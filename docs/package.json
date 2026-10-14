@@ -5,6 +5,7 @@
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
     "docs:preview": "vitepress preview",
+    "verify": "node scripts/verify-docs.mjs",
     "test": "vitest run",
     "test:wasm": "vitest run tests/wasm.test.ts"
   },

@@ -311,18 +311,22 @@ func TestCLIOptionTable(t *testing.T) {
 	}
 }
 
-// TestCLIOptionsAreDocumented: the manual and the usage document mention every option.
+// TestCLIOptionsAreDocumented: the manual and the command line reference mention every option. An option counts
+// as mentioned only as a whole word: "--online" is not mentioned by "--online-allow".
 func TestCLIOptionsAreDocumented(t *testing.T) {
-	for _, file := range []string{"docs/usage.md", "man/jactionlint.1.ronn"} {
+	word := func(option string) *regexp.Regexp {
+		return regexp.MustCompile(`(^|[^A-Za-z0-9-])` + regexp.QuoteMeta(option) + `($|[^A-Za-z0-9-])`)
+	}
+	for _, file := range []string{"docs/cli.md", "man/jactionlint.1.ronn"} {
 		b, err := os.ReadFile(filepath.FromSlash(file))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, o := range cliOptions {
-			if !strings.Contains(string(b), "--"+o.Long) {
+			if !word("--" + o.Long).Match(b) {
 				t.Errorf("%s does not document --%s", file, o.Long)
 			}
-			if o.Short != "" && !strings.Contains(string(b), "-"+o.Short) {
+			if o.Short != "" && !word("-"+o.Short).Match(b) {
 				t.Errorf("%s does not mention -%s", file, o.Short)
 			}
 		}

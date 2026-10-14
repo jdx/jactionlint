@@ -4,466 +4,399 @@ jactionlint(1) -- static checker for GitHub Actions workflow files
 ## SYNOPSIS
 
 `jactionlint` [<options>] <br>
-`jactionlint` [<options>] <file>...<br>
-`jactionlint` [<options>] -<br>
-
+`jactionlint` [<options>] <file>... <br>
+`jactionlint` [<options>] `-`
 
 ## DESCRIPTION
 
-**jactionlint** is a linter for GitHub Actions workflow files.
+`jactionlint` checks GitHub Actions workflow files for mistakes and insecure constructs. It validates the workflow syntax, types the `${{ }}` expressions, compares the `with:` inputs and the `steps.<id>.outputs` of actions with their metadata, runs `shellcheck` and `pyflakes` over the `run:` scripts, validates glob patterns, `needs:` dependencies, runner labels and cron schedules, and applies security and policy rules such as script injection, unpinned actions, excessive permissions and missing timeouts. It also checks the composite actions and the Dependabot configuration of the repository, and the Actions lock file against the workflows. Every finding carries the stable ID of the rule that reports it, such as `unpinned-uses`.
 
-Features:
+The rules form three profiles, and each profile includes the one before it. `correctness` has what actionlint checks and the bug detectors of jactionlint. `default` adds the security posture and policy rules, and applies when nothing is configured. `pedantic` adds the noisy and opinionated rules. Rules that no profile enables run only when the configuration turns them on, and the rules of the online checks run only when you turn those checks on with `--online`, `online: true` in the config file or `JACTIONLINT_ONLINE` (see the GitHub API section). Choose a profile with `--profile` or with `profile:` in the config file.
 
-- **Syntax check for workflow files** to check unexpected or missing keys following workflow syntax
-- **Strong type check for `${{ }}` expressions** to catch several semantic errors like access to
-  not existing property, type mismatches, ...
-- **Actions usage check** to check that inputs at `with:` and outputs in `steps.{id}.outputs` are
-  correct
-- **shellcheck and pyflakes integrations** for scripts at `run:`
-- **Security and policy checks**; script injection by untrusted inputs, unpinned actions, excessive
-  permissions, dangerous triggers, hard-coded credentials, missing timeouts, ...
-- **Other several useful checks**; glob syntax validation, dependencies check for `needs:`, runner
-  label validation, cron syntax validation, ...
+Without file arguments `jactionlint` checks the repository that holds the current directory. That is the nearest directory upwards that has a `.git` (a directory, or a file in a worktree or a submodule) or a `.jj` entry and that has a `.github/workflows` directory, a `.github/actions` directory or an `action.yml` or `action.yaml` in its root. When there is none, it exits with status 3. It then checks these files:
 
-The checks are organized in three profiles, each including the one before it: **correctness** (what
-actionlint checks plus the bug detectors of jactionlint), **default** (adds the security posture and
-policy rules worth failing a build on; used when nothing is configured) and **pedantic** (adds the
-noisy and opinionated rules). Choose one with **--profile** or with `profile:` in the configuration
-file. Every finding has a stable rule ID such as `unpinned-uses`.
+  * The workflow files: the `.yml` and `.yaml` files directly in `.github/workflows`. GitHub does not load files in subdirectories of it, so `jactionlint` checks them only when you name them as arguments.
 
+  * The composite actions: every file named `action.yml` or `action.yaml` except one directly in `.github/workflows`, wherever it is in the repository. The directories `.git`, `node_modules`, `vendor`, `testdata`, `fixtures`, `.venv`, `venv`, `target` and `dist` are not searched, but an action in one of them is checked when a local `uses: ./path` refers to it.
 
-## USAGE
+  * The Dependabot configuration: `.github/dependabot.yml` or `.github/dependabot.yaml`.
 
-To check all workflow files in the current repository, just run **jactionlint** without arguments. The composite
-actions of the repository (**action.yml** in the root, under **.github/actions** and the directories which a local
-**uses: ./path** refers to) and **.github/dependabot.yml** are checked as well. A file named **action.yml** or
-**action.yaml** is the metadata of an action wherever it is, except under **.github/workflows**.
-It automatically finds the nearest `.github/workflows` directory:
+  * The Actions lock file `.github/workflows/actions.lock`, when it exists.
 
-    $ jactionlint
-
-To check specific workflow files, pass the file paths as arguments:
-
-    $ jactionlint file1.yaml file2.yaml
-
-To check a content which is not saved in file yet (e.g. output from some command), pass **-**
-argument. It reads stdin and checks it as workflow file:
-
-    $ jactionlint -
-
-To serialize errors, use **--format** option. **json**, **jsonl**, **sarif**, **gcc** and **github**
-are available. A custom Go template can be given too:
-
-    $ jactionlint --format sarif
-    $ jactionlint --format '{{json .}}'
-
+Nothing uses the network unless you give `--online` or `--suggest-timeouts`, set `online: true` in the config file or set `JACTIONLINT_ONLINE` in the environment.
 
 ## OPTIONS
 
-jactionlint uses POSIX/GNU command line options. A long option is `--name` and takes its value as
-`--name=VALUE` or `--name VALUE`. A short option is one letter, can be bundled with others and takes its
-value attached or separate (`-vfjson`, `-cfile`, `-c file`). `--` ends the options and a lone `-` means
-stdin. An option whose value is optional (`--color`, `--fix`, `--online`, `--baseline`,
-`--baseline-write`) takes it only as `--name=VALUE`. Abbreviations of long options are not accepted. The
-single-dash long options of v1 are removed; the error names the replacement.
+### Option syntax
 
-  * `--color`[=<WHEN>]:
-    Colorize the output: `always`, `never` or `auto` (default). A bare `--color` means `always`, which is
-    useful to force colorful outputs
+  * A long option is `--name`. It takes its value as `--name=VALUE` or `--name VALUE`.
 
-  * `-c`, `--config-file` <PATH>:
-    File path to config file
+  * A short option is one letter. It can be bundled with others and takes its value attached or separate: `-vfjson`, `-cfile`, `-c file`. Only the most used options have one.
 
-  * `--debug`:
-    Enable debug output (for development)
+  * `--` ends the options. A lone `-` is not an option: it means stdin.
 
-  * `--baseline`[=<FILE>], `--no-baseline`:
-    Hide the findings recorded in the baseline file (`.github/jactionlint-baseline.json` in the
-    repository by default). `--no-baseline` ignores a baseline which the configuration enables
-    (`baseline: auto`). The exit status counts only the findings which are not in the baseline.
+  * An option whose value is optional (`--color`, `--fix`, `--online`, `--baseline`, `--baseline-write`) takes it only as `--name=VALUE`. `--fix unsafe` is `--fix` plus a file named `unsafe`.
 
-  * `--baseline-check`:
-    Report the baseline entries which match no finding any more as `unused-baseline-entry` (level
-    `info`). Implies `--baseline`.
+  * Abbreviations of long options are not accepted. An unknown option or an invalid value exits with status 2. The old single-dash spellings of long options, as actionlint writes them, are rejected, and the error names the replacement.
 
-  * `--baseline-write`[=<FILE>]:
-    Record the current findings as the baseline and exit with 0. A plain run does not read the
-    baseline until the configuration says `baseline: auto` or `--baseline` is given; the command
-    prints the line to put in the configuration file. With file arguments only the
-    entries of those files are refreshed. The file has no line numbers, so writing it again
-    without a change in the findings gives the same bytes. Write it in the environment of the CI.
-
-  * `--diff`:
-    Print the changes `--fix` would make as a unified diff on stdout and do not write the files. Implies
-    `--fix`. The errors which remain are printed on stderr. Exits with 1 when there is a diff or an error
-    remains.
-
-  * `--fix`[=`unsafe`]:
-    Apply the automatic fixes to the files and report what remains. `--fix=unsafe` also applies the
-    fixes which may change the behavior of the workflow. Every pass is checked: the result must be valid
-    YAML which differs from the original only where the edits are, or the fix is refused and the exit
-    status is 3. Exits with 1 when an error remains.
-
-  * `--sarif-hide-baselined`:
-    Leave the findings accepted by the baseline out of `--format sarif`. By default they are in the
-    log as results with a suppression of the kind `external`.
-
-  * `-f`, `--format` <FORMAT>:
-    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc`, `github` or `summary`. A custom
-    template in Go template syntax which has `{{ }}` is also accepted. See the usage documentation
-    for more details.
-
-  * `-i`, `--ignore` <PATTERN>:
-    Rule ID (e.g. `unpinned-uses`) or regular expression matching to error messages you want to
-    ignore. This option is repeatable. For example, `--ignore A --ignore B` ignores errors whose message
-    includes "A" OR "B". To accept a finding in one place, an ignore comment (`# jactionlint
-    ignore=<PATTERN>` above a line or at its end) or an entry of `ignores:` in the config file can be
-    used. The latter matches by rule, file, job, step and `uses:` and survives tools such as
-    Renovate rewriting the line. It can expire (`expires: YYYY-MM-DD`).
-
-  * `--init-config`:
-    Generate default config file at `.github/jactionlint.yaml` in current project
-
-  * `--migrate-config`:
-    Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of
-    `--config-file`) into the `rules` mapping
-
-  * `--migrate-ignores`:
-    Rewrite the trailing `# zizmor: ignore[...]` comments of the files (the workflows of the project
-    by default) into `# jactionlint ignore=...` comments. zizmor comments are also honored as they are
-
-  * `--select` <ID>[,<ID>...]:
-    Report only the findings of these rule IDs, also of the rules which the profile does not enable.
-    A level which the configuration sets for a selected rule stays, and a selected rule which the
-    configuration turns off runs at its default level. It can be repeated. `shellcheck` and
-    `pyflakes` run only when they are selected
-
-  * `--no-ignores`:
-    Apply no ignore comment, no `ignores` and `paths` ignore of the configuration file and no baseline,
-    so that the run shows what they hide. The `--ignore` options of the command stay. It cannot be
-    combined with `--baseline`, `--baseline-check` and `--baseline-write`
-
-  * `--list-rules`:
-    List every rule ID with its group, the profile which enables it, its default level and a
-    summary, and exit. With `--format json` or `jsonl` the list is JSON
-  * `--print-config-schema`:
-    Print the JSON Schema of the config file, with the rule IDs and the options of each rule, and exit.
-    `--init-config` writes a comment which points editors to it
-
-  * `--print-output-schema`:
-    Print the JSON Schema of the output of `--format json` and `jsonl`, and exit
-
-  * `--export-facts`:
-    Print the facts of the workflows and actions of the repository as versioned JSON and exit: the events,
-    permissions, concurrency, the local calls and who calls them, and the inputs, with positions and an explicit
-    `dynamic`, `unknown` or `repository-setting` wherever a value is not known. Nothing is checked or written
-
-  * `--print-facts-schema`:
-    Print the JSON Schema of the output of `--export-facts`, and exit
-
-  * `--min-severity` <LEVEL>:
-    Hide the errors less severe than this level: `info` (default), `warn` or `error`
-
-  * `-p`, `--profile` <NAME>:
-    Rule profile: `correctness` (what actionlint checks plus the bug detectors of jactionlint),
-    `default` (adds the security posture and policy rules) or `pedantic` (adds the noisy and
-    opinionated rules). Each profile includes the one before it. It overrides `profile` of the
-    config file. `strict` and `all`, the former names, are accepted in the config file only and
-    mean `pedantic`
-
-  * `--show-doc-urls`:
-    Print the URL of the documentation of the rule of each finding: under the finding in the text
-    format (not with `oneline`) and in the message of the annotation in the `github` format
-
-  * `--show-fix-status`:
-    Print what the fix of each finding is, or why it has none: under the finding in the text format
-    (not with `oneline`) and in the message of the annotation in the `github` format. A finding that
-    the rule never fixes has no line. The `json` and `sarif` formats always have it (`fix`, `no_fix`,
-    `noFixCode`)
-
-  * `--finding-context`:
-    Add `events` (the events of `on:` of the workflow) and `permissions` (the permissions of the token
-    of the job the finding is in, scope to `read`, `write` or `none`) to each finding of the `json`,
-    `jsonl` and `sarif` formats. Without it they are not in the output
-
-  * `--no-hints`:
-    Do not print the line at the end of a text run with many findings (20 or more) that says how to
-    count them (`--format summary`), adopt them gradually (`--baseline-write`) and get the checks of
-    actionlint only (`--profile correctness`). It is printed to stderr only when stderr is a terminal
-    or `CI` or `GITHUB_ACTIONS` is set, and never with another format. It also silences the note
-    that `shellcheck` or `pyflakes` was not found. `JACTIONLINT_NO_HINTS=1` does the same.
-
-  * `--no-color`:
-    Disable colorful output. The same as `--color=never`
-
-  * `--no-online`:
-    Never use the network, even when the configuration turns the online checks on (`online: true`)
-    or `JACTIONLINT_ONLINE` does. Cannot be combined with `--online`.
-
-  * `--online`[=<MODE>]:
-    Enable the checks which query the GitHub API (`impostor-commit`, `known-vulnerable-actions`,
-    `ref-confusion`, `stale-action-refs`, `archived-uses`, `ref-version-mismatch` and `repojacking`), and let `--fix`
-    pin tags to commit SHAs. `--online=cache` uses only the answers in the disk cache and never the
-    network. `--online=strict` exits with status 3 when a lookup had to be skipped (`cache,strict`
-    does both). A lookup which fails (404, 403, server error, timeout, rate limit) is skipped with
-    one warning per kind of failure and does not change the exit status. The token is read from
-    `--online-token-env`, `--online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`, and
-    is sent only to the API host. Nothing uses the network without this option, `online: true` in the
-    configuration, or `JACTIONLINT_ONLINE` in the environment (`1`, or a mode; `0` turns it off).
-
-  * `--online-github-com-fallback`, `--online-github-com-token-env` <NAME>, `--online-github-com-token-file` <PATH>:
-    On a GitHub Enterprise Server, look up the repositories which the Server answers 404 for on
-    `api.github.com` (actions that GitHub Connect syncs from github.com). The token for github.com is
-    `$GITHUB_COM_TOKEN` or the variable or file named; the token of the Server is never sent there.
-    The names of those repositories go to github.com, so keep internal ones out with `--online-deny`
-
-  * `--online-allow` <PATTERN>, `--online-deny` <PATTERN>:
-    Look up only (allow), or never look up (deny), the repositories matching `owner/repo`, where `*`
-    is a wildcard, for example `--online-deny 'mycorp/*'` for private actions. Repeatable. Deny wins.
-
-  * `--online-api-url` <URL>:
-    The REST API of a GitHub Enterprise Server such as `https://ghe.example.com/api/v3`. The default
-    is `$GITHUB_API_URL`, else derived from `$GITHUB_SERVER_URL` or `$GH_HOST`, else `api.github.com`
-
-  * `--online-token-env` <NAME>, `--online-token-file` <PATH>:
-    The environment variable and the file which hold the GitHub token, read before `GITHUB_TOKEN`
-    and `GH_TOKEN`
-
-  * `--suggest-timeouts`:
-    Report how long the jobs of the workflows really took in the latest successful runs of each workflow, read
-    from GitHub (it implies `--online`), with a `timeout-minutes` to consider for each job that has enough
-    samples. Nothing is written and no rule uses the numbers: a timeout is a decision of the person. The
-    report says how many runs and samples it read, what it could not match to a job of the file, and that
-    the longest run on record is not a bound on the next one
-
-  * `--timeout-history-runs` <N>, `--timeout-buffer` <FACTOR>:
-    With `--suggest-timeouts`: how many of the latest successful runs of each workflow are read (1 to 100,
-    default 20; each costs a request), and the factor by which the longest duration is multiplied (at least
-    1, default 2)
-
-  * `--online-report` <FILE>:
-    Write how complete the online checks were to FILE as JSON, whatever the `--format`: `status`
-    (`complete`, `incomplete` or `disabled`), the skipped lookups by kind, the excluded repositories
-    and where the answers came from (network or cache, with the age of the oldest cached one)
-
-  * `--online-max-wait` <DURATION>:
-    The longest to wait for a GitHub rate limit to reset (default 30s). A limit which resets later
-    skips the lookups. 0 never waits
-
-  * `--online-cache-ttl` <DURATION>:
-    How long `--online` uses an answer of the GitHub API from the cache in
-    `$XDG_CACHE_HOME/jactionlint` without asking GitHub whether it changed (default 1h0m0s). 0 checks
-    every answer
-
-  * `--oneline`:
-    Use one line per one error. Useful for reading error messages from programs
-
-  * `--rule-ids`:
-    Accepted for compatibility. The text format always shows the stable rule ID such as
-    `unpinned-uses` at the end of each error, since that is what the configuration, `--ignore` and
-    the ignore comments accept
-
-  * `--fix-rules` <ID>[,<ID>...]:
-    With `--fix` or `--diff`, apply only the fixes of these rule IDs. The `fix.rules` key of the
-    configuration file does the same.
-
-  * `--pyflakes` <EXECUTABLE>:
-    Command name or file path of "pyflakes" external command. If empty, pyflakes integration will be
-    disabled (default "pyflakes"). A command given with this option must exist: the exit status is
-    3 when it is not found or not executable. When the default is not found, one note on stderr
-    says how many scripts were not checked
-
-  * `--ruff` <EXECUTABLE>:
-    Check the Python scripts of `shell: python` with this ruff (only its pyflakes rules `F`, without
-    the configuration of the working directory) instead of pyflakes. The command must exist: the
-    exit status is 3 when it is not found or not executable
-
-  * `--shellcheck` <EXECUTABLE>:
-    Command name or file path of "shellcheck" external command. If empty, shellcheck integration will
-    be disabled (default "shellcheck"). A command given with this option must exist: the exit status
-    is 3 when it is not found or not executable. When the default is not found, one note on stderr
-    says how many scripts were not checked
-
-  * `--shellcheck-rcfile` <FILE>:
-    Let shellcheck read this shellcheckrc file instead of running it with `--norc`. A relative path is
-    resolved from the working directory and the file must exist (exit status 3 otherwise). It
-    overrides `shellcheck.rcfile` of the configuration file, which also has `args` and `enable`
-
-  * `--changed-since` <REV>:
-    Show only the findings on the lines that changed since the merge base of <REV> and `HEAD`: the commits, the
-    index and the working tree, and every line of a file that is not tracked. Every file is still checked and the
-    call graph of the repository is read as in a full run; only what is shown is filtered. It fails (status 3) when
-    the comparison is not possible, and cannot be combined with `--fix`, `--diff`, `--baseline-write` or stdin
-
-  * `--changed-scope` <SCOPE>:
-    With `--changed-since`: `lines` (default) shows the findings on the changed lines, `files` shows every
-    finding of a changed file
-
-  * `--strict-exit`:
-    Exit with status 1 also when only errors of `warn` or `info` level are found. By default only
-    errors of `error` level make the exit status 1
-
-  * `-v`, `--verbose`:
-    Enable verbose output
-
-  * `--completion` <SHELL>:
-    Print the completion script of a shell (`bash`, `zsh`, `fish` or `powershell`) and exit. It
-    completes the options, their values and the rule IDs of this version
-
-  * `--explain` <RULE>:
-    Print the documentation of a rule ID and exit: summary, group, profile, default level, options,
-    fixes, and its section of the checks document
-
-  * `--stdin-filename` <NAME>:
-    File name when reading input from stdin (default "&lt;stdin&gt;")
-
-  * `-V`, `--version`:
-    Show version and how this binary was installed
+### General
 
   * `-h`, `--help`:
-    Show the help and exit with status 0
+    Print the help and exit with status 0.
 
+  * `-V`, `--version`:
+    Print the version and how this binary was installed, then exit.
 
-## DOCUMENTS
+  * `-v`, `--verbose`:
+    Print verbose logs to stderr, such as the repository that was found, every online lookup that was skipped and which source supplied the token.
 
-Documents for more details are available online.
+  * `--debug`:
+    Print debug logs to stderr. They are meant for the development of `jactionlint`.
 
-### Checks
+  * `--completion`=<SHELL>:
+    Print the completion script of a shell (`bash`, `zsh`, `fish` or `powershell`; `pwsh` is accepted as `powershell`) and exit. The script completes the options, their values and the rule IDs of this version.
 
-https://jactionlint.jdx.dev/checks
+  * `--stdin-filename`=<NAME>:
+    File name used in the output when reading stdin (default `<stdin>`). The name also decides what stdin is: a `dependabot.yml` or `dependabot.yaml` without a directory or in a `.github` directory is Dependabot configuration, an `action.yml` or `action.yaml` is the metadata of an action, `.github/workflows/actions.lock` is the Actions lock file, and anything else is a workflow. When the name is the path of an existing file in a repository, the config file of that repository applies to the input; otherwise the user-global config file or the defaults apply.
 
-Full list of all checks done by jactionlint with example inputs, outputs, and playground links.
+### Output
 
-### Rules
+  * `-f`, `--format`=<FORMAT>:
+    Output format: `text` (default), `oneline`, `json`, `jsonl`, `sarif`, `gcc`, `github`, `summary` (counts per rule and per file) or a Go template that contains `{{ }}`, such as `'{{json .}}'`. The page https://jactionlint.jdx.dev/output#format-error-messages describes the fields of each format.
 
-https://jactionlint.jdx.dev/rules
+  * `--oneline`:
+    One line per finding. The same as `--format oneline`.
 
-Reference of all rule IDs with their group, default level and profile.
+  * `--rule-ids`:
+    Accepted for compatibility. The text format always shows the rule ID at the end of each finding, because the configuration, `--ignore` and the ignore comments take it.
 
-### Installation
+  * `--color`[=<WHEN>]:
+    Colorize the output: `always`, `never` or `auto` (default), which colors the output when it goes to a terminal. A bare `--color` means `always`. `NO_COLOR` turns the colors off in every mode (see ENVIRONMENT).
 
-https://jactionlint.jdx.dev/install
+  * `--no-color`:
+    The same as `--color=never`.
 
-Installation instructions. Prebuilt binaries, Homebrew package, building from source, a Docker
-image, a download script (for CI) are available.
+  * `--show-doc-urls`:
+    Print the URL of the documentation of the rule of each finding: under the finding in the text format (not with `oneline`) and in the message of the annotation in the `github` format.
 
-### Usage
+  * `--show-fix-status`:
+    Print what the fix of each finding is, or why it has none: under the finding in the text format (not with `oneline`) and in the message of the annotation in the `github` format. A finding that its rule never fixes has no line. The `json`, `jsonl` and `sarif` formats always have the data (`fix`, `no_fix`, `noFixCode`).
 
-https://jactionlint.jdx.dev/usage
+  * `--finding-context`:
+    Add `events` (the events of `on:` of the workflow) and `permissions` (the permissions of the token of the job the finding is in, as a map of each scope to `read`, `write`, `none` or `unknown`, where `*` stands for all scopes) to each finding of the `json`, `jsonl` and `sarif` formats. `permissions` is left out when the file sets none. Without this option neither is in the output.
 
-How to use `jactionlint` command locally or on GitHub Actions, the online playground, an official
-Docker image, and integrations with reviewdog, Problem Matchers, super-linter, pre-commit.
+  * `--no-hints`:
+    Do not print the hint line after a run with the `text` or `oneline` format that reports 20 or more findings with a profile other than `correctness`. The line goes to stderr, only when stderr is a terminal or `CI` or `GITHUB_ACTIONS` is set (see ENVIRONMENT), and never with another format. It says how to count the findings (`--format summary`), how to adopt them gradually (`--baseline-write`) and how to get the checks of actionlint only (`--profile correctness`). The option also silences the notes that `shellcheck`, `pyflakes` or `node` was not found (see the External tools section). `JACTIONLINT_NO_HINTS=1` does the same.
 
-### Configuration
+  * `--min-severity`=<LEVEL>:
+    Hide the findings less severe than LEVEL: `info` (default), `warn` or `error`. Hidden findings do not count for the exit status.
 
-https://jactionlint.jdx.dev/config
+  * `--changed-since`=<REV>:
+    Show only the findings on the lines that changed since the merge base of REV and `HEAD`: the commits, the staged and unstaged changes of tracked files, and every line of a file that is not tracked and not ignored. Every file is still checked and the call graph of the repository is read as in a full run, so a finding it shows is one that a full run reports, and only what is shown is filtered. A finding that a change causes on a line that did not change is not shown. The baseline applies first, and the exit status counts the findings that are shown. The text and `oneline` formats print a note on stderr with the number of hidden findings, and the SARIF log has `properties.changedSince`. It exits with status 3 when git does not know REV, finds no merge base (a shallow clone has none) or is missing, and it cannot be combined with `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--init-config`, `--migrate-config`, `--export-facts`, `--suggest-timeouts` or stdin.
 
-How to configure jactionlint behavior by the configuration file `jactionlint.yaml`: the profile, the
-level of each rule, runner labels, ignores, the baseline and the online options.
+  * `--changed-scope`=<SCOPE>:
+    With `--changed-since`: `lines` (default) shows the findings on the changed lines, `files` shows every finding of a file that changed. The option without `--changed-since` exits with status 2.
 
-### Coming from actionlint
+  * `--strict-exit`:
+    Exit with status 1 for a finding of any level. By default only a finding of level `error` does.
 
-https://jactionlint.jdx.dev/actionlint
+### Rules and configuration
 
-How to get the checks of actionlint with `--profile correctness`.
+  * `-p`, `--profile`=<NAME>:
+    Rule profile: `correctness`, `default` or `pedantic` (see DESCRIPTION). It overrides `profile` of the config file. The former names `strict` and `all` are accepted in the config file only and mean `pedantic`.
 
-### Migrating to v2
+  * `-c`, `--config-file`=<FILE>:
+    Read this file instead of the config file of the repository and the user-global one (see FILES). A file that it names under `extends` is still read.
 
-https://jactionlint.jdx.dev/v2-migration
+  * `-i`, `--ignore`=<PATTERN>:
+    Ignore the findings whose rule ID or message matches PATTERN, which is a rule ID such as `unpinned-uses` or a regular expression. The option is repeatable: `--ignore A --ignore B` ignores the findings that match A or B. It takes one pattern, so a comma does not separate two. To accept a finding in one place, use an ignore comment (`# jactionlint ignore=<PATTERN>` above the line or at its end) or an entry of `ignores:` in the config file. The entry matches by rule, file, job, step and `uses:`, survives a tool such as Renovate rewriting the line, and can expire (`expires: YYYY-MM-DD`). See https://jactionlint.jdx.dev/ignore.
 
-What changed since v1 and what to do about it.
+  * `--init-config`:
+    Write a default config file to `.github/jactionlint.yaml` of the repository and exit. It exits with status 3 and writes nothing when the file exists.
 
-### Go API
+  * `--migrate-config`:
+    Rewrite the deprecated keys of the config file (`.github/jactionlint.yaml` or the file of `--config-file`) into the `rules` mapping, and exit.
 
-https://jactionlint.jdx.dev/api
+  * `--migrate-ignores`:
+    Rewrite the trailing `# zizmor: ignore[...]` comments of the files into `# jactionlint ignore=...` comments, and exit. Without file arguments it takes the workflow files and the root `action.yml` or `action.yaml` of the repository. `jactionlint` also honors the zizmor comments as they are.
 
-How to use jactionlint as Go library.
+  * `--select`=<RULES>:
+    Report only the findings of these rules, given as comma separated rule IDs, also of the rules that the profile does not enable. The option is repeatable. A level that the configuration sets for a selected rule stays, and a selected rule that the configuration turns off runs at its default level. `shellcheck` and `pyflakes` run only when they are selected.
 
-### References
+  * `--no-ignores`:
+    Apply no ignore comment, no `ignores` and `paths` ignore of the config file and no baseline, so that the run shows what they hide. The `--ignore` options stay. The option cannot be combined with `--baseline`, `--baseline-check` and `--baseline-write`.
 
-https://jactionlint.jdx.dev/reference
+  * `--list-rules`:
+    List every rule ID with its group, the profile that enables it, its default level and a summary, and exit. The profile is `correctness`, `default` or `pedantic`, `online` for a rule of the online checks, or `opt-in` for a rule that runs only when configured. With `--format json` or `jsonl` the list is JSON.
 
-Links to resources.
+  * `--print-config-schema`:
+    Print the JSON Schema of the config file, with the rule IDs and the options of each rule, and exit. `--init-config` writes a comment that points editors to it. The option cannot be combined with `--print-output-schema` or `--print-facts-schema`.
 
-## USAGE ON GITHUB ACTIONS
+  * `--print-output-schema`:
+    Print the JSON Schema of the output of `--format json` and `jsonl`, and exit.
 
-Please try the download script.
+  * `--export-facts`:
+    Print the facts of the workflows and composite actions of the repository as one versioned JSON document, and exit: the events, permissions, concurrency, the local calls and who calls them, and the inputs, each with its position. Wherever a value is not known, the document says `dynamic`, `unknown` or `repository-setting` and never guesses. Nothing is checked or written, and `--profile`, `--select` and `--ignore` do not change the output. With file arguments it exports those files, and the callers are still those of the whole repository. It cannot be combined with `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--suggest-timeouts`, `--changed-since` or stdin.
 
-https://github.com/jdx/jactionlint/blob/main/scripts/download-jactionlint.bash
+  * `--print-facts-schema`:
+    Print the JSON Schema of the output of `--export-facts`, and exit. The option cannot be combined with `--print-config-schema` or `--print-output-schema`.
 
-It downloads the latest version of jactionlint executable to the current directory automatically.
-On GitHub Actions environment, it sets a file path to executable to`executable` output for using
-the executable in the following steps easily.
+  * `--explain`=<RULE>:
+    Print the documentation of a rule ID and exit: summary, group, profile, default level, options, fixes, what its fix needs and its section of the checks page. The text is part of the binary, so the option needs no network.
 
-Here is an example of simple workflow to run jactionlint on GitHub Actions. Please ensure `shell: bash`
-since the default shell for Windows runners is `pwsh`.
+### Fixing
 
-```
-name: Lint GitHub Actions workflows
-on: [push, pull_request]
+The fixes are safe or unsafe. A safe fix keeps the behavior of the workflow. The page https://jactionlint.jdx.dev/fix lists the rules that have one.
 
-jobs:
-  jactionlint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download jactionlint
-        id: get_jactionlint
-        run: bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-        shell: bash
-      - name: Check workflow files
-        run: ${{ steps.get_jactionlint.outputs.executable }} --color
-        shell: bash
-```
+  * `--fix`[=`unsafe`]:
+    Apply the safe automatic fixes to the files and report what remains. `--fix=unsafe` also applies the fixes that may change the behavior of the workflow. `jactionlint` checks every pass: the result must be valid YAML that differs from the original only where the edits are, or it refuses the fix and exits with status 3. It exits with status 1 when a finding of level `error` remains. `--fix` cannot read stdin.
 
-or simply run
+  * `--diff`:
+    Print the changes `--fix` would make as a unified diff on stdout and write no file. It implies `--fix`. The findings that remain go to stderr. It exits with status 1 when there is a diff or a finding of level `error` remains.
 
-```yaml
-- name: Check workflow files
-  run: |
-    bash <(curl https://raw.githubusercontent.com/jdx/jactionlint/main/scripts/download-jactionlint.bash)
-    ./jactionlint --color
-  shell: bash
-```
+  * `--fix-rules`=<RULES>:
+    With `--fix` or `--diff`, apply only the fixes of these comma separated rule IDs. The `fix.rules` key of the config file does the same. Without `--fix` or `--diff` the option exits with status 2.
 
+### Baseline
+
+A baseline records the findings that exist today, so that later runs fail only on new ones. The page https://jactionlint.jdx.dev/baseline describes the procedure.
+
+  * `--baseline`[=<FILE>]:
+    Hide the findings recorded in the baseline file, which is `.github/jactionlint-baseline.json` in the repository unless FILE names another. The baseline is used only when this option is given or the config file has `baseline: auto` (`true` and a file path work too, `false` turns it off). The exit status counts only the findings that are not in the baseline.
+
+  * `--no-baseline`:
+    Ignore the baseline, also when the config file enables it. The option cannot be combined with `--baseline`.
+
+  * `--baseline-write`[=<FILE>]:
+    Record the current findings as the baseline and exit with status 0. The command prints the line to put in the config file so that every run uses the baseline. With file arguments it refreshes only the entries of those files. The file has no line numbers, so writing it again without a change in the findings gives the same bytes. Write it in the environment that CI runs in: with the same configuration, with `--online` if CI uses it, and with the same `shellcheck` and `pyflakes`. A finding that your machine cannot produce is not recorded, and CI would report it as new. The option cannot be combined with `--baseline`, `--no-baseline`, `--baseline-check`, `--fix` or stdin.
+
+  * `--baseline-check`:
+    Report the baseline entries that match no finding any more as `unused-baseline-entry` (level `info`). It implies `--baseline`.
+
+  * `--sarif-hide-baselined`:
+    Leave the findings that the baseline accepts out of `--format sarif`. By default they are in the log as results with a suppression of the kind `external`.
+
+### GitHub API (online checks)
+
+The online checks ask the GitHub API about the actions that a workflow uses. The rules that need them show `online` as their profile in `--list-rules` and `only with --online` on https://jactionlint.jdx.dev/rules. Unless `--online`, `--suggest-timeouts`, `online: true` in the config file or `JACTIONLINT_ONLINE` turns them on, nothing uses the network.
+
+The token is the first of these: the variable named by `--online-token-env`, the file named by `--online-token-file`, `GITHUB_TOKEN`, `GH_TOKEN` (on a GitHub Enterprise Server `GITHUB_ENTERPRISE_TOKEN` and `GH_ENTERPRISE_TOKEN` come before these two) and the output of `gh auth token` when the `gh` command is installed. `jactionlint` sends it only to the API host. The page https://jactionlint.jdx.dev/online describes the checks, the cache and the rate limits.
+
+  * `--online`[=<MODE>]:
+    Run the online checks. They run the rules that ask GitHub about an action (for example `archived-uses`, `impostor-commit` and `known-vulnerable-actions`), check the inputs, the secrets and the outputs of remote actions and reusable workflows against their metadata, and let `--fix` replace a tag by the commit it points to (`--fix=unsafe` also pins container images to digests). MODE is `cache` (answer from the disk cache only and never use the network), `strict` (exit with status 3 when a lookup had to be skipped) or `cache,strict`. A lookup that fails (404, 403, server error, timeout, rate limit) is skipped with one warning per kind of failure and does not change the exit status, unless `strict` is given. The environment variable `JACTIONLINT_ONLINE` sets the default.
+
+  * `--no-online`:
+    Never use the network, even when the config file has `online: true` or `JACTIONLINT_ONLINE` asks for the online checks. The option cannot be combined with `--online`.
+
+  * `--online-api-url`=<URL>:
+    The REST API of a GitHub Enterprise Server, such as `https://ghe.example.com/api/v3`. The option wins over `online-options.api-url` of the config file. Without both, the URL is `$GITHUB_API_URL`, else derived from `$GITHUB_SERVER_URL` or `$GH_HOST`, else `https://api.github.com`. A host that only the config file of the repository names gets no token.
+
+  * `--online-token-env`=<NAME>:
+    The name of the environment variable that holds the GitHub token. It is read before `GITHUB_TOKEN` and `GH_TOKEN`.
+
+  * `--online-token-file`=<FILE>:
+    The file that holds the GitHub token. It is read before `GITHUB_TOKEN` and `GH_TOKEN`.
+
+  * `--online-github-com-fallback`:
+    On a GitHub Enterprise Server, look up on `api.github.com` the repositories that the Server answers 404 for (actions that GitHub Connect syncs from github.com). The token for github.com is `GITHUB_COM_TOKEN` or the one named by the next two options, and the token of the Server is never sent there. The names of those repositories go to github.com, so keep internal ones out with `--online-deny`.
+
+  * `--online-github-com-token-env`=<NAME>:
+    With the fallback: the name of the environment variable that holds the token for `api.github.com` (default `GITHUB_COM_TOKEN`).
+
+  * `--online-github-com-token-file`=<FILE>:
+    With the fallback: the file that holds the token for `api.github.com`.
+
+  * `--online-allow`=<PATTERN>:
+    Look up only the repositories that match the `owner/repo` PATTERN, where `*` is a wildcard. The option is repeatable, and a value may hold several comma separated patterns.
+
+  * `--online-deny`=<PATTERN>:
+    Never look up the repositories that match the `owner/repo` PATTERN, for example `--online-deny 'mycorp/*'` for private actions. The option is repeatable, and a value may hold several comma separated patterns. Deny wins over allow.
+
+  * `--online-cache-ttl`=<DURATION>:
+    How long an answer of the GitHub API is used from the disk cache without asking GitHub whether it changed (default `1h`). `0` checks every answer.
+
+  * `--suggest-timeouts`:
+    Report how long the jobs of the workflows really took in the latest successful runs of each workflow, read from GitHub, with a `timeout-minutes` to consider for each job that has at least 3 samples. It implies `--online`, and `--online=cache` and `--online=strict` still apply. Nothing is written and no rule uses the numbers: a timeout is for you to choose. The report says how many runs and samples it read, what it could not match to a job of the file, and that the longest duration on record is not a bound on the next run. `--format` is `text` or `json`. The repository is `GITHUB_REPOSITORY`, else the `origin` remote on github.com. A lookup that fails makes the report incomplete and says so, and `--online=strict` turns that into exit status 3. The option cannot be combined with `--no-online`, `--fix`, `--diff`, `--baseline-write`, `--migrate-ignores`, `--export-facts`, `--changed-since` or stdin.
+
+  * `--timeout-history-runs`=<N>, `--timeout-buffer`=<FACTOR>:
+    With `--suggest-timeouts`: how many of the latest successful runs of each workflow are read (1 to 100, default 20; each costs a request, plus one for each workflow), and the factor by which the longest duration on record is multiplied before it is rounded up to whole minutes (at least 1, default 2). A value out of range, or either option without `--suggest-timeouts`, exits with status 2.
+
+  * `--online-report`=<FILE>:
+    Write how complete the online checks were to FILE as JSON, whatever the `--format`. It has the `status` (`complete`, `incomplete` or `disabled`), the skipped lookups by kind, the excluded repositories and where the answers came from (network or cache, with the age of the oldest cached one).
+
+  * `--online-max-wait`=<DURATION>:
+    The longest to wait for a GitHub rate limit to reset (default `30s`). A limit that resets later skips the lookups. `0` never waits.
+
+### External tools
+
+`jactionlint` runs `shellcheck` over the shell scripts and `pyflakes` (or `ruff`) over the Python scripts of `run:`. It runs `node` (version 20 or later) for the rule `github-script-syntax`, which has no option, and `git` to list the files of the repository for the rule `unmatched-paths-filter`. When the default `shellcheck` or `pyflakes`, or `node`, is not found, `jactionlint` skips the scripts and prints one note on stderr for each missing tool that says how many scripts it did not check. `--no-hints` silences the notes. Without `shellcheck`, also when an empty `--shellcheck` turns it off, the rule `shell-syntax` still reports the syntax errors that stop a `bash` or `sh` script, which a built-in parser finds. It reports nothing else.
+
+  * `--shellcheck`=<CMD>:
+    The command or file path of `shellcheck` (default `shellcheck`). An empty value disables the integration. A command given here must exist: the exit status is 3 when it is not found or not executable.
+
+  * `--pyflakes`=<CMD>:
+    The command or file path of `pyflakes` (default `pyflakes`). An empty value disables the integration. A command given here must exist: the exit status is 3 when it is not found or not executable.
+
+  * `--ruff`=<CMD>:
+    Check the Python scripts of `shell: python` with this `ruff` instead of `pyflakes`. It runs only its pyflakes rules (`F`) and ignores the configuration of the working directory. The command must exist: the exit status is 3 when it is not found or not executable.
+
+  * `--shellcheck-rcfile`=<FILE>:
+    Let `shellcheck` read this `shellcheckrc` file instead of running it with `--norc`. A relative path is resolved from the working directory, and the file must exist (exit status 3 otherwise). It overrides `shellcheck.rcfile` of the config file, which also has `args` and `enable`.
 
 ## EXIT STATUS
 
-`jactionlint` command exits with one of the following exit statuses.
+  * **0**:
+    `jactionlint` ran and left no finding of level `error`. Findings of level `warn` and `info` do not count. The options that print something and exit (`--help`, `--version`, `--list-rules`, `--explain`, `--completion`, `--print-config-schema`, `--print-output-schema`, `--print-facts-schema`) and a successful `--export-facts`, `--suggest-timeouts`, `--init-config`, `--migrate-config`, `--migrate-ignores` or `--baseline-write` exit with 0 too. A `--suggest-timeouts` report that says it is incomplete exits with 0 as well, unless `--online=strict` is set.
 
-  - **0**: It ran successfully and no problem was found.
-  - **1**: It ran successfully and some problem was found. Only errors of `error` level count unless
-    `--strict-exit` is given.
-  - **2**: It failed due to an invalid command line option or option value (**--profile**, **--format**,
-    **--ignore**, ...).
-  - **3**: It failed due to some fatal error such as no project or an unreadable file or config.
+  * **1**:
+    At least one finding of level `error` is left after the ignores, the baseline, `--min-severity` and `--changed-since`. With `--strict-exit` a finding of any level counts. `--diff` exits with 1 when its diff is not empty, and `--fix` when a finding that counts remains.
 
+  * **2**:
+    The command line is invalid: an unknown option, a missing or invalid value, an unknown rule ID, a regular expression of `--ignore` that does not compile, a combination of options that cannot work (such as `--online` with `--no-online`, or `--changed-since` with `--fix`), a value out of range (`--changed-scope`, `--timeout-history-runs`, `--timeout-buffer`), or `--fix`, `--diff` or `--baseline-write` with `-`.
 
-## PLAYGROUND
+  * **3**:
+    `jactionlint` failed: no repository was found, a file or a config file cannot be read or parsed, a baseline file, a `shellcheckrc` file or a command named by `--shellcheck`, `--pyflakes` or `--ruff` is missing, `--init-config` finds a config file already there, a fix was refused or did not converge, `--changed-since` could not compare (git does not know the revision, finds no merge base or is missing), `--suggest-timeouts` could not tell the GitHub repository, or `--online=strict` skipped a lookup (status 3 wins over 1).
 
-Thanks to WebAssembly, jactionlint playground is available on your browser. It never sends any data
-to outside of the browser.
+The page https://jactionlint.jdx.dev/cli#exit-status lists every cause.
 
-https://jactionlint.jdx.dev/
+## ENVIRONMENT
 
-Paste your workflow content to the code editor at left pane. It automatically shows the results at
-right pane. When editing the workflow content at the left pane, the results will be updated on the
-fly in the right pane. Clicking an error message in the results table moves a cursor to the
-position of the error in the code editor.
+  * `JACTIONLINT_ONLINE`:
+    The default of `--online` and `--no-online`. `1`, `true` or `on` is `--online`. `cache`, `strict` and `cache,strict` are the modes of `--online=MODE`. `0`, `false`, `off` or `no` is `--no-online`. An empty value is not set, and any other value exits with status 2. The command line wins over the variable, and the variable wins over `online:` of the config file. `--suggest-timeouts` exits with status 2 for a value that means `--no-online`.
 
+  * `JACTIONLINT_NO_HINTS`:
+    The same as `--no-hints` when it is set to anything but an empty value, `0` or `false`.
+
+  * `CI`, `GITHUB_ACTIONS`:
+    Decide whether the hint line of a text run is printed when stderr is not a terminal. `CI` counts unless it is empty, `false` or `0`, and `GITHUB_ACTIONS` unless it is empty or `false`.
+
+  * `NO_COLOR`:
+    When it is set to a non-empty value, the output has no colors, also with `--color` and `--color=always`. `TERM=dumb` turns the colors off with `--color=auto` only.
+
+  * `GITHUB_TOKEN`, `GH_TOKEN`:
+    The token of the online checks, after `--online-token-env` and `--online-token-file`.
+
+  * `GITHUB_ENTERPRISE_TOKEN`, `GH_ENTERPRISE_TOKEN`:
+    The token of the online checks on a GitHub Enterprise Server. They are read before `GITHUB_TOKEN` and `GH_TOKEN`.
+
+  * `GITHUB_COM_TOKEN`:
+    The token for `api.github.com` with `--online-github-com-fallback`.
+
+  * `GITHUB_API_URL`, `GITHUB_SERVER_URL`, `GH_HOST`:
+    The API host of the online checks when `--online-api-url` and the config file do not give one. `GITHUB_API_URL` is the API URL itself, and the other two name the host that it is derived from.
+
+  * `GITHUB_GRAPHQL_URL`:
+    The GraphQL endpoint that the rule `impostor-commit` uses to scan branches. It is ignored, with a notice, unless it is on the host of the REST API.
+
+  * `GITHUB_REPOSITORY`:
+    The repository (`owner/repo`) whose environments the online checks of `untrusted-checkout`, `untrusted-artifact` and `agentic-actions` look up, and the repository that `--suggest-timeouts` asks about. The default is the `origin` remote, when it is a github.com URL.
+
+  * `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`:
+    The base directories of the user-global config file and of the cache of the online checks. Only an absolute path counts, and the defaults are `~/.config` and `~/.cache`.
+
+  * `SHELLCHECK_OPTS`:
+    Read by `shellcheck` itself, also when `jactionlint` runs it with `--norc`.
+
+  * `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and the other variables that redirect git:
+    Removed from the environment of the `git` commands of `jactionlint`, so that a git hook cannot point them at another repository.
+
+## FILES
+
+  * `.github/workflows/*.yml`, `.github/workflows/*.yaml`:
+    The workflow files of the repository.
+
+  * `.github/jactionlint.yaml`, `.github/jactionlint.yml`:
+    The config file of the repository. When neither exists, `jactionlint` reads `.github/actionlint.yaml` or `.github/actionlint.yml`, the names of actionlint. A file with such a name that sets no `profile` gets the `default` profile, which has more rules than actionlint, and `jactionlint` prints a note that says so.
+
+  * `$XDG_CONFIG_HOME/jactionlint/jactionlint.yaml`, `$XDG_CONFIG_HOME/jactionlint/jactionlint.yml`:
+    The user-global config file, used when the repository has none and `--config-file` is not given. `$XDG_CONFIG_HOME/actionlint/actionlint.yaml` and `.yml` follow it. Without an absolute `XDG_CONFIG_HOME` the directory is `~/.config`. `jactionlint` uses the first file it finds and merges files only through `extends`. The page https://jactionlint.jdx.dev/config#configuration-file-location-and-priority has the details.
+
+  * `.github/jactionlint-baseline.json`:
+    The baseline that `--baseline-write` writes and `--baseline` reads.
+
+  * `.github/workflows/actions.lock`:
+    The Actions lock file, which `jactionlint` reads and compares with the workflows. It never writes it.
+
+  * `.github/dependabot.yml`, `.github/dependabot.yaml`:
+    The Dependabot configuration of the repository.
+
+  * `$XDG_CACHE_HOME/jactionlint`:
+    The disk cache of the online checks and of `--suggest-timeouts`, at most 32 MiB (`~/.cache/jactionlint` without an absolute `XDG_CACHE_HOME`).
+
+## EXAMPLES
+
+Check the whole repository, only the given files, or a workflow that comes from stdin:
+
+    jactionlint
+    jactionlint .github/workflows/ci.yaml .github/workflows/release.yaml
+    jactionlint - < workflow.yaml
+
+Run only the checks of actionlint:
+
+    jactionlint --profile correctness
+
+Report only two rules, also when the profile does not enable them:
+
+    jactionlint --select unpinned-uses,missing-timeout
+
+Print what a rule checks, with its profile, level, options and fixes:
+
+    jactionlint --explain unpinned-uses
+
+Preview the safe fixes as a diff, then apply them:
+
+    jactionlint --diff
+    jactionlint --fix
+
+Write SARIF for code scanning:
+
+    jactionlint --format sarif > jactionlint.sarif
+
+Record the current findings as the baseline, then fail only on new ones:
+
+    jactionlint --baseline-write
+    jactionlint --baseline
+
+Show only the findings on the lines that a branch changed since `origin/main`:
+
+    jactionlint --changed-since origin/main
+
+Print the events, permissions, concurrency and calls of the workflows as JSON, for another tool:
+
+    jactionlint --export-facts
+
+Report how long the jobs really took in their latest runs, from GitHub:
+
+    jactionlint --suggest-timeouts
+
+Run the online checks from the disk cache, without the network:
+
+    jactionlint --online=cache
+
+## SEE ALSO
+
+`shellcheck`(1)
+
+The pages of the documentation site, which describe the same behavior with more detail and examples:
+
+  * https://jactionlint.jdx.dev/usage: first run, choosing a profile, explaining a rule.
+  * https://jactionlint.jdx.dev/cli: every option, the environment variables and the exit statuses.
+  * https://jactionlint.jdx.dev/output: the formats, their fields, SARIF and templates.
+  * https://jactionlint.jdx.dev/online: the online checks, the token, the cache and the rate limits.
+  * https://jactionlint.jdx.dev/checks: every check, with example inputs and outputs.
+  * https://jactionlint.jdx.dev/rules: every rule ID with its group, default level and profile.
+  * https://jactionlint.jdx.dev/config: the config file.
+  * https://jactionlint.jdx.dev/ci: the GitHub Action, Docker, problem matchers and mise.
+  * https://jactionlint.jdx.dev/hooks: hk, pre-commit and editors.
+
+The playground at https://jactionlint.jdx.dev/playground runs `jactionlint` in a browser, with no online checks: linting uses no network.
 
 ## BUGS
 
-Please visit issues page to see known bugs. If you found a new bug or have some feature request,
-please report by making a new issue.
-
-https://github.com/jdx/jactionlint/issues
-
+Known bugs and requests are listed at https://github.com/jdx/jactionlint/issues. Report a new bug or request there.
 
 ## COPYRIGHT
 
-**jactionlint** is licensed under the MIT License: `Copyright (c) 2021 rhysd, Copyright (c) 2026 jdx`
-
-https://github.com/jdx/jactionlint/blob/main/LICENSE.txt
+`jactionlint` is licensed under the MIT License: Copyright (c) 2021 rhysd, Copyright (c) 2026 jdx. See https://github.com/jdx/jactionlint/blob/main/LICENSE.txt.
 
 <!-- vim: set ft=markdown: -->
