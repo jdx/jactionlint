@@ -54,6 +54,8 @@ archives:
       files:
         - README.md
         - LICENSE.txt
+        - NOTICE.md
+        - CONTRIBUTING.md
         - docs
         - man/jactionlint.1
     id: nix

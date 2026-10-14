@@ -6,7 +6,7 @@ import (
 )
 
 // The tests of this file are the lessons of the issue tracker of zizmor that apply to the rules of jactionlint, see
-// "Lessons applied" in docs/zizmor-parity.md. The name of each test names the issue.
+// "Lessons applied" in docs/zizmor-measurements.md. The name of each test names the issue.
 
 func pitfallConfig(ids ...string) *Config {
 	c := &Config{Profile: ProfileDefault, Rules: map[string]RuleConfig{}}

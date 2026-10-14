@@ -3,23 +3,10 @@ export const defaultSource = `# Paste your workflow YAML to this code editor
 on:
   push:
     branch: main
-    tags:
-      - 'v\\d+'
 jobs:
   test:
-    strategy:
-      matrix:
-        os: [macos-latest, linux-latest]
-    runs-on: \${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
-      - run: echo "Checking commit '\${{ github.event.head_commit.message }}'"
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node_version: 18.x
-      - uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: \${{ matrix.platform }}-node-\${{ hashFiles('**/package-lock.json') }}
-        if: \${{ github.repository.permissions.admin == true }}
-      - run: npm install && npm test`;
+      - run: echo "\${{ github.event.head_commit.message }}"
+      - run: echo "\${{ matrix.os }}"`;
