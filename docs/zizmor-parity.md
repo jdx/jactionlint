@@ -27,7 +27,7 @@ How to read the table:
 | `artipacked` | `artipacked` | default | partial, with a fix. A checkout that a later `git push` (or an action that pushes) needs, `actions/checkout@v1` and a `persist-credentials` given by an expression are not reported. A `git push` counts as a command only: in a comment, in the text of `echo` or in a heredoc it does not. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
 | `bot-conditions` | `bot-conditions` | default | partial: `github.actor`, `github.triggering_actor`, `github.actor_id` and `github.event.sender.*` compared with a bot (`==`, `contains()`, `startsWith()`, `endsWith()`) in job and step `if:`. `!=` and negated tests are not reported, as in zizmor. `--fix=unsafe` only for workflows with `pull_request`/`pull_request_target` events. Bot names without `[bot]` are known by ID and prefix only. Judged by the events that reach the job, also through local reusable workflows: not reported when only `push`-like events (`push`, `schedule`, `workflow_dispatch`, ...) can run it, and the suggestion says that the author field is missing on the other events of a mixed workflow. Composite actions: the fix needs every local caller to run on a pull request event. A conjunction with a check of the author of the pull request is not reported (zizmor#1914), and neither is a negated test; those are the 4 misses |
 | `cache-poisoning` | `cache-poisoning` | default, with the option `pedantic` | partial: a fixed table of cache actions and publishing actions. 43% of the findings of zizmor on the corpus are reported by default and 72% with the option `pedantic`, which adds zizmor's two heuristics (a tag with read-only permissions, a `branches:` filter that names a release branch among others) and has a measured false-positive rate of about 90%; most of the rest is zizmor reporting a cache that the action does not restore. See [cache-poisoning against zizmor](#cache-poisoning-against-zizmor). `tags-ignore` is not a release trigger, neither is a `tags:` filter that lets no tag through. `setup-node` v5 and later and `docker/setup-buildx-action` are covered, judged by the `package.json` of the repository and by `version`. A step guarded by `if: !startsWith(github.ref, 'refs/tags/')` is evaluated for the release scenarios, where zizmor reports it The table has the actions of zizmor's table (`pnpm/setup`, `graalvm/setup-graalvm`, `ramsey/composer-install` among them). The option `pedantic` also reports a cache that saves a file with credentials (`~/.npmrc`, `~/.ssh`, ...; [zizmor#723](https://github.com/zizmorcore/zizmor/issues/723) is open). |
-| `concurrency-limits` | `concurrency-limits` | default | partial: only a missing `concurrency:` and the bare group form are reported, not `cancel-in-progress: false`. A workflow that only a schedule or a manual run starts is not reported (nothing supersedes such a run), nor is the job of `copilot-setup-steps.yml` or a generated file. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
+| `concurrency-limits` | `concurrency-limits` | default | partial: a missing `concurrency:` and the bare group form are reported. A workflow that only a schedule or a manual run starts is reported with the option `pedantic` (the `pedantic` profile turns it on) and not by default, because nothing supersedes such a run; the advice for it never cancels runs. zizmor 1.30.1 does not report `cancel-in-progress: false` either. The job of `copilot-setup-steps.yml`, a generated file and a `concurrency:` that is an expression are not reported. See [where a rule differs on purpose](#where-a-rule-differs-on-purpose) |
 | `dangerous-triggers` | `dangerous-triggers` | default, with the option `pedantic` | full, except that a workflow which cannot write (`permissions: {}`, read-only everywhere) and reads no secret is reported only with the option `pedantic`, as [zizmor#398](https://github.com/zizmorcore/zizmor/issues/398) proposes (zizmor reports it always; the effect on the comparison below was not measured). The message names the scopes the token can write and the secrets. Adds `issue_comment`, which zizmor flags from 1.31; reported at the trigger, zizmor reports at `on:`, which is more than 3 lines away in a long `on:` block (all 72 misses of the harness are that). `pull_request_target` with only `actions/labeler` is exempt in both |
 | `dependabot-cooldown` | `dependabot-cooldown` | default | full on the corpus, plus true positives that zizmor 1.30.1 misses (it stops at the first update which satisfies the minimum). `--fix` needs the `default-days` option; zizmor has a built-in 7. The `semver-*-days` keys are checked by neither. An update with `open-pull-requests-limit: 0` or an `ignore` of every dependency is not reported (nothing is proposed that a cooldown could delay), where zizmor reports it |
 | `dependabot-execution` | `dependabot-execution` | default | not measured: no `allow` on the corpus, so both tools report nothing. Covered by unit tests only. The fix is unsafe (zizmor offers it too) |
@@ -75,7 +75,7 @@ audit with findings of both is one rule with the option `pedantic` for the noisi
 | --- | --- | --- |
 | `anonymous-definition`, `undocumented-permissions` | pedantic | `pedantic` profile |
 | `self-hosted-runner`, `secrets-outside-env` | auditor | `pedantic` profile |
-| `concurrency-limits` | pedantic | `default` profile, a decision of the maintainer; it has a safe fix for workflows that only pull requests start |
+| `concurrency-limits` | pedantic | `default` profile, a decision of the maintainer; it has a safe fix for workflows that only pull requests start. A workflow that only a schedule or a manual run starts is behind the option `pedantic` |
 | `template-injection`, `superfluous-actions`, `unpinned-tools` | regular and pedantic | `default` profile, the pedantic findings behind the option `pedantic` |
 | `misfeature` | regular, the custom shells auditor | `default` profile, custom shells behind the option `pedantic` |
 | `artipacked`, `excessive-permissions`, `obfuscation`, `unpinned-images`, `unpinned-uses`, `insecure-commands` | regular, with pedantic or auditor findings for special cases | `default` profile; the special cases are not separate findings |
@@ -186,7 +186,7 @@ Known causes of differences between the tools:
 
 ### Refresh of 2026-10-13 on smaller corpora
 
-`mise run zizmor-diff` was run again with jactionlint from `main` (`871c07d5`), zizmor 1.30.1 (still the newest version that mise
+`mise run zizmor-diff` was run again with jactionlint from `main` (`ac37b698`, 2026-10-14), zizmor 1.30.1 (still the newest version that mise
 lists, so the pin is unchanged), the `pedantic` profile of `scripts/zizmor-diff/pedantic.yaml` and `--line-tolerance 3`, the settings of the
 run above, over the repositories that were on the machine. **These are subsets, not the 1,109 repositories**, and whether they are part of
 them is not known, so their percentages are not comparable with the 92.8% above.
@@ -199,15 +199,15 @@ them is not known, so their percentages are not comparable with the 92.8% above.
 
 | | zizmor | also reported | missed | share |
 | --- | --: | --: | --: | --: |
-| A, 287 repositories | 36,733 | 34,700 | 2,033 | 94.5% |
+| A, 287 repositories | 36,733 | 35,227 | 1,506 | 95.9% |
 | B, 23 repositories | 998 | 955 | 43 | 95.7% |
-| C, 73 repositories | 11,319 | 10,240 | 1,079 | 90.5% |
+| C, 73 repositories | 11,319 | 10,484 | 835 | 92.6% |
 
 Audits with misses, A and C (B has `excessive-permissions` 35, `artipacked` 7 and `undocumented-permissions` 1, nothing else):
 
 | zizmor audit | A zizmor | A missed | C zizmor | C missed |
 | --- | --: | --: | --: | --: |
-| `concurrency-limits` | 1,956 | 574 | 790 | 281 |
+| `concurrency-limits` | 1,956 | 47 | 790 | 37 |
 | `undocumented-permissions` | 2,909 | 461 | 1,258 | 211 |
 | `anonymous-definition` | 3,122 | 346 | 1,358 | 294 |
 | `artipacked` | 2,536 | 214 | 1,021 | 88 |
@@ -231,16 +231,23 @@ and `unsound-ternary` (and `overprovisioned-secrets` on A, with 10 findings). Ev
 harness reported no unmapped audit: all 41 audits whose documentation anchor is in the zizmor 1.30.1 binary have a row in the table above.
 
 **What changed since the last measurement.** To say why, the same three runs were repeated with jactionlint built from `b1ac9f23`, the
-commit of the 1,109 run (72 commits earlier; the harness did not change between the two). The only mapped audit whose misses changed is
-`unsound-condition`, by one change: `if-always-true` stopped reporting the newlines at the end of a block scalar (#226), which GitHub trims.
-The new misses are the `if: >` conditions of `home-assistant/core` and `github/codeql` (2 on A, 1 on C). Totals: A 2,031 to 2,033, C 1,078 to
-1,079, B unchanged at 43. Every other number in the table is the same before and after the 72 commits, so the merged rules did not add or
-remove a shared finding of a mapped audit on these corpora. **Not done**: the causes of the misses in the table were not sorted again.
-[Where a rule differs on purpose](#where-a-rule-differs-on-purpose) holds the causes of the 1,109 run; whether the same causes explain the
-misses of the subsets was not checked. The shares differ from the 1,109 run for reasons that are not all known; one is known for
-`cache-poisoning`: the harness compares the `pedantic` persona of zizmor, and the section on cache poisoning the `auditor` one.
+commit of the 1,109 run (the harness did not change between the two). Two mapped audits have other misses, each by one change:
 
-The findings that only jactionlint reports grew on A from 50,546 to 62,631, on C from 18,923 to 21,197 and on B from 2,455 to 2,544, mostly
+- `concurrency-limits`: 574 to 47 misses on A and 281 to 37 on C (B had none). Cause: #266, which reports a workflow that only a schedule
+  or a manual run starts with the option `pedantic`, which the `pedantic` profile of the harness turns on. That is the group that the
+  1,109 run counted as 1,363 of its 1,440 misses (see [where a rule differs on purpose](#where-a-rule-differs-on-purpose), whose
+  numbers are those of the 1,109 run). The 47 and 37 that are left were not sorted by cause.
+- `unsound-condition`: 0 to 2 misses on A and 0 to 1 on C. Cause: #226 (`if-always-true` no longer reports the newlines at the end of a
+  block scalar), which GitHub trims. The misses are the `if: >` conditions of `home-assistant/core` and `github/codeql`.
+
+Totals: A 2,031 to 1,506 misses, C 1,078 to 835, B unchanged at 43. Every other number in the table is the same before and after, so the
+other merged rules did not add or remove a shared finding of a mapped audit on these corpora. **Not done**: the causes of the misses in
+the table were not sorted again. [Where a rule differs on purpose](#where-a-rule-differs-on-purpose) holds the causes of the 1,109 run;
+whether the same causes explain the misses of the subsets was not checked. The shares differ from the 1,109 run for reasons that are not
+all known; one is known for `cache-poisoning`: the harness compares the `pedantic` persona of zizmor, and the section on cache poisoning
+the `auditor` one.
+
+The findings that only jactionlint reports grew on A from 50,546 to 62,680, on C from 18,923 to 21,238 and on B from 2,455 to 2,543, mostly
 from the rules added since: on A `unmatched-paths-filter` (5,147, an artifact of this corpus: it holds the `.github` directories only, so
 no path of a filter exists), `deprecated-node-runtime` (2,145), `fail-fast-action-inputs` (1,061), `missing-version-comment` (469),
 `deprecated-runner-label` (290), `insufficient-permissions` (229), `event-name-never-received` (175), `comment-trigger-authorization` (88),
@@ -276,6 +283,7 @@ jactionlint" in the harness report. The idea behind some of them is an open issu
 | `insufficient-permissions`, `ubuntu-slim-limits` | default | the explicit `permissions` of a job do not grant what an action or command of the job needs; a job on `ubuntu-slim` that has a container, services or a Docker container action. Both have the option `pedantic` for the noisier cases. [Permissions](checks.md#check-insufficient-permissions), [runner](checks.md#check-ubuntu-slim-limits) | fixtures |
 | `deprecated-node-runtime`, `deprecated-runner-label` | pedantic | a Node.js runtime that GitHub removed, and a runner label that GitHub is going to retire on a known date. [Node](checks.md#check-deprecated-node-runtime), [label](checks.md#check-deprecated-runner-label) | fixtures; the findings change with the date, so they are not a stable corpus number |
 | `concurrency-deadlock`, `event-name-never-received`, `fail-fast-action-inputs` | correctness, pedantic, pedantic | a concurrency group equal to that of a local reusable workflow the job calls; `github.event_name` compared with an event the workflow never receives; an action that passes when nothing was produced and is not told to fail. [Deadlock](checks.md#check-concurrency-deadlock), [event](checks.md#check-event-name-never-received), [inputs](checks.md#check-fail-fast-action-inputs) | fixtures |
+| `hardcoded-registry-credentials` | default | a `password`, `token`, `key` or `auth-key` of a `registries` entry in `dependabot.yml` that is a literal and not a reference (`${{secrets.NAME}}`), and a password in the user information of its `url`. [The check](checks.md#check-hardcoded-registry-credentials) | zizmor [#1222](https://github.com/zizmorcore/zizmor/issues/1222) is open (it proposes the same idea, and folding it with `hardcoded-container-credentials` into one `hardcoded-credentials`); the ID follows `hardcoded-container-credentials`. Not measured against zizmor, which has no such audit. The 76 repositories of the local corpus used for this rule have 42 `dependabot.yml` files, 2 with `registries` (one uses `${{secrets.X}}`, the other has no credential), so there is no finding and no measured false-positive rate, only unit tests and fixtures. A user name is not a credential (the options reference writes a literal one), a username in the URL is not reported, and no fix is offered |
 | `pipeline-without-pipefail` | default | a failure in a pipeline of a `run:` script is hidden because the default shell (`bash -e {0}`) and `shell: sh` do not enable pipefail. zizmor [#288](https://github.com/zizmorcore/zizmor/issues/288) is the open idea | unit tests and fixtures |
 | `agentic-actions` | default | AI agent actions ([zizmor#1605](https://github.com/zizmorcore/zizmor/issues/1605) is a proposal): an agent outsiders can steer without a check of the user, an open gate (`allowed_non_write_users: '*'`), settings that turn safeguards off, an agent on the code of a pull request. [The check](checks.md#check-agentic-actions) | [see below](#agentic-actions) |
 | `unverified-download` | default | a download piped into a shell or an interpreter, a downloaded file made executable and run without a checksum or signature check, TLS verification turned off. The idea is zizmor [#711](https://github.com/zizmorcore/zizmor/issues/711) | [see below](#downloads-and-credentials) |
@@ -351,7 +359,7 @@ actions.
   anywhere, also `# v8.0.1 (source v8)` and `# Release v4.4.1`, which zizmor 1.30.1 calls version-less.
 - `obfuscation` does not report `fromJSON(toJSON(context))`; a constant `if:` is `constant-condition` and `if-always-true` (14 of the misses, all `if: ${{ false }}`); an index that is a value of the matrix (`secrets[matrix.provider.env_key]`, `fromJSON(...)[matrix.tool]`) is not reported, because the matrix is how a workflow selects a value by name (53 of the misses); a trailing slash in the path of a remote action (`owner/repo/@sha`) is not reported (1).
 - **Generated files.** A file whose header says that a tool wrote it (`# This file was automatically generated by gh-aw`, `# generated by praktika`, `# Generated by projen`) is not checked by the rules of the `policy` and `style` groups by default (`generated-files: skip-policy`), because its author fixes the generator. On the corpus that is 200 files in 42 repositories (96 by gh-aw, 28 by praktika, 25 "automatically generated", 10 by dist, 5 by modulesync and a few others). They hold 941 of the 963 misses of `anonymous-definition`, 755 of the 756 of `unpinned-uses`, 37 of the 1,440 of `concurrency-limits` and 2 of the 33 of `unpinned-images`. With `generated-files: report` the same run misses 22, 1, 1,403 and 31.
-- `concurrency-limits` does not report a workflow that only a `schedule` or a `workflow_dispatch` starts, because nothing supersedes such a run (1,363 of the 1,440 misses). It reports a missing `concurrency:` and the bare group form, not a `concurrency:` without `cancel-in-progress: true` (15), and not a workflow in which every job has a `concurrency:` of its own (4). The job of `copilot-setup-steps.yml` is not reported by it or by `anonymous-definition` (20 and 22 misses, see zizmor#1481 above). One more miss is a position: the `on:` of a workflow that is indented as a whole is not found, so jactionlint reports at line 1.
+- `concurrency-limits` does not report a workflow that only a `schedule` or a `workflow_dispatch` starts by default, because nothing supersedes such a run (1,363 of the 1,440 misses of the larger corpus above, which could not be run again for this change). The maintainer decided to report them behind the option `pedantic` (on in the `pedantic` profile, which is what the comparison uses), so the default profile does not change. The advice for such a workflow is a top-level `concurrency:` with a `group:` and **not** `cancel-in-progress: true`, because a cancelled scheduled run is not started again and can lose its work. There is no fix for it. A bare group name (`concurrency: nightly`) of such a workflow is reported with the advice to write `cancel-in-progress: false` explicitly, which is the same behavior. A workflow that releases or deploys keeps its bare group. Measured on 100 local repositories (the 22 of `corpus.txt` and 76 well-known public repositories, `mise run zizmor-diff` with `--line-tolerance 3` and the `pedantic` profile): zizmor reports 864 findings of this audit, jactionlint also reported 583 before the change and reports 827 after it; the 37 misses that are left are 24 in generated files, 9 `copilot-setup-steps.yml` and 4 `concurrency: ${{ ... }}` (an expression can be a whole configuration, so it is not taken for a group name). The change adds 41 findings that zizmor does not report there: 36 are workflows in which every job calls a reusable workflow, which zizmor skips and jactionlint reports on purpose (zizmor#1619 above), and 5 are in a repository whose zizmor configuration turns the audit off. `cancel-in-progress: false`, a mapping without `cancel-in-progress`, and `queue:` are accepted: a probe of zizmor 1.30.1 with a file of each shape does not report them either, and the 15 misses of this kind that the table above counted before could not be found again on the 100 repositories (there are none), so no claim is made for them. A job whose `concurrency:` is only a group name is reported by zizmor even when every job has one, and not by jactionlint (the 4 misses of the larger corpus): that stays a difference, not measured. The job of `copilot-setup-steps.yml` is not reported by it or by `anonymous-definition` (20 and 22 misses, see zizmor#1481 above). One more miss is a position: the `on:` of a workflow that is indented as a whole is not found, so jactionlint reports at line 1.
 - `artipacked` does not report a checkout that a later step pushes with: a `git push` command, or an action that pushes (678 of the 699 misses, zizmor#1043), `actions/checkout@v1`, which has no such input (8, zizmor#1098), or a `persist-credentials` that is an expression (2). The other 11 are positions: zizmor reports at the first line of the step and jactionlint at its `uses:`, more than 3 lines further down when the step has a long `if:` or comments, or at the alias of a step written as a YAML anchor.
 - `dependabot-cooldown` does not report an update that cannot propose anything: `open-pull-requests-limit: 0` or an `ignore` of every dependency (40 of the 44 misses). The other 4 are positions: zizmor reports at the `package-ecosystem` key and jactionlint at the first key of the update.
 - `dangerous-triggers`: 72 misses, all of them the position of the `on:` block.
@@ -454,16 +462,15 @@ without buildx is the one case that this does not cover.
 
 ## What is not done
 
-These ideas from the zizmor tracker are **not built** (checked against [rules.md](rules.md) on 2026-10-13): shell syntax errors without
-shellcheck ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)) and credentials in the `registries` of `dependabot.yml`
-([#1222](https://github.com/zizmorcore/zizmor/issues/1222)). A rule for a SHA without a version comment
-([#2316](https://github.com/zizmorcore/zizmor/issues/2316)) exists now: `missing-version-comment` (see [rules of our own](#rules-of-our-own)).
-The cold-run cost of `--online` is the number of requests (about 91 for a repository with 173 `uses:` lines, see [online audits](#online-audits)); a bulk
-fetch of advisories that would cut it is not built at the time of writing. zizmor does not have a precomputed snapshot of tags or
-advisories either: the only static data it ships for these audits is a list of 153 archived repositories
-(`crates/zizmor/data/archived-repos.txt`), which lets `archived-uses` run offline, and `known-vulnerable-actions` asks the advisories API
-through an HTTP cache (checked in the source of zizmor at commit 1779f43, not with the harness). The registry of rules, [rules.md](rules.md), is the
-list of what exists.
+One idea from the zizmor tracker is **not built** (checked against [rules.md](rules.md) on 2026-10-14): shell syntax errors without
+shellcheck ([#2322](https://github.com/zizmorcore/zizmor/issues/2322)). Two that were not built are now: a rule for a SHA without a version
+comment ([#2316](https://github.com/zizmorcore/zizmor/issues/2316)) is `missing-version-comment`, and credentials in the `registries` of
+`dependabot.yml` ([#1222](https://github.com/zizmorcore/zizmor/issues/1222)) are `hardcoded-registry-credentials` (see [rules of our
+own](#rules-of-our-own)). zizmor does not have a precomputed snapshot of tags or advisories, so there is none to match: the only static
+data it ships for these audits is a list of 153 archived repositories (`crates/zizmor/data/archived-repos.txt`), which lets `archived-uses`
+run offline, and `known-vulnerable-actions` asks the advisories API through an HTTP cache (checked in the source of zizmor at commit
+1779f43, not with the harness). jactionlint's `known-vulnerable-actions` reads the advisories of all actions with one request, not one per
+action (#268). The registry of rules, [rules.md](rules.md), is the list of what exists.
 
 ## Permissions against zizmor
 
@@ -661,8 +668,10 @@ Gaps of the online rules that the corpus does not show, so they are not measured
 - Reusable workflows are checked like actions; composite action files (`action.yml`) are checked too, with the steps of a composite
   action treated like workflow steps.
 
-Cost: for a repository with 173 `uses:` lines the first run makes about 91 requests, a run within the hour none, and a later run
-only conditional requests (a 304 answer is free of rate limit for authenticated clients).
+Cost: for a repository with 173 `uses:` lines the first run made about 91 requests, before `known-vulnerable-actions` read the advisories of
+all actions with one request (#268, which measured 104, 136 and 118 requests for `jdx/mise`, `astral-sh/uv` and `home-assistant/core` falling to
+79, 102 and 83; the 91 was not measured again). A run within the hour makes none, and a later run only conditional requests (a 304 answer
+is free of rate limit for authenticated clients).
 
 ### Online client: where it differs from zizmor
 
@@ -680,8 +689,8 @@ Not compatible by design; the client answers zizmor issues [#1350](https://githu
 - The token is sent to the API host only, is redacted from all output, and is never sent to a host that a repository's own config file chose.
 - `--online=cache` answers from the disk cache only, without the network.
 
-Not done: a bulk fetch of advisories, which would cut the cold-run cost (the number of requests) further. zizmor does not have a
-precomputed snapshot of tags or advisories either (see [what is not done](#what-is-not-done)).
+Not done: a precomputed snapshot of tags or advisories. zizmor does not have one either (see [what is not done](#what-is-not-done)); the
+cold-run cost of `--online` is the number of requests, which the single advisories request cut by one per distinct action.
 
 ## Ignore comments
 
@@ -735,5 +744,6 @@ These are reported or left unreported on purpose:
   a checkout of a private repository.
 - `self-repository` is a zizmor regular finding that the profile keeps in `pedantic`.
 - `concurrency-limits` changes its advice to `cancel-in-progress: false` for workflows that release or deploy, so that it does not
-  contradict `concurrency-cancels-release`; the fixer only applies to workflows of pull requests.
+  contradict `concurrency-cancels-release`, and does not suggest cancelling for a workflow that only a schedule or a manual run
+  starts; the fixer only applies to workflows of pull requests.
 - `workflow-call-permissions` without `assume-default-permissions` reports only what no default token has (`id-token`).

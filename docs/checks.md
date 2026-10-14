@@ -75,6 +75,7 @@ List of checks:
 - [Dependabot configuration syntax](#check-dependabot-syntax)
 - [Dependabot cooldown](#check-dependabot-cooldown)
 - [Dependabot insecure code execution](#check-dependabot-execution)
+- [Dependabot registry credentials in plain text](#check-hardcoded-registry-credentials)
 - [Dependabot updates of actions (pedantic)](#check-dependabot-missing-actions-update)
 - [Pipelines that hide failures](#check-pipeline-without-pipefail)
 - [GNU-only options on macOS runners (pedantic)](#check-macos-gnu-flags)
@@ -7128,6 +7129,69 @@ The rule is `dependabot-execution`. It is enabled by default as an error. Remove
 working. If you need `allow` for a registry, ignore the finding for that file with `paths:` in [the configuration](config.md)
 or with an [ignore comment](usage.md).
 
+<a id="check-hardcoded-registry-credentials"></a>
+## Dependabot registry credentials in plain text
+
+The `registries` of `dependabot.yml` tell Dependabot how to sign in to a private package registry. Dependabot reads a
+secret from the Dependabot secrets of the repository when a value is written as `${{secrets.NAME}}`, so a `password`,
+`token`, `key` or `auth-key` that is a literal puts the credential in the repository and its history, where everybody who
+can read the code (and every fork) has it. A `password` in the user information of the `url` (`https://user:password@host/`)
+is the same. This check reports them. It is the counterpart of [`hardcoded-container-credentials`](#check-hardcoded-credentials)
+for `dependabot.yml`; zizmor has no audit for it yet ([zizmor#1222](https://github.com/zizmorcore/zizmor/issues/1222) is open).
+
+Example input:
+
+```yaml
+version: 2
+registries:
+  dockerhub:
+    type: docker-registry
+    url: https://registry.hub.docker.com
+    username: octocat
+    # ERROR: the password is written in the repository
+    password: not-a-real-password
+  npm-github:
+    type: npm-registry
+    url: https://npm.pkg.github.com
+    # OK: a Dependabot secret
+    token: ${{secrets.NPM_TOKEN}}
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - dockerhub
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    registries:
+      - npm-github
+```
+
+Output:
+
+```
+.github/dependabot.yml:8:15: "password" of registry "dockerhub" is written in plain text. store it as a Dependabot secret and write ${{secrets.NAME}} instead, and rotate the credential because it is in the history of the repository [hardcoded-registry-credentials]
+  |
+8 |     password: not-a-real-password
+  |               ^~~~~~~~~~~~~~~~~~~
+```
+
+<!-- Skip playground link -->
+
+The rule is `hardcoded-registry-credentials`. It is enabled by default as an error. It reads a value as a reference when it has
+an expression (`${{ ... }}`), so `${{secrets.NAME}}` is not reported. Usernames and OIDC settings (`tenant-id`, `client-id`, ...)
+are also not reported. There is no automatic
+fix because jactionlint cannot know the name of the secret, and a credential that was committed has to be rotated anyway.
+Only `password`, `token`, `key`, `auth-key` and a password in the `url` are checked: a user name in the user information of the
+`url` (`https://token@host/`) is not.
+
 <a id="check-dependabot-missing-actions-update"></a>
 ## Dependabot updates of actions (pedantic)
 
@@ -7506,8 +7570,37 @@ queues runs and cancels none, is accepted. The two rules never contradict each o
 by the other.
 
 Whether to cancel is a choice, so a `concurrency:` mapping that does not cancel (to serialize releases, for example) is
-accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that only run on a `schedule` or
-by `workflow_dispatch` (no new commit supersedes such a run), and workflows where every job sets its own `concurrency:`.
+accepted, and so is a `queue:`. The rule skips workflows that only run through `workflow_call` (the caller decides), workflows that
+only run on a `schedule` or by `workflow_dispatch` (no new commit supersedes such a run, but see the option `pedantic` below), and
+workflows where every job sets its own `concurrency:`.
+
+With the option `pedantic` (on under the `pedantic` profile, off otherwise, so the `default` profile reports what it always did) the
+rule also reports a workflow that only a `schedule` or a `workflow_dispatch` starts, as zizmor does. A run of such a workflow is not
+superseded by a commit, but it can overlap with the next scheduled run, with a manual one, or with itself when it takes longer than
+the interval. The advice differs from the one above on purpose:
+
+- It asks for a top-level `concurrency:` with a `group:` such as `${{ github.workflow }}` and does **not** suggest
+  `cancel-in-progress: true`: a scheduled run that is cancelled is not started again, so the work of the run (a release, a
+  synchronization, a report) is lost or left half done. A group without `cancel-in-progress` makes a new run wait for the running one.
+  Set `cancel-in-progress: true` only when a run can be thrown away without loss.
+- Only one run can wait in a group: while one run is going and two more start, the newer waiting run replaces the older waiting one,
+  so an occurrence of the schedule can be skipped. The message says so and names `queue: max` (up to 100 runs wait; GitHub does not
+  allow it together with `cancel-in-progress: true`) for a workflow in which every occurrence must run. For a manual run that takes
+  inputs it adds that the inputs belong in the group, so that runs with other inputs do not replace each other.
+- The group of a workflow and the groups of its jobs are one set of names, and at most one run holds a group at a time, so a job
+  whose `concurrency.group` equals the group of its own workflow run waits for the run that contains it. When a job already uses the
+  suggested group (compared without regard to spaces inside `${{ }}`), the message suggests `${{ github.workflow }}-workflow`
+  instead, and so on if that one is used too.
+- A `concurrency:` that is only a group name (`concurrency: nightly`) is reported too, because zizmor reports it. It already behaves
+  like `cancel-in-progress: false`, so the advice is to write the mapping form with an explicit `cancel-in-progress: false`. It is not
+  reported for a workflow that releases or deploys, where the plain group is what is wanted.
+- There is no fix. The group is the choice of the author, and the fix of this rule only ever adds a group per pull request.
+
+The mapping form without `cancel-in-progress`, or with `cancel-in-progress: false`, is accepted for every kind of workflow, also with
+the option: zizmor 1.30.1 does not report it either (probed with a file of each shape), so the rule does not either. A `concurrency:`
+that is an expression (`concurrency: ${{ github.workflow }}`) can be a whole configuration, so it is not taken for a group name. A
+workflow in which every job has a `concurrency:` of its own is not reported, although zizmor reports a job whose `concurrency:` is only
+a group name. That is a documented difference, not measured: the corpus that could be run has no such workflow.
 
 `jactionlint --fix` adds the block above after `on:` when it is safe to do so, that is, only for a workflow whose triggers are all
 events of a pull request (`pull_request`, `pull_request_target`, `pull_request_review` and `pull_request_review_comment`), in which
@@ -9056,6 +9149,12 @@ GitHub publishes security advisories for actions, such as the leak of secrets th
 `known-vulnerable-actions` looks the advisories of the GitHub Actions ecosystem up for every action and reusable workflow, works
 out which version the workflow runs, and reports it when an advisory covers that version. This is the same as the
 [zizmor audit][zizmor-known-vulnerable-actions] of that name.
+
+The advisories come from one request for the whole run: the list of all advisories of the actions ecosystem (a single page of 100
+at the time of writing, 56 advisories), which also names no repository of yours to GitHub. If that list cannot be read (the endpoint
+answers an error, or the list is longer than 5 pages), the rule asks about each action instead, as before; the findings are the same.
+The data is always live (or the cache of the last live answer, see [the online section of the usage document](usage.md#online-checks)), never a copy
+shipped with jactionlint.
 
 The version comes from the ref: a version tag such as `v45.0.2` is the version. For `v45`, or a commit SHA, the rule takes the most
 specific version tag on the same commit. A branch has no version and is never reported. The finding names the first patched
@@ -10855,7 +10954,7 @@ How the rules treat actions:
 
 - **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `hardcoded-registry-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

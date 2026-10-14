@@ -989,6 +989,11 @@ jactionlint --online
   run over 20 large public repositories made 2231 requests with a cold cache, 427 of them
   for these files, and none with a warm one. Without a token GitHub allows 60 requests an hour: set one (see **Token**) when a repository
   uses many actions.
+- **Advisories in one request.** `known-vulnerable-actions` reads the advisories of the whole actions ecosystem with one list request
+  (`GET /advisories?ecosystem=actions&per_page=100`, up to 5 pages) and picks the ones of your actions itself, instead of one request
+  for each action. Cold-cache runs over three public repositories went from 104, 136 and 118 requests to 79, 102 and 83, with the same findings. The list is live data, kept
+  in the cache like every answer; nothing is built into the binary. If it cannot be read or is longer than 5 pages, each action is asked
+  about as before (`--verbose` says so). On an Enterprise Server with `--online-github-com-fallback` the list is the one of github.com.
 - **Skip private or internal actions.** `--online-deny 'mycorp/*'` (repeatable, or `deny:` in `online-options`) never asks
   about matching repositories, `--online-allow 'actions/*'` asks only about matching ones. They are not failures and not warned about.
 - **Cache.** Answers are kept in `$XDG_CACHE_HOME/jactionlint` (`~/.cache/jactionlint`), at most 32 MiB, shared safely by parallel
