@@ -183,7 +183,7 @@ func (p textPrinter) print(w io.Writer, results []fileResult, _ runInfo) error {
 			x = newLineIndex(r.src)
 		}
 		for _, e := range r.errs {
-			e.prettyPrint(w, x, true)
+			e.prettyPrint(w, x)
 			if p.docURLs && e.DocURL != "" {
 				gray.Fprintf(w, "  = docs: %s\n", e.DocURL)
 			}

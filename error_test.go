@@ -82,14 +82,14 @@ func TestErrorPrettyPrint(t *testing.T) {
 			message:  "simple message",
 			line:     1,
 			column:   1,
-			expected: "filename.txt:1:1: simple message [kind]",
+			expected: "filename.txt:1:1: simple message [id]",
 		},
 		{
 			message: "simple message with source",
 			line:    1,
 			column:  1,
 			source:  "this is source",
-			expected: `filename.txt:1:1: simple message with source [kind]
+			expected: `filename.txt:1:1: simple message with source [id]
   |
 1 | this is source
   | ^~~~`,
@@ -99,7 +99,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    1,
 			column:  6,
 			source:  "this is source",
-			expected: `filename.txt:1:6: error at middle of source [kind]
+			expected: `filename.txt:1:6: error at middle of source [id]
   |
 1 | this is source
   |      ^~`,
@@ -109,7 +109,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    1,
 			column:  15,
 			source:  "this is source",
-			expected: `filename.txt:1:15: error at end of source [kind]
+			expected: `filename.txt:1:15: error at end of source [id]
   |
 1 | this is source
   |               ^`,
@@ -119,7 +119,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    1,
 			column:  5,
 			source:  "foo . bar",
-			expected: `filename.txt:1:5: error at one character word in source [kind]
+			expected: `filename.txt:1:5: error at one character word in source [id]
   |
 1 | foo . bar
   |     ^`,
@@ -129,7 +129,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    1,
 			column:  4,
 			source:  "foo bar",
-			expected: `filename.txt:1:4: error at space in source [kind]
+			expected: `filename.txt:1:4: error at space in source [id]
   |
 1 | foo bar
   |    ^`,
@@ -139,7 +139,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    3,
 			column:  3,
 			source:  "this\nis\nsource",
-			expected: `filename.txt:3:3: simple message with multi-line source [kind]
+			expected: `filename.txt:3:3: simple message with multi-line source [id]
   |
 3 | source
   |   ^~~~`,
@@ -149,7 +149,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    3,
 			column:  7,
 			source:  "this\nis\nsource",
-			expected: `filename.txt:3:7: error at end of multi-line source [kind]
+			expected: `filename.txt:3:7: error at end of multi-line source [id]
   |
 3 | source
   |       ^`,
@@ -159,7 +159,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    2,
 			column:  3,
 			source:  "this\nis\nsource",
-			expected: `filename.txt:2:3: error at newline of multi-line source [kind]
+			expected: `filename.txt:2:3: error at newline of multi-line source [id]
   |
 2 | is
   |   ^`,
@@ -169,7 +169,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    2,
 			column:  1,
 			source:  "this\n\nsource",
-			expected: `filename.txt:2:1: error at blank line of multi-line source [kind]
+			expected: `filename.txt:2:1: error at blank line of multi-line source [id]
   |
 2 | 
   | ^`,
@@ -179,7 +179,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:    11,
 			column:  2,
 			source:  "\n\n\n\n\n\n\n\n\n\nfooo",
-			expected: `filename.txt:11:2: error at line more than 10 [kind]
+			expected: `filename.txt:11:2: error at line more than 10 [id]
    |
 11 | fooo
    |  ^~~`,
@@ -189,14 +189,14 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:     2,
 			column:   6,
 			source:   "aaa\nbbb\nccc",
-			expected: "filename.txt:2:6: error at out of source [kind]",
+			expected: "filename.txt:2:6: error at out of source [id]",
 		},
 		{
 			message: "error at zero column",
 			line:    1,
 			column:  0,
 			source:  "this is source",
-			expected: `filename.txt:1:0: error at zero column [kind]
+			expected: `filename.txt:1:0: error at zero column [id]
   |
 1 | this is source
   | `,
@@ -206,7 +206,7 @@ func TestErrorPrettyPrint(t *testing.T) {
 			line:     0,
 			column:   0,
 			source:   "this is source",
-			expected: `filename.txt:0:0: error at zero line and zero column [kind]`,
+			expected: `filename.txt:0:0: error at zero line and zero column [id]`,
 		},
 	}
 
@@ -735,5 +735,35 @@ func TestDuplicateErrorsKeepTheUnsafeFixWhateverTheOrder(t *testing.T) {
 		if len(errs) != 1 || !errs[0].Fix.Unsafe {
 			t.Errorf("order %v: want the unsafe fix, got %+v", order, errs[0].Fix)
 		}
+	}
+}
+
+// TestErrorNamesTheRuleID: Error and PrettyPrint print the rule ID in the brackets, like the command, and
+// the kind only for an error without an ID.
+func TestErrorNamesTheRuleID(t *testing.T) {
+	e := &Error{Message: "no timeout", Filepath: "w.yml", Line: 3, Column: 5, Kind: "timeout-check", ID: "missing-timeout"}
+	if have, want := e.Error(), "w.yml:3:5: no timeout [missing-timeout]"; have != want {
+		t.Errorf("Error(): want %q, have %q", want, have)
+	}
+	var b bytes.Buffer
+	e.PrettyPrint(&b, nil)
+	if have, want := b.String(), "w.yml:3:5: no timeout [missing-timeout]\n"; have != want {
+		t.Errorf("PrettyPrint(): want %q, have %q", want, have)
+	}
+
+	e.ID = ""
+	if have, want := e.Error(), "w.yml:3:5: no timeout [timeout-check]"; have != want {
+		t.Errorf("Error() without an ID: want %q, have %q", want, have)
+	}
+}
+
+// TestTemplateFieldsEndColumnCountsCodePoints: end_column is counted in code points like column, not in
+// display width (the CJK characters are two cells wide).
+func TestTemplateFieldsEndColumnCountsCodePoints(t *testing.T) {
+	src := []byte("on: push\njobs:\n  a:\n    name: 日本語です\n")
+	e := &Error{Message: "m", Filepath: "w.yml", Line: 4, Column: 11, Kind: "k", ID: "i"}
+	f := e.GetTemplateFields(src)
+	if f.EndColumn != 15 {
+		t.Errorf("EndColumn of five CJK characters from column 11: want 15, have %d (snippet %q)", f.EndColumn, f.Snippet)
 	}
 }

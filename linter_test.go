@@ -1142,3 +1142,30 @@ func TestLinterGenerateDefaultConfigNewNameAndConflicts(t *testing.T) {
 		}
 	}
 }
+
+// TestNewLinterNilOptions: nil options are the zero value.
+func TestNewLinterNilOptions(t *testing.T) {
+	src := []byte("on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ foo }}\n")
+	lint := func(opts *LinterOptions) []string {
+		l, err := NewLinter(io.Discard, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, err := l.Lint("w.yml", src, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ret []string
+		for _, e := range errs {
+			ret = append(ret, e.Error())
+		}
+		return ret
+	}
+	have, want := lint(nil), lint(&LinterOptions{})
+	if len(want) == 0 {
+		t.Fatal("the source should have findings")
+	}
+	if !slices.Equal(have, want) {
+		t.Errorf("nil options: want %q, have %q", want, have)
+	}
+}

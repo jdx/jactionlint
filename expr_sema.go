@@ -551,9 +551,9 @@ func (sema *ExprSemanticsChecker) UpdateJobs(ty *ObjectType) {
 //
 // Elements of 'avail' parameter must be in lower case to check context names in case-insensitive.
 //
-// If this method is not called before checks, ExprSemanticsChecker considers any contexts are
-// available by default.
-// Available contexts for workflow keys can be obtained from jactionlint.ContextAvailability.
+// If this method is not called before checks, no context is available: ExprSemanticsChecker reports
+// every context it finds as not allowed. An empty slice means the same.
+// Available contexts for workflow keys can be obtained from jactionlint.WorkflowKeyAvailability.
 func (sema *ExprSemanticsChecker) SetContextAvailability(avail []string) {
 	sema.availableContexts = avail
 }
@@ -596,7 +596,7 @@ func (sema *ExprSemanticsChecker) checkAvailableContext(n *VariableNode) bool {
 // allowed by default. Allowed functions can be obtained from jactionlint.SpecialFunctionNames global
 // constant.
 //
-// Available function names for workflow keys can be obtained from jactionlint.ContextAvailability.
+// Available function names for workflow keys can be obtained from jactionlint.WorkflowKeyAvailability.
 func (sema *ExprSemanticsChecker) SetSpecialFunctionAvailability(avail []string) {
 	sema.availableSpecialFuncs = avail
 }

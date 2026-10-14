@@ -154,7 +154,7 @@ func generate(src []byte, out io.Writer) error {
 package jactionlint
 
 // WorkflowKeyAvailability returns contexts and special functions availability of the given workflow key.
-// 1st return value indicates what contexts are available. Empty slice means any contexts are available.
+// 1st return value indicates what contexts are available. Empty slice means no contexts are available.
 // 2nd return value indicates what special functions are available. Empty slice means no special functions are available.
 // The 'key' parameter should represents a workflow key like "jobs.<job_id>.concurrency".
 //
