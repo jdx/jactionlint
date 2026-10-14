@@ -137,10 +137,10 @@ dir = "docs"
 run = "npm install && exec npm run docs:dev"
 
 [tasks."docs:build"]
-description = "Build the documentation site (VitePress) into docs/.vitepress/dist; fails on dead links"
+description = "Build the documentation site (VitePress) into docs/.vitepress/dist; fails on dead links, lost anchors and dead #fragments"
 depends = ["docs:wasm"]
 dir = "docs"
-run = "npm ci && npm run docs:build"
+run = "npm ci && npm run docs:build && npm run verify"
 
 [tasks."docs:preview"]
 description = "Serve the built documentation site"
