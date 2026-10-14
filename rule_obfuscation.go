@@ -54,16 +54,20 @@ func (rule *RuleObfuscation) checkUses(s *String) {
 	}
 	if clean == "" {
 		rule.ReportIDf("obfuscation", s.Pos, "path of %q has redundant or empty segments (\"//\", \".\" or \"..\"). write the path in its plain form", s.Value)
+		rule.errs[len(rule.errs)-1].NoFix = &NoFix{Code: NoFixNeedsJudgment, Reason: "the path climbs out of the repository, so it has no plain form to write. point it at the action by hand"}
 		return
 	}
 	rule.ReportIDf("obfuscation", s.Pos, "path of %q has redundant or empty segments (\"//\", \".\" or \"..\"). write it as %q", s.Value, clean+s.Value[len(path):])
 	// GitHub resolves the path on its own, so the plain form is expected but not guaranteed to be
 	// the same reference. That is why the fix is unsafe.
+	noFix := &NoFix{Code: NoFixUnsupportedShape, Reason: "the value is not written in a way the fix can edit exactly, write the plain path by hand"}
 	if rule.src == nil {
+		rule.errs[len(rule.errs)-1].NoFix = noFix
 		return
 	}
 	off, ok := rule.src.valueOffset(s, 0)
 	if !ok || !rule.src.matches(off, path) {
+		rule.errs[len(rule.errs)-1].NoFix = noFix
 		return
 	}
 	rule.errs[len(rule.errs)-1].Fix = &Fix{

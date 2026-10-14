@@ -316,6 +316,7 @@ func TestChangedSinceCommand(t *testing.T) {
 		{[]string{"--changed-since", "main", "--changed-scope", "all"}, "invalid value"},
 		{[]string{"--changed-since", "main", "--fix"}, "cannot be combined"},
 		{[]string{"--changed-since", "main", "--diff"}, "cannot be combined"},
+		{[]string{"--changed-since", "main", "--export-facts"}, "--export-facts prints no findings"},
 		{[]string{"--changed-since", "main", "-"}, "stdin"},
 		{[]string{"--changed-since="}, "needs a revision"},
 	} {
@@ -431,6 +432,83 @@ func TestChangedSinceKeepsTheSharedFindingOfTheChangedLine(t *testing.T) {
 	changed := run("main")
 	if len(changed) != 1 || !strings.HasSuffix(filepath.ToSlash(changed[0].Filepath), "b.yaml") {
 		t.Errorf("the copy on the changed file is shown: %v", changed)
+	}
+}
+
+// The number of findings left out is that of a full run: a shared finding (the same broken local action reported by
+// every workflow that uses it) is one finding, hidden once when no copy of it is shown and not at all when one is.
+func TestChangedSinceCountsASharedFindingOnce(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	r := gitRepoForChanged{t: t, dir: t.TempDir()}
+	r.git("init", "-q")
+	r.git("checkout", "-q", "-b", "main")
+	wf := func(name string) string {
+		return "name: " + name + "\non: push\npermissions: {}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n"
+	}
+	r.write(".github/actions/x/action.yml", "name: x\ndescription: x\noutputs: nope\nruns:\n  using: composite\n  steps: []\n")
+	for _, n := range []string{"a", "b", "c"} {
+		r.write(".github/workflows/"+n+".yaml", wf(n))
+	}
+	r.git("add", ".")
+	r.git("commit", "-q", "-m", "base")
+	r.git("checkout", "-q", "-b", "feature")
+
+	hidden := func() (shown int, hidden int) {
+		l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{WorkingDir: r.dir, ChangedSince: "main", Select: []string{"invalid-local-action"}, Config: mustParseConfig(t, "profile: correctness\n")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		errs, err := l.LintRepository(r.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(errs), l.changedInfo().Hidden
+	}
+	// A copy of the finding is on a changed line: it is shown, and nothing is hidden
+	r.write(".github/workflows/b.yaml", strings.Replace(wf("b"), "- uses: ./.github/actions/x", "- uses: ./.github/actions/x # changed", 1))
+	if shown, hid := hidden(); shown != 1 || hid != 0 {
+		t.Errorf("a copy on a changed line: shown %d, hidden %d, want 1 and 0", shown, hid)
+	}
+	// Only a line away from every copy changed: the finding is hidden, once and not three times
+	r.write(".github/workflows/b.yaml", wf("b"))
+	r.write(".github/workflows/c.yaml", strings.Replace(wf("c"), "name: c", "name: c2", 1))
+	if shown, hid := hidden(); shown != 0 || hid != 1 {
+		t.Errorf("no copy on a changed line: shown %d, hidden %d, want 0 and 1", shown, hid)
+	}
+}
+
+// A directory whose name only starts with two dots is inside the repository: its file is filtered like any other, and
+// not shown whole as if it were outside; a file outside every repository is shown.
+func TestChangedSinceDirectoryStartingWithTwoDots(t *testing.T) {
+	r := newChangedRepo(t)
+	r.write("..foo/x.yaml", changedWorkflowA)
+	r.git("add", ".")
+	r.git("commit", "-q", "-m", "dots")
+	outside := filepath.Join(t.TempDir(), "outside.yaml")
+	if err := os.WriteFile(outside, []byte(changedWorkflowA), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{
+		WorkingDir: r.dir, ChangedSince: "feature", Config: mustParseConfig(t, "profile: correctness\nrules:\n  missing-timeout: error\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nothing changed since the branch itself: the files of the repository are hidden, the one outside it is shown
+	errs, err := l.LintFiles([]string{filepath.Join(r.dir, "..foo", "x.yaml"), filepath.Join(r.dir, ".github", "workflows", "a.yaml"), outside}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, e := range errs {
+		if e.ID == "missing-timeout" {
+			got[filepath.Base(filepath.Dir(e.Filepath))+"/"+filepath.Base(e.Filepath)] = true
+		}
+	}
+	if got["..foo/x.yaml"] || got["workflows/a.yaml"] || !got[filepath.Base(filepath.Dir(outside))+"/outside.yaml"] {
+		t.Errorf("..foo/x.yaml and a.yaml did not change, the file outside every repository is shown: %v", got)
 	}
 }
 

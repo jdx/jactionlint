@@ -287,6 +287,10 @@ func (cmd *Command) Main(args []string) int {
 			fmt.Fprintln(cmd.Stderr, err)
 			return ExitStatusInvalidCommandOption
 		}
+		if f.exportFacts {
+			fmt.Fprintln(cmd.Stderr, "--changed-since filters findings and --export-facts prints no findings but the facts of the whole repository, so they cannot be combined")
+			return ExitStatusInvalidCommandOption
+		}
 		if fix.mode != 0 || diff || baselineWrite.set || f.migrateIgnores || f.initConfig || f.migrateConfig {
 			fmt.Fprintln(cmd.Stderr, "--changed-since only filters what is reported, so it cannot be combined with --fix, --diff, --baseline-write, --migrate-ignores, --init-config or --migrate-config")
 			return ExitStatusInvalidCommandOption
