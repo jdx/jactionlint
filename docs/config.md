@@ -349,6 +349,10 @@ rules:
 - `profile` and scalar keys are replaced. `rules` and `paths` are merged by key: the entry of the later file replaces the
   entry with the same rule ID or the same glob. Lists such as `labels`, `config-variables` and `required-actions` are replaced.
 - A file can extend other files. A cycle, or a chain deeper than 10 files, is an error.
+- A file listed in `extends` which does not exist is an error (exit status 3) that names the config file and the missing
+  file. This holds for a config file given with `--config-file` and for one that is found on its own (the repository's
+  `.github/jactionlint.yaml` and the user-global file): the file is not skipped, and the next candidate or the defaults
+  are not used instead. Only a config file that does not exist itself counts as "no config file here".
 
 ## Ignoring errors by rule ID
 
@@ -466,6 +470,9 @@ are not merged:
    `$XDG_CONFIG_HOME` is not set, `$HOME/.config/jactionlint/jactionlint.yaml` is used instead, following the
    [XDG Base Directory specification][xdg]. The location used by the original actionlint
    (`$XDG_CONFIG_HOME/actionlint/actionlint.yaml`) is checked after it.
+
+The first file that exists is used even when it is broken: a parse error, or a file in its `extends` that does not exist,
+is an error with exit status 3 and the next candidate is not tried.
 
 The user-global configuration is useful for personal or organization-wide defaults shared across many repositories
 (for example via dotfiles), or for CI base images that need a baseline configuration without injecting a config file

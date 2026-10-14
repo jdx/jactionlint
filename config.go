@@ -461,6 +461,27 @@ func ReadConfigFile(path string) (*Config, error) {
 // maxExtendsDepth limits how deep "extends" chains can be.
 const maxExtendsDepth = 10
 
+// extendsError is the error of a file listed in "extends" which could not be loaded. It wraps the cause, so that
+// errors.Is(err, os.ErrNotExist) is true when the file does not exist. Use isExtendsError to tell that apart
+// from the config file itself not existing.
+type extendsError struct {
+	path   string // the config file which lists the file
+	target string // the entry of "extends" as written
+	err    error
+}
+
+func (e *extendsError) Error() string {
+	return fmt.Sprintf("could not load %q listed in \"extends\" of config file %q: %s", e.target, e.path, e.err)
+}
+
+func (e *extendsError) Unwrap() error { return e.err }
+
+// isExtendsError reports whether err comes from a file listed in "extends", at any depth of the chain.
+func isExtendsError(err error) bool {
+	var ee *extendsError
+	return errors.As(err, &ee)
+}
+
 func readConfigFile(path string, stack []string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -499,7 +520,7 @@ func readConfigFile(path string, stack []string) (*Config, error) {
 		}
 		base, err := readConfigFile(p, stack)
 		if err != nil {
-			return nil, fmt.Errorf("could not load %q listed in \"extends\" of config file %q: %w", e, path, err)
+			return nil, &extendsError{path: path, target: e, err: err}
 		}
 		merged.merge(base)
 	}
@@ -609,10 +630,12 @@ func loadRepoConfig(root string) (*Config, error) {
 		p := filepath.Join(root, ".github", f)
 		c, err := ReadConfigFile(p)
 		switch {
-		case errors.Is(err, os.ErrNotExist):
+		// A file listed in "extends" which does not exist is an error of this config file, which is there.
+		case errors.Is(err, os.ErrNotExist) && !isExtendsError(err):
 			continue
 		case err != nil:
-			return nil, fmt.Errorf("could not parse config file %q: %w", p, err)
+			// The error of ReadConfigFile already names the file.
+			return nil, err
 		default:
 			c.noteActionlintFile(f, filepath.ToSlash(filepath.Join(".github", f)))
 			return c, nil
@@ -652,10 +675,12 @@ func loadGlobalConfig() (*Config, string, error) {
 			p := filepath.Join(dir, d.dir, f)
 			c, err := ReadConfigFile(p)
 			switch {
-			case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+			// A file listed in "extends" which does not exist is an error of this config file, which is there.
+			case (errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) && !isExtendsError(err):
 				continue
 			case err != nil:
-				return nil, "", fmt.Errorf("could not parse global config file %q: %w", p, err)
+				// The error of ReadConfigFile already names the file.
+				return nil, "", fmt.Errorf("global config file: %w", err)
 			default:
 				c.noteActionlintFile(f, p)
 				return c, p, nil

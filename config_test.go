@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -595,6 +596,132 @@ func TestConfigLoadRepoConfigNames(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A config file which exists but extends a file which does not is an error. It is not "no config file here",
+// even though errors.Is(err, os.ErrNotExist) is true for it.
+func TestConfigLoadRepoConfigMissingExtends(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string // relative to the repository root
+		want  []string          // parts of the error message
+	}{
+		{
+			name: "extends of the config file",
+			files: map[string]string{
+				".github/jactionlint.yaml": "profile: pedantic\nextends: [../nope.yaml]\n",
+			},
+			want: []string{`.github/jactionlint.yaml`, `"../nope.yaml"`, `"extends"`, `nope.yaml`},
+		},
+		{
+			name: "does not fall through to the next name",
+			files: map[string]string{
+				".github/jactionlint.yaml": "extends: [nope.yaml]\n",
+				".github/actionlint.yaml":  "self-hosted-runner:\n  labels: [foo]\n",
+			},
+			want: []string{`.github/jactionlint.yaml`, `"nope.yaml"`, `"extends"`},
+		},
+		{
+			name: "extends of an extended file",
+			files: map[string]string{
+				".github/jactionlint.yml": "extends: [base.yaml]\n",
+				".github/base.yaml":       "extends: [nope.yaml]\n",
+			},
+			want: []string{`.github/jactionlint.yml`, `"base.yaml"`, `"nope.yaml"`, `"extends"`},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for f, body := range tc.files {
+				writeFile(t, filepath.Join(root, filepath.FromSlash(f)), body)
+			}
+			c, err := loadRepoConfig(root)
+			if err == nil {
+				t.Fatalf("error did not occur but the config %v was loaded", c)
+			}
+			if c != nil {
+				t.Errorf("config must not be returned with an error: %v", c)
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("the cause must stay in the chain: %v", err)
+			}
+			msg := filepath.ToSlash(err.Error())
+			for _, w := range tc.want {
+				if !strings.Contains(msg, w) {
+					t.Errorf("error message must contain %q: %q", w, msg)
+				}
+			}
+		})
+	}
+}
+
+func TestConfigLoadGlobalConfigMissingExtends(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// The actionlint location after it has a config file which must not be used instead.
+	writeFile(t, filepath.Join(dir, "jactionlint", "jactionlint.yaml"), "extends: [nope.yaml]\n")
+	writeFile(t, filepath.Join(dir, "actionlint", "actionlint.yaml"), "self-hosted-runner:\n  labels: [foo]\n")
+
+	c, p, err := loadGlobalConfig()
+	if err == nil {
+		t.Fatalf("error did not occur but the config %v was loaded from %q", c, p)
+	}
+	if c != nil || p != "" {
+		t.Errorf("config must not be returned with an error: config=%v path=%q", c, p)
+	}
+	msg := filepath.ToSlash(err.Error())
+	for _, w := range []string{"global config file", "jactionlint/jactionlint.yaml", `"nope.yaml"`, `"extends"`} {
+		if !strings.Contains(msg, w) {
+			t.Errorf("error message must contain %q: %q", w, msg)
+		}
+	}
+}
+
+// ReadConfigFile names the config file in its errors, so the loaders must not name it again.
+func TestConfigLoadConfigErrorNamesFileOnce(t *testing.T) {
+	const broken = "this: [is not: valid\n"
+	const prefix = "could not parse config file"
+
+	t.Run("repository", func(t *testing.T) {
+		root := t.TempDir()
+		p := filepath.Join(root, ".github", "jactionlint.yaml")
+		writeFile(t, p, broken)
+		_, err := loadRepoConfig(root)
+		if err == nil {
+			t.Fatal("error did not occur")
+		}
+		msg := err.Error()
+		if n := strings.Count(msg, prefix); n != 1 {
+			t.Errorf("%q must be there once but is there %d times: %q", prefix, n, msg)
+		}
+		if n := strings.Count(msg, p); n != 1 {
+			t.Errorf("the path must be there once but is there %d times: %q", n, msg)
+		}
+		if !strings.HasPrefix(msg, prefix+" ") {
+			t.Errorf("message must start with %q: %q", prefix, msg)
+		}
+	})
+	t.Run("global", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", dir)
+		p := filepath.Join(dir, "jactionlint", "jactionlint.yaml")
+		writeFile(t, p, broken)
+		_, _, err := loadGlobalConfig()
+		if err == nil {
+			t.Fatal("error did not occur")
+		}
+		msg := err.Error()
+		if n := strings.Count(msg, prefix); n != 1 {
+			t.Errorf("%q must be there once but is there %d times: %q", prefix, n, msg)
+		}
+		if n := strings.Count(msg, p); n != 1 {
+			t.Errorf("the path must be there once but is there %d times: %q", n, msg)
+		}
+		if !strings.Contains(msg, "global config file") {
+			t.Errorf("message must say that the file is the global one: %q", msg)
+		}
+	})
 }
 
 func TestConfigLoadGlobalConfigOldDirectory(t *testing.T) {
