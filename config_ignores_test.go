@@ -620,3 +620,15 @@ func TestConfigIgnoreRefCaseOfAReusableWorkflow(t *testing.T) {
 		t.Error("@V1 is not @v1")
 	}
 }
+
+func TestConfigIgnoreAllowUnused(t *testing.T) {
+	cfg := ignoreConfigHead + `ignores:
+  - {rule: unpinned-uses, uses: actions/cache, allow-unused: true}
+  - {rule: unpinned-uses, uses: actions/gone}
+`
+	root := ignoreProject(t, cfg, map[string]string{"ci.yaml": ignoreWorkflow})
+	unused := ofRule(lintIgnoreProject(t, root, fixedNow), "unused-ignore")
+	if len(unused) != 1 || unused[0].Line != 4 {
+		t.Errorf("want only the second entry reported, got %v", unused)
+	}
+}

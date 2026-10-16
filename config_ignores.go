@@ -60,6 +60,9 @@ type ConfigIgnore struct {
 	// Expires is the last day (YYYY-MM-DD, UTC) the entry suppresses findings. After it the findings
 	// come back and the entry is reported by the expired-ignore rule. Empty never expires.
 	Expires string
+	// AllowUnused accepts that the entry suppresses nothing at times, for a finding which comes and
+	// goes: the unused-ignore rule does not report it. Expiry is still checked.
+	AllowUnused bool
 
 	// Path is the config file the entry was read from. It is set by ReadConfigFile.
 	Path string
@@ -101,6 +104,9 @@ func (ig ConfigIgnore) Snippet() string {
 	put("step", ig.Step)
 	put("reason", ig.Reason)
 	put("expires", ig.Expires)
+	if ig.AllowUnused {
+		put("allow-unused", "true")
+	}
 	return b.String()
 }
 
@@ -113,7 +119,7 @@ func yamlScalar(s string) string {
 	return strings.TrimSuffix(string(out), "\n")
 }
 
-var configIgnoreKeys = []string{"rule", "file", "uses", "job", "step", "reason", "expires"}
+var configIgnoreKeys = []string{"rule", "file", "uses", "job", "step", "reason", "expires", "allow-unused"}
 
 // UnmarshalYAML implements yaml.Unmarshaler.
 func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
@@ -158,6 +164,11 @@ func (ig *ConfigIgnore) UnmarshalYAML(n *yaml.Node) error {
 			out.Reason, err = str()
 		case "expires":
 			out.Expires, err = str()
+		case "allow-unused":
+			if v.Kind != yaml.ScalarNode || (v.Value != "true" && v.Value != "false") {
+				return fmt.Errorf("\"allow-unused\" in \"ignores\" must be true or false at line %d, column %d", v.Line, v.Column)
+			}
+			out.AllowUnused = v.Value == "true"
 		}
 		if err != nil {
 			return err
@@ -685,7 +696,7 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 			}
 			// An entry which is about to expire can be unused as well: the warning must not hide it. An
 			// expired one suppresses nothing by definition, so only the expiry is reported.
-			if !expired && !rc.used[ig] && ig.someRuleRuns(cfg, l.onlineOn(cfg), rc.skipped) && rc.judgeUnused(ig, covered) {
+			if !expired && !ig.AllowUnused && !rc.used[ig] && ig.someRuleRuns(cfg, l.onlineOn(cfg), rc.skipped) && rc.judgeUnused(ig, covered) {
 				fs = append(fs, found{ig.errorAt("unused-ignore", fmt.Sprintf("the ignore for %s did not suppress any finding. remove it from \"ignores\"%s", describeIgnore(ig), ignoreReason(ig))), false})
 			}
 			for _, f := range fs {

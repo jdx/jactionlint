@@ -187,6 +187,7 @@ ignores:
 | `uses` | string | The `uses:` value of the step, or of the job when it calls a reusable workflow. See [Forms of `uses`](#forms-of-uses). |
 | `reason` | string | Why the finding is accepted. It is free text for the readers of the file, and it appears in the messages about the entry. |
 | `expires` | string `YYYY-MM-DD` | The entry suppresses through the end of that day (UTC) and stops after it. Write the date in quotes. |
+| `allow-unused` | boolean | `true` keeps the entry from being reported as [`unused-ignore`](./rules.md#unused-ignore) when it suppresses nothing, for a finding that comes and goes, such as a moving tag. Expiry is still checked. Default `false`. |
 
 An entry needs at least one of `file`, `uses`, `job` and `step`. To turn a rule off everywhere, use [`rules`](#rule-levels-and-options). Every key that an entry sets must match, and entries are not combined: two entries are two independent reasons to ignore.
 

@@ -316,6 +316,10 @@
         ],
         "description": "One accepted finding.",
         "properties": {
+          "allow-unused": {
+            "description": "Do not report the entry as unused-ignore when it suppresses nothing, for a finding which comes and goes.",
+            "type": "boolean"
+          },
           "expires": {
             "description": "The last day (YYYY-MM-DD, UTC) the entry accepts findings. After it the findings come back and the expired-ignore rule reports the entry. Quote it (\"2027-06-30\") if your editor reads an unquoted date as a timestamp, which has no string type.",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
