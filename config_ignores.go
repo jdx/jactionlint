@@ -105,7 +105,7 @@ func (ig ConfigIgnore) Snippet() string {
 	put("reason", ig.Reason)
 	put("expires", ig.Expires)
 	if ig.AllowUnused {
-		put("allow-unused", "true")
+		b.WriteString(prefix + "allow-unused: true\n")
 	}
 	return b.String()
 }
