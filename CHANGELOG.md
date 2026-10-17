@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.0](https://github.com/jdx/jactionlint/compare/v2.2.0...v2.3.0) (2026-10-17)
+
+
+### Features
+
+* **config:** add allow-unused to durable ignores ([#297](https://github.com/jdx/jactionlint/issues/297)) ([69311d3](https://github.com/jdx/jactionlint/commit/69311d3227f97134cc768264676d76af3ec461b4))
+* **upstream:** catch workflow analyzer gaps earlier ([#288](https://github.com/jdx/jactionlint/issues/288)) ([439e97d](https://github.com/jdx/jactionlint/commit/439e97d042466daaa769f73b69c3d6934aa2ee1f))
+
+
+### Bug Fixes
+
+* **workflow-call-permissions:** grant id-token to a silent caller under the permissive default ([#299](https://github.com/jdx/jactionlint/issues/299)) ([493a916](https://github.com/jdx/jactionlint/commit/493a916e4a5ee1b9b77573ec23cc8a9c458be29e))
+
 ## [2.2.0](https://github.com/jdx/jactionlint/compare/v2.1.0...v2.2.0) (2026-10-14)
 
 
