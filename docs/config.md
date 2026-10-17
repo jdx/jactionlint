@@ -305,9 +305,9 @@ Local actions and Docker images never match. Only workflow files are checked. Th
 
 | Value | Effect |
 | --- | --- |
-| unset | jactionlint reports only a scope that no default token has, such as `id-token`, which always needs an explicit opt-in. The findings are the ones of `permissive`, and the message says that no default token has the permissions. |
+| unset | jactionlint gives the caller the benefit of the doubt and assumes the permissive default, like `permissive`. |
 | `restricted` | Assumes GitHub's restricted default token (`contents: read` and `packages: read`, every other scope `none`). jactionlint reports every other scope that the called workflow needs. |
-| `permissive` | Assumes the permissive default (write on every scope). `id-token` is still treated as `none`. |
+| `permissive` | Assumes the permissive default (write on every scope, `id-token` included, which GitHub grants to a called job when the repository default is permissive). |
 
 The key affects only callers that have no `permissions:` block anywhere. When a caller declares any block, even `permissions: {}`, the check runs against that block, because GitHub treats a scope that an explicit block omits as `none`. The rule is `workflow-call-permissions`; see [Reusable workflows](./checks.md#check-reusable-workflows).
 

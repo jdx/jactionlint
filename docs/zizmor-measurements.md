@@ -426,7 +426,7 @@ These behaviors are reported or left unreported on purpose.
 - `invalid-local-action` never reports a missing local action in a composite action (actionlint issues #25 and #40), because it can be a checkout of a private repository.
 - `self-repository` is a regular-persona finding of zizmor that the profile keeps in `pedantic`.
 - `concurrency-limits` stays in the `default` profile, where zizmor has it in its pedantic persona. It changes its advice to `cancel-in-progress: false` for workflows that release or deploy, so that it does not contradict `concurrency-cancels-release`, and it does not suggest cancelling for a workflow that only a schedule or a manual run starts, which it reports only with the option `pedantic`; the fixer applies only to workflows of pull requests.
-- `workflow-call-permissions` without `assume-default-permissions` reports only what no default token has (`id-token`).
+- `workflow-call-permissions` without `assume-default-permissions` assumes the permissive default.
 - `unredacted-secrets`, `overprovisioned-secrets` and `typosquat-uses` stay in `default` although their false-positive rate on a corpus is not recorded.
 
 ## Next steps

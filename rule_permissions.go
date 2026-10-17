@@ -59,14 +59,11 @@ func effectiveLevel(p *ReusableWorkflowPermissions, scope string) int {
 // silentDefaultLevel returns the level GitHub grants for the given scope when the caller declares
 // no `permissions:` block at all (workflow- or job-level). Behavior depends on the configured
 // assumption: "restricted" matches GitHub's restricted default token (contents/packages: read,
-// everything else: none); "permissive" matches the permissive default (write on every scope) with
-// the exception of `id-token`, which always requires an explicit opt-in regardless of the
-// repo-level Workflow permissions setting.
+// everything else: none); "permissive" matches the permissive default (write on every scope).
+// GitHub also hands `id-token: write` to a called job when the caller sets no permissions and the
+// repository default is permissive.
 func silentDefaultLevel(mode, scope string) int {
 	if mode == AssumeDefaultPermissionsPermissive {
-		if scope == "id-token" {
-			return permLevelNone
-		}
 		return clampLevelForScope(scope, permLevelWrite)
 	}
 	switch scope {

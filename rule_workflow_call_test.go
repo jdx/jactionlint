@@ -478,10 +478,9 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 			cfgMode:    AssumeDefaultPermissionsPermissive,
 		},
 		{
-			what:       "caller silent, default permissive still denies id-token",
+			what:       "caller silent, default permissive grants id-token",
 			calleePerm: scopes("id-token", "write"),
 			cfgMode:    AssumeDefaultPermissionsPermissive,
-			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none"`,
 		},
 		{
 			what:       "caller silent, default restricted denies id-token",
@@ -519,9 +518,8 @@ func TestRuleWorkflowCallCheckPermissions(t *testing.T) {
 			calleePerm: scopes("pull-requests", "write", "contents", "write", "packages", "write"),
 		},
 		{
-			what:       "caller silent, default unknown, id-token is flagged since no default token has it",
+			what:       "caller silent, default unknown, id-token is not flagged",
 			calleePerm: scopes("id-token", "write", "contents", "write"),
-			wantErr:    `requires "id-token: write" but the calling job grants "id-token: none". neither the calling job nor its workflow sets "permissions:", so the token has the default of the repository, and no default token has these permissions`,
 		},
 		{
 			what:       "caller silent, restricted by the configuration, says so",
