@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.3.0](https://github.com/jdx/jactionlint/compare/v2.2.0...v2.3.0) (2026-10-21)
+
+
+### Features
+
+* **config:** add allow-unused to durable ignores ([#297](https://github.com/jdx/jactionlint/issues/297)) ([69311d3](https://github.com/jdx/jactionlint/commit/69311d3227f97134cc768264676d76af3ec461b4))
+* **upstream:** catch workflow analyzer gaps earlier ([#288](https://github.com/jdx/jactionlint/issues/288)) ([439e97d](https://github.com/jdx/jactionlint/commit/439e97d042466daaa769f73b69c3d6934aa2ee1f))
+
+
+### Bug Fixes
+
+* build with Go 1.27.3 to reject compromised eMudhra certificates ([#301](https://github.com/jdx/jactionlint/issues/301)) ([cca9bb8](https://github.com/jdx/jactionlint/commit/cca9bb8a59472f93ff56dd04a52e2a6cc81f8b80))
+* **workflow-call-permissions:** grant id-token to a silent caller under the permissive default ([#299](https://github.com/jdx/jactionlint/issues/299)) ([493a916](https://github.com/jdx/jactionlint/commit/493a916e4a5ee1b9b77573ec23cc8a9c458be29e))
+
 ## [2.2.0](https://github.com/jdx/jactionlint/compare/v2.1.0...v2.2.0) (2026-10-14)
 
 
