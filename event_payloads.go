@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 7e81618beb08),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 3177ad6a86ca),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //
@@ -181,10 +181,10 @@ var eventPayloadObjects = map[string]string{
 var eventPayloads = map[string]string{
 	"*": `{account,action,after,alert:{affected_package_name,affected_range,assigned_to,assignees,auto_dismissed_at,closure_request_comment,
 		closure_request_reviewer,closure_request_reviewer_comment,created_at,dependency:{manifest_path,package,relationship,
-		scope},dismiss_comment,dismiss_reason,dismissal_approved_by,dismissal_request:{created_at,id,requester,status,
-		url},dismissed_at,dismissed_by,dismissed_comment,dismissed_reason,dismisser,external_identifier,external_reference,
-		fix_reason,fixed_at,fixed_in,ghsa_id,html_url,id,instances:[{analysis_key,classifications:[],commit_sha,environment,
-		location,message,ref,state}],instances_url,locations_url,metadata:[{key,value}],most_recent_instance:{analysis_key,
+		scope,version_requirement},dismiss_comment,dismiss_reason,dismissal_approved_by,dismissal_request:{created_at,
+		id,requester,status,url},dismissed_at,dismissed_by,dismissed_comment,dismissed_reason,dismisser,external_identifier,
+		external_reference,fix_reason,fixed_at,fixed_in,ghsa_id,html_url,id,instances:[{analysis_key,classifications:[],
+		commit_sha,environment,location,message,ref,state}],instances_url,locations_url,metadata:[{key,value}],most_recent_instance:{analysis_key,
 		category,classifications:[],commit_sha,environment,location,message,ref,state},multi_repo,node_id,number,provider,
 		provider_slug,publicly_leaked,push_protection_bypass_request_comment,push_protection_bypass_request_html_url,push_protection_bypass_request_reviewer,
 		push_protection_bypass_request_reviewer_comment,push_protection_bypassed,push_protection_bypassed_at,push_protection_bypassed_by,
