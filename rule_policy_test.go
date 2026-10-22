@@ -549,6 +549,8 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"step condition on the trigger", "      - uses: Swatinem/rust-cache@v2\n        if: github.event_name == 'push'\n", 0},
 		{"gradle", "      - uses: gradle/actions/setup-gradle@v4\n", 1},
 		{"docker cache-from gha", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n", 1},
+		{"docker cache-from gha with no-cache", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n          no-cache: true\n", 0},
+		{"docker cache-from gha with no-cache false", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n          no-cache: false\n", 1},
 		{"docker without cache", "      - uses: docker/build-push-action@v6\n", 0},
 		{"unrelated action", "      - uses: actions/checkout@v4\n", 0},
 		// Only the inputs which switch the caching count as a condition on the trigger
@@ -565,6 +567,8 @@ func TestCachePoisoningActions(t *testing.T) {
 		{"lookup-only false on the release", "      - uses: Swatinem/rust-cache@v2\n        with:\n          lookup-only: ${{ github.event_name != 'release' }}\n", 1},
 		{"cache-disabled true on a tag", "      - uses: gradle/actions/setup-gradle@v4\n        with:\n          cache-disabled: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 0},
 		{"cache-disabled false on a tag", "      - uses: gradle/actions/setup-gradle@v4\n        with:\n          cache-disabled: ${{ github.ref == 'refs/heads/main' }}\n", 1},
+		{"docker no-cache on tags", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n          no-cache: ${{ startsWith(github.ref, 'refs/tags/') }}\n", 0},
+		{"docker no-cache off tags", "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n          no-cache: ${{ !startsWith(github.ref, 'refs/tags/') }}\n", 1},
 		{"bundler-cache decided by the ref", "      - uses: ruby/setup-ruby@v1\n        with:\n          bundler-cache: ${{ github.ref == 'refs/heads/main' }}\n", 0},
 	}
 	for _, tc := range tests {

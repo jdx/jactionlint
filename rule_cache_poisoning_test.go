@@ -219,6 +219,29 @@ func TestCachePoisoningBranchPushKnowsItsRefIsNotATag(t *testing.T) {
 	}
 }
 
+// TestCachePoisoningNoCacheRefType checks the "no-cache" input of docker/build-push-action against the ref type:
+// a release and a pushed tag have a tag ref, and a pushed branch has a branch ref even when its name is not known.
+func TestCachePoisoningNoCacheRefType(t *testing.T) {
+	const step = "      - uses: docker/build-push-action@v6\n        with:\n          cache-from: type=gha\n          no-cache: ${{ github.ref_type == 'tag' }}\n      - run: docker push example/img\n"
+	tests := []struct {
+		name, on string
+		want     int
+	}{
+		{"a pushed tag", "on:\n  push:\n    tags: ['v*']\n", 0},
+		{"the release event", "on:\n  release:\n    types: [published]\n", 0},
+		{"a pushed branch", "on:\n  push:\n    branches: [main]\n", 1},
+		{"a push without a ref filter", "on: push\n", 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.on + "jobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n" + step
+			if got := lintCacheWorkflow(t, "", src); len(got) != tc.want {
+				t.Errorf("want %d findings but got %v", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestCachePoisoningPushWithoutRefFilterAlsoGetsTags(t *testing.T) {
 	// a push trigger without a ref filter runs for tags as well as branches: a cache kept for tags is restored
 	// by the tag push. A filter on one kind of ref keeps the other kind away.
@@ -298,6 +321,35 @@ func TestCachePoisoningCallerInputExpressions(t *testing.T) {
 
 // TestCachePoisoningCallerInputExpressionsOffWhenTrue covers an input that switches the cache off when it is true.
 func TestCachePoisoningCallerInputExpressionsOffWhenTrue(t *testing.T) {
+	t.Run("docker no-cache", func(t *testing.T) {
+		const action = "name: x\ndescription: d\ninputs:\n  no-cache:\n    description: c\n    default: 'false'\nruns:\n  using: composite\n  steps:\n    - uses: docker/build-push-action@v6\n      with:\n        cache-from: type=gha\n        no-cache: ${{ inputs.no-cache }}\n"
+		const on = "on:\n  push:\n    tags: ['v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n        with:\n          no-cache: "
+		for _, tc := range []struct {
+			name  string
+			value string
+			want  int
+		}{
+			{"true on tags", "${{ startsWith(github.ref, 'refs/tags/') }}", 0},
+			{"false on tags", "${{ !startsWith(github.ref, 'refs/tags/') }}", 1},
+			{"unknown", "${{ vars.NO_CACHE }}", 1},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				root := writeProject(t, map[string]string{
+					".github/workflows/ci.yml":     on + tc.value + "\n",
+					".github/actions/x/action.yml": action,
+				})
+				l := newActionLinter(t, root, io.Discard, LinterOptions{}, "rules:\n  cache-poisoning: warn\n")
+				errs, err := l.LintFiles([]string{filepath.Join(root, ".github", "actions", "x", "action.yml")}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := policyErrorsOf(errs, "cache-poisoning"); len(got) != tc.want {
+					t.Errorf("want %d findings but got %v", tc.want, got)
+				}
+			})
+		}
+	})
+
 	const action = "name: x\ndescription: d\ninputs:\n  lookup:\n    description: c\n    default: 'false'\nruns:\n  using: composite\n  steps:\n    - uses: Swatinem/rust-cache@v2\n      with:\n        lookup-only: ${{ inputs.lookup }}\n"
 	const on = "on:\n  push:\n    tags: ['v*']\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: ./.github/actions/x\n        with:\n          lookup: "
 	tests := []struct {
