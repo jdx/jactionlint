@@ -6438,10 +6438,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # ERROR: the token stays in .git/config for the following steps
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: tar czf repo.tgz .
       # OK
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
           path: other
@@ -6459,7 +6459,7 @@ Output:
 ```
 test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of the workspace, where a later step such as an artifact upload can publish it. set "persist-credentials: false" under "with:" unless a later step needs to push [artipacked]
   |
-8 |       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+8 |       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
   |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -6468,6 +6468,8 @@ test.yaml:8:15: actions/checkout leaves the GITHUB_TOKEN in the git config of th
 The checkout action stores the `GITHUB_TOKEN` in the git config of the workspace so that later `git` commands can push. Any later step can read it, and a step that copies the workspace, such as `actions/upload-artifact` with `path: .`, publishes it in the artifact (the [ArtiPACKED](https://unit42.paloaltonetworks.com/github-repo-artifacts-leak-tokens/) attack).
 
 **Configure.** The output shows only the findings of this rule; run `jactionlint --select=artipacked` to get the same on your own files. The level of the rule is set under `rules` in the [configuration file](config.md#rules); `error` is the default and `off` turns the rule off; the example config of this section is such an entry.
+
+From `actions/checkout@v6` on the credential is kept in a separate file under `$RUNNER_TEMP`, which the git config only includes, so an upload of the workspace no longer publishes it. The rule does not report v6 and later (a commit pin is read from the version comment after it, `# v6`).
 
 **Fix.** Set `persist-credentials: false` unless a later step needs to push. An explicit `persist-credentials: true` says that the credential is needed, so it is not reported, and neither is a value given by an expression.
 
