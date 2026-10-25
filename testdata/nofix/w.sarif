@@ -148,7 +148,7 @@
             }
           ],
           "partialFingerprints": {
-            "primaryLocationLineHash": "28735841a4a4eea1:1"
+            "jactionlint/contextHash/v1": "28735841a4a4eea1:1"
           }
         },
         {
@@ -179,7 +179,7 @@
             "noFixReason": "a fix exists (Remove ACTIONS_ALLOW_UNSECURE_COMMANDS) but it may change the behavior of the workflow, so it is not offered here: review it and apply it with --fix=unsafe"
           },
           "partialFingerprints": {
-            "primaryLocationLineHash": "c0396432f10c2be1:1"
+            "jactionlint/contextHash/v1": "c0396432f10c2be1:1"
           }
         },
         {
@@ -212,7 +212,7 @@
             "noFixReason": "set the missing-timeout option default-minutes to enable the fix, jactionlint does not choose a timeout"
           },
           "partialFingerprints": {
-            "primaryLocationLineHash": "b69078b07f90fc50:1"
+            "jactionlint/contextHash/v1": "b69078b07f90fc50:1"
           }
         },
         {
@@ -269,7 +269,7 @@
             "kind": "require-permissions"
           },
           "partialFingerprints": {
-            "primaryLocationLineHash": "52b4750999256152:1"
+            "jactionlint/contextHash/v1": "52b4750999256152:1"
           }
         },
         {
@@ -301,7 +301,7 @@
             "noFixReason": "pinning needs GitHub to resolve the tag, run with --online to enable the fix"
           },
           "partialFingerprints": {
-            "primaryLocationLineHash": "9ed8c288d1f8ddd3:1"
+            "jactionlint/contextHash/v1": "9ed8c288d1f8ddd3:1"
           }
         },
         {
@@ -333,7 +333,7 @@
             "noFixReason": "the expression is an unquoted argument of the script, so quoting it would change word splitting and globbing when the value is meant to expand to several words. quote it by hand, or pass it through an environment variable and expand it the way the script needs"
           },
           "partialFingerprints": {
-            "primaryLocationLineHash": "0f6b45ebff707eaa:1"
+            "jactionlint/contextHash/v1": "0f6b45ebff707eaa:1"
           }
         }
       ]

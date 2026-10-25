@@ -454,7 +454,7 @@ jactionlint --profile correctness --select malformed-expression-delimiters --for
     }
   ],
   "partialFingerprints": {
-    "primaryLocationLineHash": "ada39da3f318b102:1"
+    "jactionlint/contextHash/v1": "ada39da3f318b102:1"
   }
 }
 ```
@@ -468,7 +468,7 @@ The log has these parts:
 | `artifacts` | One entry per file with findings, with `sourceLanguage: yaml`. The paths stay relative, so a consumer resolves them from the directory where jactionlint ran. An absolute path becomes a `file://` URI |
 | `columnKind` | `unicodeCodePoints` |
 | `results` | One result per finding, with the files sorted by path. A result has `ruleId`, `ruleIndex` (its position in `rules`), `level` (`error`, `warning` or `note`), `message.text`, the location with the region and `partialFingerprints` |
-| `partialFingerprints` | `primaryLocationLineHash` is the context hash of the [baseline](./baseline.md#how-a-finding-matches) (the rule, the enclosing job or top-level key and the normalized text of the line, without the message) and `:n` for the n-th finding with the same hash in the file. Code scanning keeps tracking a finding when lines move above it, the indentation changes or the message is reworded |
+| `partialFingerprints` | `jactionlint/contextHash/v1` is the context hash of the [baseline](./baseline.md#how-a-finding-matches) (the rule, the enclosing job or top-level key and the normalized text of the line, without the message) and `:n` for the n-th finding with the same hash in the file. The hash does not change when lines move above the finding, the indentation changes or the message is reworded, so other tools can use it to follow a finding. Code scanning does not use it: `github/codeql-action/upload-sarif` computes `primaryLocationLineHash` from the source itself and warns when a file gives another value, which is why the key has another name |
 | `fixes` | The safe fix as `artifactChanges[].replacements[]`, each with a `deletedRegion` in lines and columns and the `insertedContent.text` |
 | `properties` of a result | `kind` when it differs from the ID, `events` and `permissions` with `--finding-context`, and `noFixCode`, `noFixReason` and `noFixOption` for a finding without a fix |
 | `suppressions` | A finding that the baseline hides has one `external` suppression. `--sarif-hide-baselined` leaves such findings out of the log instead |

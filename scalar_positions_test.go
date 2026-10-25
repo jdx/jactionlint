@@ -288,7 +288,7 @@ func TestSARIFHasStableFingerprints(t *testing.T) {
 		}
 		var ret []string
 		for _, r := range doc.Runs[0].Results {
-			fp := r.PartialFingerprints["primaryLocationLineHash"]
+			fp := r.PartialFingerprints["jactionlint/contextHash/v1"]
 			if fp == "" {
 				t.Fatalf("%s has no fingerprint", r.RuleID)
 			}
