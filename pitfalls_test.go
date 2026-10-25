@@ -126,6 +126,13 @@ func TestPitfallArtipacked(t *testing.T) {
 		{"a push that runs next to one that does not", pitfallJob("      - uses: actions/checkout@v4\n      - if: false\n        run: git push\n      - run: git push\n"), 0},
 		{"checkout v1 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1\n"), 0},
 		{"checkout v1.0.0 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v1.0.0\n"), 0},
+		{"checkout v5", pitfallJob("      - uses: actions/checkout@v5\n"), 1},
+		{"checkout v6 keeps the credential out of the workspace", pitfallJob("      - uses: actions/checkout@v6\n"), 0},
+		{"checkout v6.0.2", pitfallJob("      - uses: actions/checkout@v6.0.2\n"), 0},
+		{"checkout v10", pitfallJob("      - uses: actions/checkout@v10\n"), 0},
+		{"checkout v6 and an upload of the workspace", pitfallJob("      - uses: actions/checkout@v6\n" + up), 0},
+		{"checkout v6 pinned to a commit", pitfallJob("      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2\n"), 0},
+		{"checkout v5 pinned to a commit", pitfallJob("      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1\n"), 1},
 		{"checkout v4 pinned to a commit", pitfallJob("      - uses: actions/checkout@544eadc6bf3d226fd7a7a9f0dc5b5bf7ca0675b9 # v4.1.0\n"), 1},
 	}
 	for _, tc := range tests {

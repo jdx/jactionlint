@@ -103,9 +103,14 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 			// cannot be judged: neither can a "with:" which is an expression
 			continue
 		}
-		if checkoutV1Re.MatchString(ref.Ref) || rule.pinnedToV1(a, ref) {
+		if checkoutV1Re.MatchString(ref.Ref) || rule.pinnedTo(a, ref, checkoutV1Re) {
 			// actions/checkout@v1 has no such input and always leaves the credential. The outdated runner
 			// check reports the version, and nothing here could be done (zizmor#1098)
+			continue
+		}
+		if checkoutV6Re.MatchString(ref.Ref) || rule.pinnedTo(a, ref, checkoutV6Re) {
+			// From v6 on the checkout keeps the credential in a file under $RUNNER_TEMP, which the git config only
+			// includes, so an upload of the workspace no longer publishes it (actions/checkout README, "Checkout v6")
 			continue
 		}
 		if suffix == nil {
@@ -125,9 +130,9 @@ func (rule *RuleArtipacked) VisitJobPre(n *Job) error {
 	return nil
 }
 
-// pinnedToV1 reports whether the checkout is pinned to a commit and the version comment after it names the
-// first major version: `actions/checkout@<sha> # v1`.
-func (rule *RuleArtipacked) pinnedToV1(a *ExecAction, ref *UsesRef) bool {
+// pinnedTo reports whether the checkout is pinned to a commit and the version comment after it names a version
+// that matches re: `actions/checkout@<sha> # v1`.
+func (rule *RuleArtipacked) pinnedTo(a *ExecAction, ref *UsesRef, re *regexp.Regexp) bool {
 	if ref.RefKind != RefFullSHA || rule.wf == nil || rule.wf.Comments == nil || a.Uses.Pos == nil {
 		return false
 	}
@@ -136,11 +141,14 @@ func (rule *RuleArtipacked) pinnedToV1(a *ExecAction, ref *UsesRef) bool {
 		return false
 	}
 	v, ok := commentVersion(c.Text)
-	return ok && checkoutV1Re.MatchString(v)
+	return ok && re.MatchString(v)
 }
 
 // checkoutV1Re matches the refs of the first major version of actions/checkout.
 var checkoutV1Re = regexp.MustCompile(`^v?1(\.[0-9]+)*$`)
+
+// checkoutV6Re matches the refs of actions/checkout from the sixth major version on.
+var checkoutV6Re = regexp.MustCompile(`^v?([6-9]|[1-9][0-9]+)(\.[0-9]+)*$`)
 
 // gitPushRe matches a git command that pushes.
 var gitPushRe = regexp.MustCompile(`(?m)\bgit\b[^\n]*\bpush\b`)
