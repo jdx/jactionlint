@@ -390,9 +390,10 @@ type sarifResult struct {
 	Locations  []sarifLocation `json:"locations"`
 	Fixes      []sarifFix      `json:"fixes,omitempty"`
 	Properties map[string]any  `json:"properties,omitempty"`
-	// PartialFingerprints identify the finding by what it says and where it is relative to its own
-	// line, so that code scanning keeps tracking it when lines are added above it. It must not use the key
-	// primaryLocationLineHash: upload-sarif computes that one itself and warns when a file disagrees.
+	// PartialFingerprints carry the context hash of the finding (what it says and where it is relative to its
+	// own line), which does not change when lines are added above it. Code scanning does not use this key to
+	// track alerts: upload-sarif computes primaryLocationLineHash itself and warns when a file gives another
+	// value, so the key must not be named that. Other consumers of the SARIF log can use the hash.
 	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
 	// Suppressions is set on the findings that the baseline accepts.
 	Suppressions []sarifSuppression `json:"suppressions,omitempty"`
