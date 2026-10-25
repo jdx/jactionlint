@@ -391,7 +391,8 @@ type sarifResult struct {
 	Fixes      []sarifFix      `json:"fixes,omitempty"`
 	Properties map[string]any  `json:"properties,omitempty"`
 	// PartialFingerprints identify the finding by what it says and where it is relative to its own
-	// line, so that code scanning keeps tracking it when lines are added above it.
+	// line, so that code scanning keeps tracking it when lines are added above it. It must not use the key
+	// primaryLocationLineHash: upload-sarif computes that one itself and warns when a file disagrees.
 	PartialFingerprints map[string]string `json:"partialFingerprints,omitempty"`
 	// Suppressions is set on the findings that the baseline accepts.
 	Suppressions []sarifSuppression `json:"suppressions,omitempty"`
@@ -696,7 +697,7 @@ func (p sarifPrinter) print(w io.Writer, results []fileResult, info runInfo) err
 				Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{
 					ArtifactLocation: sarifArtifactLocation{URI: uri, Index: &ai},
 				}}},
-				PartialFingerprints: map[string]string{"primaryLocationLineHash": fingerprints[i]},
+				PartialFingerprints: map[string]string{"jactionlint/contextHash/v1": fingerprints[i]},
 			}
 			if i, ok := index[e.ID]; ok {
 				res.RuleIndex = &i
