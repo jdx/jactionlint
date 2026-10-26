@@ -76,6 +76,15 @@ func TestInvisibleCharactersReported(t *testing.T) {
 	}
 }
 
+func TestInvisibleCharactersPrivateUseName(t *testing.T) {
+	for _, run := range []string{"echo hi \ue000\ue001", "echo hi \U000f0000\U0010fffd"} {
+		errs := lintInvisible(t, "ci.yaml", wfWithRun(run))
+		if len(errs) != 1 || strings.Count(errs[0].Message, "PRIVATE USE CHARACTER") != 2 {
+			t.Errorf("want PRIVATE USE CHARACTER named twice for %q but got %v", run, errs)
+		}
+	}
+}
+
 func TestInvisibleCharactersAllowed(t *testing.T) {
 	tests := map[string]string{
 		"ascii":                        wfWithRun("echo hi"),
