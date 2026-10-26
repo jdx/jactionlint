@@ -88,6 +88,8 @@ func TestInvisibleCharactersPrivateUseName(t *testing.T) {
 func TestInvisibleCharactersAllowed(t *testing.T) {
 	tests := map[string]string{
 		"ascii":                        wfWithRun("echo hi"),
+		"escaped private-use BMP":      wfWithRun(`echo hi \ue000\ue001`),
+		"escaped private-use planes":   wfWithRun(`echo hi \U000f0000\U0010fffd`),
 		"byte order mark at the start": "\ufeff" + wfWithRun("echo hi"),
 		"japanese":                     "# \u30c6\u30b9\u30c8\u3067\u3059\n" + wfWithRun("echo \u3053\u3093\u306b\u3061\u306f"),
 		"chinese":                      wfWithRun("echo \u4f60\u597d\uff0c\u4e16\u754c"),
