@@ -37,6 +37,8 @@ func TestInvisibleCharactersReported(t *testing.T) {
 		{"tag characters after a latin letter", wfWithRun("echo a\U000e0041\U000e007f"), 6, 20, "a run: script"},
 		{"direction mark in latin text", wfWithRun("echo a\u200fb"), 6, 20, "a run: script"},
 		{"joiner between latin letters", wfWithRun("echo a\u200db"), 6, 20, "a run: script"},
+		{"private use character", wfWithRun("echo hi \ue000\ue001"), 6, 22, "a run: script"},
+		{"private use character of a supplementary plane", wfWithRun("echo hi \U000f0000\U0010fffd"), 6, 22, "a run: script"},
 		{"escape character", wfWithRun("'echo \x1b[0m'"), 6, 20, "a run: script"},
 		{"soft hyphen", wfWithRun("echo a\u00adb"), 6, 20, "a run: script"},
 		{"hangul filler", wfWithRun("echo a\u3164b"), 6, 20, "a run: script"},

@@ -8468,7 +8468,7 @@ The example has a zero width space in the `uses:` reference and a right-to-left 
 - bidirectional controls: embeddings, overrides and isolates (`U+202A` to `U+202E`, `U+2066` to `U+2069`), and the marks `U+061C`, `U+200E` and `U+200F` unless they are next to right-to-left text;
 - zero width characters: `U+200B`, `U+2060`, `U+180E`, the invisible operators `U+2061` to `U+2064`, the soft hyphen `U+00AD`, the deprecated format characters `U+206A` to `U+206F`, `U+FEFF` anywhere except at the start of the file, and the joiners `U+200C` and `U+200D` where they are not part of correct spelling;
 - tag characters (`U+E0000` block), which can smuggle text, and variation selectors that do not follow a character they can modify;
-- fillers that are drawn as blanks (`U+115F`, `U+1160`, `U+3164`, `U+FFA0`), line and paragraph separators (`U+2028`, `U+2029`) and control characters other than tab, line feed and carriage return (such as the escape character).
+- fillers that are drawn as blanks (`U+115F`, `U+1160`, `U+3164`, `U+FFA0`), line and paragraph separators (`U+2028`, `U+2029`), private use characters (`U+E000` to `U+F8FF` and the two private use planes), which most fonts have no glyph for and which can carry a hidden payload (icons of Nerd Fonts and Powerline are among them: write them as an escape such as `"\ue0a0"`), and control characters other than tab, line feed and carriage return (such as the escape character).
 
 One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an expression, a `uses:` reference, a comment, a value or a key). Every finding has the level of the rule (`error` by default), also in a comment: a comment is how the change is made to look harmless.
 

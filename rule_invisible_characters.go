@@ -98,6 +98,8 @@ func invisibleName(r rune) string {
 		name = "CANCEL TAG"
 	case unicode.Is(unicode.Cf, r):
 		name = "FORMAT CHARACTER"
+	case unicode.Is(unicode.Co, r):
+		name = "PRIVATE USE CHARACTER"
 	default:
 		name = "INVISIBLE CHARACTER"
 	}
@@ -116,8 +118,8 @@ func visibleFormatChar(r rune) bool {
 
 // isInvisible reports whether the character is displayed as nothing (or changes how other text is
 // displayed) and so is not what a reader of the file expects to be there. It is never a letter,
-// a mark or a symbol of a script: only controls, format characters, variation selectors, fillers
-// and line separators are invisible, so text in any language is not affected.
+// a mark or a symbol of a script: only controls, format characters, variation selectors, fillers,
+// private use characters (which most fonts have no glyph for) and line separators are invisible, so text in any language is not affected.
 func isInvisible(r rune) bool {
 	switch {
 	case r == '\t' || r == '\n' || r == '\r':
@@ -130,6 +132,8 @@ func isInvisible(r rune) bool {
 		return true
 	case unicode.Is(unicode.Cf, r):
 		return !visibleFormatChar(r)
+	case unicode.Is(unicode.Co, r):
+		return true
 	case unicode.Is(unicode.Variation_Selector, r), unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r):
 		return true
 	}
