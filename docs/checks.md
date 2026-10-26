@@ -8470,7 +8470,7 @@ The example has a zero width space in the `uses:` reference and a right-to-left 
 - bidirectional controls: embeddings, overrides and isolates (`U+202A` to `U+202E`, `U+2066` to `U+2069`), and the marks `U+061C`, `U+200E` and `U+200F` unless they are next to right-to-left text;
 - zero width characters: `U+200B`, `U+2060`, `U+180E`, the invisible operators `U+2061` to `U+2064`, the soft hyphen `U+00AD`, the deprecated format characters `U+206A` to `U+206F`, `U+FEFF` anywhere except at the start of the file, and the joiners `U+200C` and `U+200D` where they are not part of correct spelling;
 - tag characters (`U+E0000` block), which can smuggle text, and variation selectors that do not follow a character they can modify;
-- fillers that are drawn as blanks (`U+115F`, `U+1160`, `U+3164`, `U+FFA0`), line and paragraph separators (`U+2028`, `U+2029`) and control characters other than tab, line feed and carriage return (such as the escape character).
+- fillers that are drawn as blanks (`U+115F`, `U+1160`, `U+3164`, `U+FFA0`), line and paragraph separators (`U+2028`, `U+2029`), private use characters (`U+E000` to `U+F8FF` and the two private use planes), which most fonts have no glyph for and which can carry a hidden payload (icons of Nerd Fonts and Powerline are among them: write them as an escape such as `"\ue0a0"`), and control characters other than tab, line feed and carriage return (such as the escape character).
 
 One finding is reported for a run of adjacent characters. The message says where the character is (a `run:` script, an expression, a `uses:` reference, a comment, a value or a key). Every finding has the level of the rule (`error` by default), also in a comment: a comment is how the change is made to look harmless.
 
@@ -8478,7 +8478,7 @@ One finding is reported for a run of adjacent characters. The message says where
 
 **Files in UTF-16 or UTF-32.** A file saved as UTF-16 or UTF-32 (it starts with the byte order mark of one of them) has a NUL byte next to every character. It gets one finding at its first line, without a fix, that names the encoding, instead of one for every NUL. Save the file as UTF-8 without a byte order mark.
 
-**Fix.** `--fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. If the character is meant to be in a string, write it as an escape in a double quoted YAML string (`"​"`) or in the shell (`$'​'`), where it is visible in the source. To silence a finding, put `# jactionlint ignore=invisible-characters` on the line before it (see [ignore a finding](ignore.md#ignore-some-errors)), or turn the rule off with `rules: invisible-characters: off`.
+**Fix.** `--fix` removes the characters of the finding. This is a safe fix: what is left is what the reader of the file already saw. Private use characters such as Nerd Font and Powerline icons can be drawn by some fonts, so the fix deletes a glyph the reader may have seen: replace an intentional one with an escape before you apply the fix. If the character is meant to be in a string, write it as an escape in a double-quoted YAML string (`"\u200b"`, or `"\ue0a0"`; `\U` for characters beyond `U+FFFF`) or in the shell (`$'\u200b'`), where it is visible in the source. To silence a finding, put `# jactionlint ignore=invisible-characters` on the line before it (see [ignore a finding](ignore.md#ignore-some-errors)), or turn the rule off with `rules: invisible-characters: off`.
 
 **Related.** How this rule compares with zizmor is on the [zizmor parity page](zizmor-parity.md).
 
