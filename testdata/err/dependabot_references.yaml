@@ -36,3 +36,10 @@ updates:
     directory: "/"
     multi-ecosystem-group: nothing
     patterns: ["*"]
+  # ERROR: the same ecosystem and directory in the same group
+  - package-ecosystem: pip
+    directories: ["/b"]
+    multi-ecosystem-group: everything
+    patterns: ["*"]
+    schedule:
+      interval: weekly

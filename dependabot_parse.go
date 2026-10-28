@@ -512,7 +512,9 @@ func (p *parser) checkDependabotReferences(d *Dependabot) {
 		groups[g.Name.Value] = struct{}{}
 	}
 
-	type updateKey struct{ ecosystem, directory, branch string }
+	// A multi-ecosystem group updates only the dependencies matching its patterns, so an update
+	// in a group does not duplicate the regular update of the same ecosystem and directory.
+	type updateKey struct{ ecosystem, directory, branch, group string }
 	seen := map[updateKey]*Pos{}
 
 	for _, u := range d.Updates {
@@ -541,8 +543,12 @@ func (p *parser) checkDependabotReferences(d *Dependabot) {
 		if u.TargetBranch != nil {
 			branch = u.TargetBranch.Value
 		}
+		group := ""
+		if u.MultiEcosystemGroup != nil {
+			group = u.MultiEcosystemGroup.Value
+		}
 		for _, dir := range dirs {
-			key := updateKey{u.PackageEcosystem.Value, dir.Value, branch}
+			key := updateKey{u.PackageEcosystem.Value, dir.Value, branch, group}
 			if prev, ok := seen[key]; ok {
 				p.errorfAt(dir.Pos, "update for package ecosystem %q and directory %q is duplicated. previously defined at %s", key.ecosystem, key.directory, prev.String())
 				continue

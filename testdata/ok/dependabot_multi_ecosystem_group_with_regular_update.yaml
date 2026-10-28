@@ -1,0 +1,32 @@
+version: 2
+
+multi-ecosystem-groups:
+  tauri:
+    schedule:
+      interval: daily
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: daily
+
+  # the group takes only the dependencies matching its patterns, so it is not a duplicate of
+  # the regular update above
+  - package-ecosystem: npm
+    directory: /
+    multi-ecosystem-group: tauri
+    patterns:
+      - "@tauri-apps/*"
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    multi-ecosystem-group: tauri
+    patterns:
+      - tauri
+      - tauri-*

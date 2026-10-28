@@ -9936,7 +9936,7 @@ The rule `dependabot-syntax` reports a Dependabot configuration that does not fo
 
 - a name in `registries` or `multi-ecosystem-group` that is not defined
 - an update that sets `multi-ecosystem-group` without `patterns`
-- `updates` items for the same package ecosystem, directory and target branch.
+- `updates` items for the same package ecosystem, directory, target branch and multi-ecosystem group. An update in a group takes only the dependencies matching its `patterns`, so it does not duplicate the regular update for the same ecosystem and directory.
 
 Registries accept more keys than the common ones (`url`, `username`, `password`, `key`, `token`, `replaces-base`) depending on their types, and new ones are added over time (for example for OIDC). jactionlint accepts any scalar value for them.
 
