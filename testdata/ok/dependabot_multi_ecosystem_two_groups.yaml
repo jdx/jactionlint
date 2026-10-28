@@ -1,0 +1,23 @@
+version: 2
+
+multi-ecosystem-groups:
+  frontend:
+    schedule:
+      interval: daily
+  backend:
+    schedule:
+      interval: daily
+
+# the same ecosystem and directory in two different groups is not a duplicate
+updates:
+  - package-ecosystem: npm
+    directory: /
+    multi-ecosystem-group: frontend
+    patterns:
+      - "react*"
+
+  - package-ecosystem: npm
+    directory: /
+    multi-ecosystem-group: backend
+    patterns:
+      - "express*"
