@@ -131,7 +131,7 @@ The `pre-commit` and `fix` hooks still run `linters` only. hk runs the batches i
 ```yaml
 repos:
   - repo: https://github.com/jdx/jactionlint
-    rev: v2.3.0  # x-release-please-version
+    rev: v2.4.0  # x-release-please-version
     hooks:
       - id: jactionlint
 ```
