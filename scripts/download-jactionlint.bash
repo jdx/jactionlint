@@ -3,7 +3,7 @@
 set -e -o pipefail
 
 # Default value is updated by the release workflow after each release
-version="2.3.0"
+version="2.4.0"
 default_version="$version"
 
 function usage() {

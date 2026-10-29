@@ -528,7 +528,7 @@ jobs:
           path: ~/.cache/jactionlint
           key: jactionlint-online-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: jactionlint-online-
-      - uses: jdx/jactionlint@a65ab044e916760429068fe5794b8306abdfcbb9 # v2.3.0
+      - uses: jdx/jactionlint@baa8d685e2b27ff5821558c9eeabb2051c1da61b # v2.4.0
         with:
           online: true
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

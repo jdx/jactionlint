@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: jdx/jactionlint@a65ab044e916760429068fe5794b8306abdfcbb9 # v2.3.0
+      - uses: jdx/jactionlint@baa8d685e2b27ff5821558c9eeabb2051c1da61b # v2.4.0
 ```
 
 The default profile asks for `permissions`, a timeout, a concurrency group and a pin by commit on every action, so the workflow has all four. Pin `jdx/jactionlint` the same way, with the release in a comment. A release has only its exact tag, so there is no moving tag such as `v2` to follow. The pin also pins jactionlint, because the `version` input defaults to the release that the action was published with.
@@ -384,7 +384,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: jdx/jactionlint@a65ab044e916760429068fe5794b8306abdfcbb9 # v2.3.0
+      - uses: jdx/jactionlint@baa8d685e2b27ff5821558c9eeabb2051c1da61b # v2.4.0
         with:
           args: --changed-since=origin/main
 ```
