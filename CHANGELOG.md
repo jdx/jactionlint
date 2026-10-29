@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.0](https://github.com/jdx/jactionlint/compare/v2.3.0...v2.4.0) (2026-10-28)
+
+
+### Features
+
+* **invisible-characters:** report Private Use Area characters ([#311](https://github.com/jdx/jactionlint/issues/311)) ([b4a8d08](https://github.com/jdx/jactionlint/commit/b4a8d08fc2fd31dc29aa724c141fd1003a22eec9))
+
+
+### Bug Fixes
+
+* **artipacked:** skip actions/checkout v6 and later ([#308](https://github.com/jdx/jactionlint/issues/308)) ([7a5eb59](https://github.com/jdx/jactionlint/commit/7a5eb5962cb37c5989d27de7272e316b97a5fdf3))
+* **dependabot-syntax:** don't report a multi-ecosystem group update as a duplicate ([#314](https://github.com/jdx/jactionlint/issues/314)) ([1950126](https://github.com/jdx/jactionlint/commit/195012673d126d6cad473ef359f5615b2028c2d7))
+* **sarif:** stop writing primaryLocationLineHash ([#307](https://github.com/jdx/jactionlint/issues/307)) ([beecbca](https://github.com/jdx/jactionlint/commit/beecbca2073195411f873ba202fae7238d221408))
+
 ## [2.3.0](https://github.com/jdx/jactionlint/compare/v2.2.0...v2.3.0) (2026-10-21)
 
 

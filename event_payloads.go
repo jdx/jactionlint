@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 3177ad6a86ca),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 b81f098026e9),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //
@@ -188,8 +188,8 @@ var eventPayloads = map[string]string{
 		category,classifications:[],commit_sha,environment,location,message,ref,state},multi_repo,node_id,number,provider,
 		provider_slug,publicly_leaked,push_protection_bypass_request_comment,push_protection_bypass_request_html_url,push_protection_bypass_request_reviewer,
 		push_protection_bypass_request_reviewer_comment,push_protection_bypassed,push_protection_bypassed_at,push_protection_bypassed_by,
-		resolution,resolution_comment,resolved_at,resolved_by,rule:{description,full_description,help,help_uri,id,name,
-		severity,tags:[]},secret,secret_category,secret_type,secret_type_display_name,security_advisory:{classification,
+		reachability:{reason,verdict},resolution,resolution_comment,resolved_at,resolved_by,rule:{description,full_description,
+		help,help_uri,id,name,severity,tags:[]},secret,secret_category,secret_type,secret_type_display_name,security_advisory:{classification,
 		cve_id,cvss,cvss_severities,cwes:[],description,epss,ghsa_id,identifiers:[],published_at,references:[],severity,
 		summary,updated_at,vulnerabilities:[],withdrawn_at},security_vulnerability:@security_vulnerability,severity,state,
 		tool:{guid,name,version},updated_at,url,validity,withdrawn_at},answer:@answer,approver,assignee,avatar_url,base_ref,
