@@ -226,7 +226,7 @@ func extractTarGz(r io.Reader, dst string) error {
 		if !filepath.IsAbs(resolved) {
 			resolved = filepath.Join(filepath.Dir(target), l.target)
 		}
-		if filepath.IsAbs(l.target) || !inDir(root, filepath.Clean(resolved)) {
+		if isAbsLink(l.target) || !inDir(root, filepath.Clean(resolved)) {
 			continue // dropped: a link out of the repository is never needed to run an action
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -237,4 +237,10 @@ func extractTarGz(r io.Reader, dst string) error {
 		}
 	}
 	return nil
+}
+
+// isAbsLink reports whether a link target is absolute on any OS: a rooted path counts on Windows too, where filepath.IsAbs
+// wants a drive letter.
+func isAbsLink(target string) bool {
+	return filepath.IsAbs(target) || strings.HasPrefix(target, "/") || strings.HasPrefix(target, "\\")
 }

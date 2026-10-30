@@ -288,7 +288,7 @@ func unpackNode(r io.Reader, dst string) error {
 			if !filepath.IsAbs(resolved) {
 				resolved = filepath.Join(filepath.Dir(target), h.Linkname)
 			}
-			if filepath.IsAbs(h.Linkname) || !inDir(root, filepath.Clean(resolved)) {
+			if isAbsLink(h.Linkname) || !inDir(root, filepath.Clean(resolved)) {
 				continue
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
