@@ -270,3 +270,68 @@ jobs:
 		t.Errorf("-i debug=false:\n%s", out)
 	}
 }
+
+func TestListSeesEventInputsAndDoesNotGuessStatuses(t *testing.T) {
+	src := `on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        default: v1
+      flag:
+        type: boolean
+        default: true
+jobs:
+  first:
+    runs-on: x
+    steps: [{run: e}]
+  by-event-input:
+    needs: first
+    if: github.event.inputs.tag == 'v1' && github.event.inputs.flag == 'true'
+    runs-on: x
+    steps: [{run: e}]
+  after-failure:
+    needs: first
+    if: failure()
+    runs-on: x
+    steps: [{run: e}]
+  always-true:
+    needs: first
+    if: failure() || true
+    runs-on: x
+    steps: [{run: e}]
+  not-pushed:
+    needs: first
+    if: github.event_name == 'push'
+    runs-on: x
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"w.yml": src})
+	_, out, _ := runMain(t, dir, "--list", "w", "-e", "workflow_dispatch")
+	line := func(job string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(l), job+" ") {
+				return l
+			}
+		}
+		return ""
+	}
+	if l := line("by-event-input"); strings.Contains(l, "=> if is") {
+		t.Errorf("success of the needed job is not known, so the condition is not decided: %s", l)
+	}
+	if l := line("after-failure"); strings.Contains(l, "=> if is") {
+		t.Errorf("failure() with needs must stay open: %s", l)
+	}
+	if l := line("always-true"); !strings.Contains(l, "=> if is true") {
+		t.Errorf("failure() || true is definite: %s", l)
+	}
+	if l := line("not-pushed"); !strings.Contains(l, "=> if is false") {
+		t.Errorf("a false condition stays false whatever the needs do: %s", l)
+	}
+	// without needs the inputs are visible in github.event.inputs
+	src2 := strings.Replace(src, "  by-event-input:\n    needs: first\n", "  by-event-input:\n", 1)
+	dir2 := repoWith(t, map[string]string{"w.yml": src2})
+	_, out, _ = runMain(t, dir2, "--list", "w", "-e", "workflow_dispatch")
+	if l := line("by-event-input"); !strings.Contains(l, "=> if is true") {
+		t.Errorf("github.event.inputs is not filled: %s", l)
+	}
+}

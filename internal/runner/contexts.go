@@ -48,7 +48,7 @@ func githubContext(in *Inputs) map[string]any {
 	}
 	event := in.EventData
 	if event == nil {
-		event = syntheticEvent(in.Event, ri, ref, refName)
+		event = syntheticEvent(in.Event, ri, ref, refName, in.Inputs)
 	}
 	return map[string]any{
 		"action":           "",
@@ -153,7 +153,7 @@ func loadEvent(path string) (map[string]any, error) {
 
 // syntheticEvent makes a small but well-formed payload for the event, so that expressions such as
 // github.event.pull_request.head.ref or github.event.repository.default_branch have a value. --event-file replaces it.
-func syntheticEvent(event string, ri repoInfo, ref, refName string) map[string]any {
+func syntheticEvent(event string, ri repoInfo, ref, refName string, inputs map[string]any) map[string]any {
 	owner := map[string]any{"login": ri.Owner, "type": "User"}
 	repo := map[string]any{
 		"name": ri.Name, "full_name": ri.Owner + "/" + ri.Name, "owner": owner, "private": false,
@@ -183,7 +183,12 @@ func syntheticEvent(event string, ri repoInfo, ref, refName string) map[string]a
 		}
 	case event == "workflow_dispatch":
 		ev["ref"] = ref
-		ev["inputs"] = map[string]any{}
+		// github.event.inputs holds the inputs as strings, whatever their type
+		strs := map[string]any{}
+		for k, v := range inputs {
+			strs[k] = eval.ToString(v)
+		}
+		ev["inputs"] = strs
 		ev["workflow"] = ""
 	case event == "schedule":
 		ev = map[string]any{"schedule": "0 0 * * *", "repository": repo}

@@ -260,11 +260,33 @@ func evalIf(env *eval.Env, j *jactionlint.Job, c *Cell) *bool {
 			return nil // reads needs, steps or another context that exists only during the run
 		}
 	}
-	v, err := e.Condition(j.If.Value)
-	if err != nil {
-		return nil
+	// With needs, the status of the job is not known before they ran: the answer counts only when it is the same
+	// whether they succeed, one fails or the run is cancelled (failure() || true is definite, success() is not).
+	statuses := []string{"success"}
+	if len(j.Needs) > 0 {
+		statuses = []string{"success", "failure", "cancelled"}
 	}
-	return &v
+	var result *bool
+	for _, st := range statuses {
+		st := st
+		e.Status = func(name string) bool {
+			switch name {
+			case "always":
+				return true
+			default:
+				return name == st
+			}
+		}
+		v, err := e.Condition(j.If.Value)
+		if err != nil {
+			return nil
+		}
+		if result != nil && *result != v {
+			return nil
+		}
+		result = &v
+	}
+	return result
 }
 
 func evalRunsOn(env *eval.Env, j *jactionlint.Job, c *Cell) string {
