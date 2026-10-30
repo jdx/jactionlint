@@ -219,8 +219,11 @@ func index(recv, idx any) any {
 		if !ok || f != math.Trunc(f) || f < 0 || f >= float64(len(r)) {
 			return nil
 		}
-		if i := int(f); i >= 0 && i < len(r) {
-			return r[i]
+		// compare instead of converting: the number comes from the workflow text and is never narrowed to an int
+		for i, v := range r {
+			if float64(i) == f {
+				return v
+			}
 		}
 		return nil
 	case map[string]any:
