@@ -5,19 +5,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [self-hosted, macos-latest]
         go: ["1.22", 1.23]
         exclude:
           - os: macos-latest
             go: "1.22"
         include:
-          - os: ubuntu-latest
+          - os: self-hosted
             go: 1.23
             race: true
     steps:
       - run: go test ./...
   lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     name: Lint
     if: >-
       github.event_name == 'push' ||
@@ -26,7 +26,7 @@ jobs:
       - run: echo lint
   shards:
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix: ${{ fromJSON(needs.lint.outputs.matrix) }}
     steps:

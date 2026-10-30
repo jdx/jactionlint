@@ -162,7 +162,7 @@ func TestListResolvesExpressions(t *testing.T) {
 on: workflow_dispatch
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps: [{run: e}]
   matrixed:
     name: Test ${{ matrix.os }} on ${{ inputs.suffix }}
@@ -173,16 +173,16 @@ jobs:
         include: ${{ fromJSON(inputs.extra) }}
     steps: [{run: e}]
   whole:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy: ${{ fromJSON(inputs.strategy) }}
     steps: [{run: e}]
   skipped:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps: [{run: e}]
   runtime:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         n: ${{ fromJSON(needs.build.outputs.n) }}
@@ -200,7 +200,7 @@ jobs:
 		"matrixed (mac)   runs-on: mac   name: Test mac on ci",
 		"whole (1)",
 		"whole (2)",
-		"skipped   runs-on: ubuntu-latest   if: github.event_name == 'push'   => if is false",
+		"skipped   runs-on: self-hosted   if: github.event_name == 'push'   => if is false",
 		"runtime (matrix known at run time: ${{ fromJSON(needs.build.outputs.n) }})",
 	} {
 		if !strings.Contains(out, want) {

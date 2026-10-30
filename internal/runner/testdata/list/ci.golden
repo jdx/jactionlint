@@ -1,10 +1,10 @@
 .github/workflows/ci.yml  (CI)
   stage 1
-    test (ubuntu-latest, 1.22)   runs-on: ubuntu-latest
-    test (ubuntu-latest, 1.23, true)   runs-on: ubuntu-latest
+    test (self-hosted, 1.22)   runs-on: self-hosted
+    test (self-hosted, 1.23, true)   runs-on: self-hosted
     test (macos-latest, 1.23)   runs-on: macos-latest
-    lint   runs-on: ubuntu-latest   if: github.event_name == 'push' || github.event_name == 'pull_request'   name: Lint   => if is true
+    lint   runs-on: self-hosted   if: github.event_name == 'push' || github.event_name == 'pull_request'   name: Lint   => if is true
   stage 2
-    shards (matrix known at run time: ${{ fromJSON(needs.lint.outputs.matrix) }})   needs: lint   runs-on: ubuntu-latest
+    shards (matrix known at run time: ${{ fromJSON(needs.lint.outputs.matrix) }})   needs: lint   runs-on: self-hosted
   stage 3
     release   needs: test, shards   calls: ./.github/workflows/release.yml
