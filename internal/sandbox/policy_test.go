@@ -138,10 +138,13 @@ func TestSeatbeltProfile(t *testing.T) {
 		Exec: []string{"/usr"}, Read: []string{"/private/etc"}, Write: []string{"/work dir", `/we"ird`}}
 	s := seatbeltProfile(p)
 	for _, want := range []string{
-		"(deny default)",
-		`(allow file-read* process-exec (subpath "/usr"))`,
-		`(allow file-read* file-write* process-exec (subpath "/work dir"))`,
-		`(subpath "/we\"ird")`,
+		"(allow default)",
+		"(deny file-write*)",
+		`(allow file-write* (subpath "/we\"ird") (subpath "/work dir"))`,
+		`(deny file-read* (subpath "/Users")`,
+		`(allow file-read* (subpath "/private/etc") (subpath "/usr") (subpath "/we\"ird") (subpath "/work dir"))`,
+		`(deny network-outbound (remote unix-socket`,
+		`(deny network-outbound (remote ip))`,
 		`(allow network-outbound (remote ip "localhost:4000"))`,
 		`(allow network-outbound (remote ip "localhost:4001"))`,
 	} {
@@ -149,15 +152,18 @@ func TestSeatbeltProfile(t *testing.T) {
 			t.Errorf("profile lacks %s\n%s", want, s)
 		}
 	}
-	if strings.Contains(s, "(allow network*)\n") {
-		t.Error("proxy mode must not allow all network")
+	// the last rule that matches wins, so each allow comes after the deny it opens up
+	if strings.Index(s, "(deny file-write*)") > strings.Index(s, "(allow file-write* (subpath") ||
+		strings.Index(s, "(deny file-read* (subpath \"/Users\")") > strings.Index(s, "(allow file-read* (subpath") ||
+		strings.Index(s, "(deny network-outbound (remote ip))") > strings.Index(s, "(allow network-outbound (remote ip") {
+		t.Errorf("an allow comes before the deny it opens\n%s", s)
 	}
 	p.Net = NetOpen
-	if !strings.Contains(seatbeltProfile(p), "(allow network*)") {
-		t.Error("open mode allows the network")
+	if s := seatbeltProfile(p); strings.Contains(s, "(deny network-outbound (remote ip))") {
+		t.Errorf("open mode restricts the network\n%s", s)
 	}
 	p.Net = NetNone
-	if s := seatbeltProfile(p); strings.Contains(s, "network-outbound") || strings.Contains(s, "(allow network*)\n") {
-		t.Error("none mode allows no internet")
+	if s := seatbeltProfile(p); !strings.Contains(s, "(deny network-outbound (remote ip))") || strings.Contains(s, "localhost:") {
+		t.Errorf("none mode\n%s", s)
 	}
 }

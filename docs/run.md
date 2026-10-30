@@ -86,7 +86,9 @@ Limits you should know about:
 
 ### macOS
 
-The sandbox is a Seatbelt profile that `sandbox-exec` applies (`(deny default)` plus the same allow lists). The profile is generated and unit-tested on every platform; the macOS backend has not been run on a Mac yet, so treat it as unverified until the macOS CI job of the release lands.
+The sandbox is a Seatbelt profile that `sandbox-exec` applies. It starts from "allow everything" and closes what a step must not touch: nothing is written except the workspace copy, the fake home, the temp directories and the tool cache; `/Users` (every home directory, with `~/.ssh`, `~/.aws` and the user keychain), `/Volumes` and the system keychains cannot be read, except for the directories the step may use; unix sockets outside the allow list (ssh-agent, `docker.sock`) cannot be connected to; `--net=none` denies IP sockets and `--net=proxy` allows only the ports of the proxy and the cache service. A profile that denies everything first has to name every Mach service and system file that a dynamically linked program needs, and a missing one makes `bash` abort at start; the price of the shape used here is that a place the profile does not name, such as `/etc`, is readable, as on Linux.
+
+The macOS backend is new: the profile text is unit-tested everywhere and the escape test runs on macOS CI, but it has had far less use than the Linux one.
 
 ### Windows
 

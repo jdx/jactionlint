@@ -8,56 +8,65 @@ import (
 
 // seatbeltProfile renders a policy as a Seatbelt (SBPL) profile for sandbox-exec. It has no build tag so that its text can
 // be tested everywhere; only the macOS backend runs it.
+//
+// The profile starts from "allow default" and closes what a step must not touch; the last rule that matches wins. A
+// profile that starts from "deny default" has to list every Mach service, sysctl and system file that a dynamically
+// linked program needs, and a missing one makes bash abort at start. The price of this shape is that a place that the
+// profile does not name is readable (like /etc on Linux), so the places that hold personal data are named: the users'
+// home directories, external volumes and the keychains. Writing is allowed nowhere except the allow list.
 func seatbeltProfile(p *Policy) string {
 	q := func(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"` }
 	var b strings.Builder
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
-
-	w("(version 1)")
-	w("(deny default)")
-	w(";; processes: a step starts programs and children, and signals its own group")
-	w("(allow process-fork)")
-	w("(allow signal (target self))")
-	w("(allow process-info* (target self))")
-	w("(allow sysctl-read)")
-	w("(allow mach-lookup (global-name \"com.apple.system.opendirectoryd.libinfo\") (global-name \"com.apple.system.notification_center\") (global-name \"com.apple.trustd.agent\") (global-name \"com.apple.SecurityServer\") (global-name \"com.apple.logd\") (global-name \"com.apple.system.logger\"))")
-	w("(allow ipc-posix-shm-read* ipc-posix-shm-write-data ipc-posix-shm-write-create)")
-	w("(allow file-read-metadata)") // stat of any path, like Landlock; contents stay closed
-	w(";; devices")
-	w("(allow file-write-data (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/dtracehelper\"))")
-	w("(allow file-read* (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/dev/tty\"))")
-	w("(allow pseudo-tty)")
-
-	section := func(op string, paths []string) {
+	subpaths := func(paths []string) string {
 		paths = cleanPaths(paths)
 		sort.Strings(paths)
+		var parts []string
 		for _, s := range paths {
-			w("(allow %s (subpath %s))", op, q(s))
+			parts = append(parts, "(subpath "+q(s)+")")
 		}
+		return strings.Join(parts, " ")
 	}
-	// macOS keeps /tmp, /var and /etc under /private; cleanPaths resolves the links, and the originals stay valid too.
-	w(";; read and run")
-	section("file-read* process-exec", p.Exec)
-	w(";; read")
-	section("file-read*", p.Read)
-	w(";; read, write and run")
-	section("file-read* file-write* process-exec", p.Write)
+	// macOS keeps /tmp, /var and /etc under /private. cleanPaths resolves links, and /private/... is what the kernel
+	// matches; the names a step uses are links to them.
+	allowed := append(append(append([]string{}, p.Exec...), p.Read...), p.Write...)
+
+	w("(version 1)")
+	w(";; everything is allowed first; the rules below close what a step must not touch (the last matching rule wins)")
+	w("(allow default)")
+
+	w(";; files: nothing is written except the allow list")
+	w("(deny file-write*)")
+	if len(p.Write) > 0 {
+		w("(allow file-write* %s)", subpaths(p.Write))
+	}
+	w("(allow file-write* (literal \"/dev/null\") (literal \"/dev/dtracehelper\") (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))")
+
+	w(";; files: the places with personal data are closed, then what the step may read is opened again")
+	w("(deny file-read* (subpath \"/Users\") (subpath \"/Volumes\") (subpath \"/private/var/root\") (subpath \"/Library/Keychains\"))")
+	if len(allowed) > 0 {
+		w("(allow file-read* %s)", subpaths(allowed))
+	}
+
+	w(";; unix sockets: no agent or daemon socket outside the allow list (ssh-agent, docker.sock)")
+	w("(deny network-outbound (remote unix-socket (subpath \"/private/tmp\") (subpath \"/private/var\") (subpath \"/Users\") (subpath \"/Volumes\")))")
+	if len(p.Write) > 0 {
+		w("(allow network-outbound (remote unix-socket %s))", subpaths(p.Write))
+	}
 
 	switch p.Net {
 	case NetNone:
 		w(";; network: none (unix sockets stay)")
-		w("(allow network* (local unix-socket))")
-		w("(allow network* (remote unix-socket))")
+		w("(deny network-outbound (remote ip))")
+		w("(deny network-inbound (local ip))")
 	case NetProxy:
 		w(";; network: only the ports of the proxy and the cache service on this machine")
+		w("(deny network-outbound (remote ip))")
 		for _, port := range p.ConnectPorts {
 			w("(allow network-outbound (remote ip %s))", q(fmt.Sprintf("localhost:%d", port)))
 		}
-		w("(allow network* (local unix-socket))")
-		w("(allow network* (remote unix-socket))")
 	default:
 		w(";; network: open")
-		w("(allow network*)")
 	}
 	return b.String()
 }
