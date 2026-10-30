@@ -62,6 +62,8 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.StringVar(&o.ro.secretFile, "secret-file", "", "a file of NAME=VALUE secrets")
 	fs.StringArrayVar(&o.ro.vars, "var", nil, "a configuration variable as NAME=VALUE for vars.NAME (repeatable)")
 	fs.StringVar(&o.ro.envFile, "env-file", "", "a file of NAME=VALUE that sets the default env of the workflow")
+	fs.BoolVar(&o.ro.trust, "trust-actions", false, "run actions that are not pinned to a commit SHA (tags and branches are resolved now)")
+	fs.StringArrayVar(&o.ro.noShim, "no-shim", nil, "run the real action instead of the built-in replacement, such as actions/checkout (repeatable)")
 	fs.BoolVar(&o.ro.debug, "debug", false, "show ::debug:: output and set RUNNER_DEBUG")
 	fs.BoolVar(&o.ro.timings, "timings", false, "show how long each step took")
 	fs.BoolVar(&o.ro.keep, "keep", false, "keep the run directory under .jactionlint/run")

@@ -30,6 +30,8 @@ type runOptions struct {
 	debug      bool
 	timings    bool
 	keep       bool
+	trust      bool
+	noShim     []string
 }
 
 // parseKV turns NAME=VALUE flags into a map.
@@ -214,7 +216,7 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 	cfg := &Config{
 		Root: root, In: in, Secrets: secrets, EnvFile: envFile,
 		Sandbox: useSandbox, Net: net, InPlace: ro.inPlace, PassEnv: ro.passEnv, AllowRead: ro.allowRead, AllowWrite: ro.allowWrite,
-		Debug: ro.debug, Timings: ro.timings, Keep: ro.keep, ParentEnv: os.Environ(), Out: stdout,
+		TrustActions: ro.trust, NoShim: ro.noShim, Debug: ro.debug, Timings: ro.timings, Keep: ro.keep, ParentEnv: os.Environ(), Out: stdout,
 	}
 	if !useSandbox {
 		fmt.Fprintln(stdout, "note: running without the sandbox (--sandbox=off): steps can read and write what you can")
