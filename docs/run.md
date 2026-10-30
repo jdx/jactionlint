@@ -1,8 +1,15 @@
 # Run workflows locally
 
-`jactionlint run` runs the jobs of a workflow on your machine, so that you can debug a `run:` script, an expression, a matrix or the `needs` wiring without pushing a commit. It needs no container engine and no runner image.
+`jactionlint run` runs the jobs of a workflow on your machine, so that you can debug a `run:` script, an expression, a matrix or the `needs` wiring without pushing a commit. It needs no container engine and no multi-gigabyte runner image: one binary, an instant start, and the isolation comes from the operating system (Landlock and seccomp on Linux, Seatbelt on macOS). A container engine is used only when a workflow asks for a container or when you pass `--container`.
 
-This page describes what the command does today. Each section says what is still missing.
+```sh
+jactionlint run --list                    # what would run, without running it
+jactionlint run ci -j test                # run the job `test` of .github/workflows/ci.yml, and the jobs it needs
+jactionlint run ci --dry-run              # the commands, with the expressions replaced
+jactionlint run --check-sandbox           # what this machine can enforce
+```
+
+It answers the question "what does this do here", not "will this pass on GitHub": the output lists everything that was skipped and why, and the [differences](#differences-from-github) are listed below.
 
 ## Run a workflow
 
@@ -108,6 +115,8 @@ Differences from GitHub that you can see in the plan: a matrix built from JSON l
 | `--event-file FILE` | A JSON file with the event payload, which is `github.event`. Without it, jactionlint makes a small payload for the event (a `push` has `ref`, `after` and `head_commit`; a `pull_request` has `number` and `head` and `base` with `ref` and `sha`). |
 | `-i`, `--input NAME=VALUE` | An input of `workflow_dispatch`, which is `inputs.NAME`. Repeat the option for more inputs. |
 | `-C`, `--directory DIR` | Run as if started in `DIR`. |
+| `--explain ID` | Explain a skip or a refusal (`--explain list` names them). |
+| `--version` | Print the behavior version of the runner. |
 
 Running the steps is not implemented yet.
 
@@ -259,3 +268,33 @@ The macOS backend is new: the profile text is unit-tested everywhere and the esc
 ### Windows
 
 Not enforced yet: the runner refuses to run steps. Use WSL2, where the Linux sandbox applies.
+
+## Differences from GitHub
+
+| On GitHub | With `jactionlint run` |
+| --- | --- |
+| A fresh virtual machine with the hosted image | Your machine, in a sandbox, with a throwaway home and a copy of the workspace. The tools of the hosted image (`jq`, `gh`, compilers, language runtimes) are only there if your `PATH` has them or a step installs them. |
+| `GITHUB_TOKEN` is injected | No token. `secrets.*` and `github.token` are empty until you pass `--secret`. |
+| `runs-on` picks the machine | A job runs here when its label fits this machine's OS; other cells are skipped (`--container` runs Linux cells in a container). `runner.environment` is `self-hosted`. |
+| One workspace per job, `actions/checkout` clones | One copy of your working tree per job (tracked and untracked-but-not-ignored files plus `.git`), `actions/checkout` does nothing. |
+| `permissions`, `concurrency`, `environment` protection, OIDC, billing | Not modelled. |
+| A matrix built from JSON keeps the order of the JSON | Keys of a matrix built from an expression are sorted alphabetically, which changes the order of values in a job name. |
+| `github.event` is the real webhook payload | A small synthetic payload for the event, or the file given with `--event-file`. `github.actor` and the repository come from git. |
+| Actions are pinned or not, as the workflow says | Repository actions and reusable workflows must be pinned to a commit SHA (`--trust-actions` resolves a tag), images by digest (`--trust-images`). |
+| `actions/cache` talks to GitHub | A local cache service answers the unmodified action; entries are scoped to the ref with fallback to the default branch. |
+| `actions/upload-artifact` and `download-artifact` use GitHub | Built-in replacements that keep artifacts in `.jactionlint/artifacts/`. |
+| Every step sees the network | `--net=open` (default) does too; `--net=proxy` and `--net=none` restrict it. |
+| Windows and macOS runners | Windows steps do not run (no sandbox backend yet). The macOS sandbox is new and has not had the use that the Linux one has. |
+| Post steps run last | Post steps of JavaScript actions run at the end of the job, last action first, and the native `actions/cache` shim saves there too. |
+
+## When something is skipped or refused
+
+Messages that end with `(jactionlint run --explain ID)` have an explanation:
+
+```console
+$ jactionlint run --explain list
+$ jactionlint run --explain sandbox-denied
+$ jactionlint run --version               # the behavior version of the runner
+```
+
+The explanations cover the sandbox that cannot be applied, permission errors in steps, jobs for another operating system, unpinned actions and images, refused container options, a missing container engine, a container that cannot see the run directory, matrices known only at run time, variables refused in `GITHUB_ENV`, secrets that were not supplied, hosts refused by `--net=proxy`, and Windows.

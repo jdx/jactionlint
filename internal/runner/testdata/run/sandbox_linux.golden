@@ -2,11 +2,11 @@
   [step 1] writing outside the workspace is denied
     <RUN>/temp/step-1.sh: line 1: <RUN>/work/../outside: Permission denied
   [step 1] failure (exit status 1)
-    hint: the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off
+    hint: the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off (jactionlint run --explain sandbox-denied)
   [step 2] reading the real home is denied
     cat: <HOME>/.jactionlint-golden-secret: Permission denied
   [step 2] failure (exit status 1)
-    hint: the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off
+    hint: the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off (jactionlint run --explain sandbox-denied)
   [step 3] no new privileges
     NoNewPrivs:1
   [step 3] success

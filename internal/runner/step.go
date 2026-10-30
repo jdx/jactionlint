@@ -256,7 +256,7 @@ func (jr *jobRun) launchPolicy(n label, step *jactionlint.Step, pr *prepared, ar
 		res = stepResult{Outcome: "failure", Note: se.Error()}
 		emit("error: " + se.Error())
 		if cfg.Sandbox {
-			eff.hint = "the step did not start because the sandbox could not be applied. Run jactionlint run --check-sandbox, or use --sandbox=off to run without it"
+			eff.hint = "the step did not start because the sandbox could not be applied. Run jactionlint run --check-sandbox, or use --sandbox=off to run without it" + explainRef("sandbox-unavailable")
 		}
 	case err != nil:
 		res = stepResult{Outcome: "failure", Note: err.Error()}
@@ -270,7 +270,7 @@ func (jr *jobRun) launchPolicy(n label, step *jactionlint.Step, pr *prepared, ar
 	if res.Outcome == "failure" && eff.hint == "" {
 		switch {
 		case cs.denied && cfg.Sandbox:
-			eff.hint = "the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off"
+			eff.hint = "the sandbox only lets a step write to its workspace copy, home, temp directories and /tmp, and read the system directories and PATH. Add a directory with --allow-read DIR or --allow-write DIR, or use --sandbox=off" + explainRef("sandbox-denied")
 		case cs.notFound:
 			eff.hint = "a program was not found. Steps see only PATH from your shell plus the tools that the steps install; run the setup step, or check that the tool is on PATH (--check-sandbox lists what a step may use)"
 		}
@@ -333,7 +333,7 @@ func (jr *jobRun) onStdout(cs *cmdState, line string, emit func(string), eff *ef
 	case "save-state":
 		eff.state[c.Props["name"]] = c.Message
 	case "set-env", "add-path":
-		emit(fmt.Sprintf("error: the %s command is disabled, write to the file $GITHUB_ENV or $GITHUB_PATH instead", c.Name))
+		emit(fmt.Sprintf("error: the %s command is disabled, write to the file $GITHUB_ENV or $GITHUB_PATH instead%s", c.Name, explainRef("set-env-disabled")))
 	case "echo", "add-matcher", "remove-matcher":
 	default:
 		emit(line)
@@ -357,7 +357,7 @@ func (jr *jobRun) collect(files fileSet, eff *effects) {
 		}
 		for _, k := range keys {
 			if sandbox.IsDangerousEnv(k) {
-				eff.warn("GITHUB_ENV: %s is not allowed to be set for later steps (it changes what code a program loads)", k)
+				eff.warn("GITHUB_ENV: %s is not allowed to be set for later steps (it changes what code a program loads)%s", k, explainRef("github-env-refused"))
 				continue
 			}
 			if _, ok := eff.env[k]; !ok {
@@ -376,7 +376,7 @@ func (jr *jobRun) collect(files fileSet, eff *effects) {
 				p = filepath.Join(jr.work, p)
 			}
 			if !jr.pathAllowed(p) {
-				eff.warn("GITHUB_PATH: %s is outside the directories a step may run programs from, so it was not added", p)
+				eff.warn("GITHUB_PATH: %s is outside the directories a step may run programs from, so it was not added%s", p, explainRef("github-env-refused"))
 				continue
 			}
 			eff.path = append(eff.path, filepath.Clean(p))

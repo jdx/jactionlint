@@ -154,7 +154,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		if target == "linux" {
 			why += "; --container runs it in a Linux container"
 		}
-		return skip(why)
+		return skip(why + explainRef("runs-on-other-os"))
 	}
 	if e.cfg.DryRun && j.WorkflowCall == nil {
 		where := "on this machine"
@@ -168,10 +168,10 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	}
 	if wantsContainer && j.WorkflowCall == nil {
 		if e.cfg.NoContainers {
-			return skip("it needs a container and --no-containers is set")
+			return skip("it needs a container and --no-containers is set" + explainRef("no-container-engine"))
 		}
 		if _, err := e.containerEngine(ctx); err != nil {
-			return skip(err.Error())
+			return skip(err.Error() + explainRef("no-container-engine"))
 		}
 		if ctrImage == "" && j.Container != nil {
 			switch {
@@ -389,7 +389,7 @@ func (jr *jobRun) interp(ev *eval.Env, s string) (string, error) {
 				}
 			}
 			if !found {
-				jr.e.warnOnce("secret:"+name, "secret %s is not set, so ${{ secrets.%s }} is empty (pass --secret %s=VALUE)", strings.ToUpper(name), strings.ToUpper(name), strings.ToUpper(name))
+				jr.e.warnOnce("secret:"+name, "secret %s is not set, so ${{ secrets.%s }} is empty (pass --secret %s=VALUE)%s", strings.ToUpper(name), strings.ToUpper(name), strings.ToUpper(name), explainRef("secret-unset"))
 			}
 		}
 	}

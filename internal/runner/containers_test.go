@@ -336,13 +336,13 @@ jobs:
 `
 	dir := actionRepo(t, wf, nil)
 	out := mustRun(t, dir, 0, "--container-engine", "no-such-engine-installed")
-	for _, want := range []string{"plain job ran", "after ran", `[job] boxed: skipped (the container engine "no-such-engine-installed" is not installed)`} {
+	for _, want := range []string{"plain job ran", "after ran", `[job] boxed: skipped (the container engine "no-such-engine-installed" is not installed`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q\n%s", want, out)
 		}
 	}
 	out = mustRun(t, dir, 0, "--no-containers")
-	if !strings.Contains(out, "boxed: skipped (it needs a container and --no-containers is set)") {
+	if !strings.Contains(out, "boxed: skipped (it needs a container and --no-containers is set") {
 		t.Errorf("--no-containers:\n%s", out)
 	}
 }

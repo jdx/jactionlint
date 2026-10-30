@@ -9,7 +9,11 @@ For the tasks behind the options, start with [Run jactionlint](./usage.md). [Onl
 ```sh
 jactionlint [OPTIONS] [FILES...]
 jactionlint [OPTIONS] -
+jactionlint run [OPTIONS] [WORKFLOW]
+jactionlint cache ls|rm|prune|path
 ```
+
+`run` and `cache` are subcommands with their own options: see [Run workflows locally](./run.md). A file that is named `run` or `cache` is checked as `./run`.
 
 - **No operand:** jactionlint checks the repository that holds the working directory: its workflow files, Dependabot configuration, composite actions and Actions lock file. See [what a run checks](./usage.md#what-a-run-checks).
 - **File operands:** jactionlint checks exactly these YAML files, wherever they are. A directory is not an operand: it exits with status 3 and the message `is a directory`.
