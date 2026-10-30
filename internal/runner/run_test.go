@@ -17,13 +17,15 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden transcripts")
 
 // normalize removes what differs between machines from a transcript.
-func normalize(s, repo, home string) string {
+func normalize(s, repo, home, state string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, state, "<STATE>")
 	if r, err := filepath.EvalSymlinks(repo); err == nil {
 		s = strings.ReplaceAll(s, r, "<REPO>")
 	}
 	s = strings.ReplaceAll(s, repo, "<REPO>")
 	s = strings.ReplaceAll(s, home, "<HOME>")
+	s = regexp.MustCompile(`<STATE>/home/[^/]+/home`).ReplaceAllString(s, "<FAKEHOME>")
 	return regexp.MustCompile(`<REPO>/\.jactionlint/run/[0-9-]+/jobs/\d+`).ReplaceAllString(s, "<RUN>")
 }
 
@@ -79,7 +81,6 @@ func TestGoldenTranscripts(t *testing.T) {
 			t.Setenv("AWS_SECRET_ACCESS_KEY", "leaked-aws")
 			t.Setenv("SSH_AUTH_SOCK", "/tmp/leaked-agent")
 			t.Setenv("GITHUB_TOKEN", "leaked-token")
-			t.Setenv("JACTIONLINT_CACHE_DIR", t.TempDir())
 
 			// Not under /tmp: the sandbox lets steps write there, so a repository in it would be writable.
 			base, err := os.MkdirTemp(home, ".jactionlint-golden-")
@@ -88,6 +89,8 @@ func TestGoldenTranscripts(t *testing.T) {
 			}
 			t.Cleanup(func() { os.RemoveAll(base) })
 			dir := filepath.Join(base, "repo")
+			state := filepath.Join(base, "state")
+			t.Setenv("JACTIONLINT_CACHE_DIR", state)
 			wf := filepath.Join(dir, ".github", "workflows")
 			if err := os.MkdirAll(wf, 0o755); err != nil {
 				t.Fatal(err)
@@ -103,7 +106,7 @@ func TestGoldenTranscripts(t *testing.T) {
 			if code != wantExit {
 				t.Fatalf("exit %d, want %d\nstdout:\n%s\nstderr:\n%s", code, wantExit, out.String(), errOut.String())
 			}
-			got := normalize(out.String(), dir, home) + normalize(errOut.String(), dir, home)
+			got := normalize(out.String(), dir, home, state) + normalize(errOut.String(), dir, home, state)
 			golden := strings.TrimSuffix(file, ".yml") + ".golden"
 			if *update {
 				if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
@@ -147,7 +150,7 @@ func homeRepo(t *testing.T, workflow string) string {
 	os.Mkdir(filepath.Join(dir, ".git"), 0o755)
 	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(workflow), 0o644)
 	os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("original\n"), 0o644)
-	t.Setenv("JACTIONLINT_CACHE_DIR", t.TempDir())
+	t.Setenv("JACTIONLINT_CACHE_DIR", filepath.Join(base, "state"))
 	return dir
 }
 

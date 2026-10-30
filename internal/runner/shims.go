@@ -25,13 +25,34 @@ func newEffects() *effects {
 // shimFor returns the built-in replacement of an action, unless the user turned it off (--no-shim).
 func (e *Engine) shimFor(ref *jactionlint.UsesRef) shim {
 	name := strings.ToLower(ref.Owner + "/" + ref.Repo)
-	if ref.Subpath != "" {
-		return nil
-	}
 	for _, n := range e.cfg.NoShim {
 		if strings.EqualFold(n, name) {
 			return nil
 		}
+	}
+	if name == "actions/cache" {
+		// off unless asked for: the real action works through the cache service
+		on := false
+		for _, n := range e.cfg.EnableShim {
+			if strings.EqualFold(n, name) {
+				on = true
+			}
+		}
+		if !on {
+			return nil
+		}
+		switch ref.Subpath {
+		case "":
+			return shimCacheMain
+		case "restore":
+			return shimCacheRestore
+		case "save":
+			return shimCacheSave
+		}
+		return nil
+	}
+	if ref.Subpath != "" {
+		return nil
 	}
 	switch name {
 	case "actions/checkout":

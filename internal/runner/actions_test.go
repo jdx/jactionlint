@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 	"github.com/jdx/jactionlint/v2/internal/sandbox"
 )
 
@@ -183,7 +184,7 @@ runs:
   post: post.js
 `,
 		"act/pre.js":  `console.log("pre: state not set yet", process.env.STATE_started || "(none)"); console.log("::save-state name=started::yes")`,
-		"act/main.js": `const fs=require("fs"); console.log("main: INPUT_WHO=" + process.env.INPUT_WHO + " INPUT_MULTI_WORD_INPUT=" + process.env["INPUT_MULTI_WORD INPUT"]+"|"+process.env.INPUT_MULTI_WORD_INPUT + " HOME_FAKE=" + /jactionlint/.test(process.env.HOME)); fs.appendFileSync(process.env.GITHUB_OUTPUT, "greeting=Hello " + process.env.INPUT_WHO + "\n"); console.log("::save-state name=value::from-main"); console.log("secret is", process.env.GITHUB_TOKEN || "unset")`,
+		"act/main.js": `const fs=require("fs"); console.log("main: INPUT_WHO=" + process.env.INPUT_WHO + " INPUT_MULTI_WORD_INPUT=" + process.env["INPUT_MULTI_WORD INPUT"]+"|"+process.env.INPUT_MULTI_WORD_INPUT + " HOME_FAKE=" + (process.env.HOME.split("/").slice(-3)[0] === "home")); fs.appendFileSync(process.env.GITHUB_OUTPUT, "greeting=Hello " + process.env.INPUT_WHO + "\n"); console.log("::save-state name=value::from-main"); console.log("secret is", process.env.GITHUB_TOKEN || "unset")`,
 		"act/post.js": `console.log("post: STATE_started=" + process.env.STATE_started + " STATE_value=" + process.env.STATE_value)`,
 	}
 	dir := actionRepo(t, wf, files)
@@ -562,5 +563,153 @@ jobs:
 	ents, _ := filepath.Glob(filepath.Join(dir, ".jactionlint", "artifacts", "*", "bundle", "a.txt"))
 	if len(ents) != 1 {
 		t.Errorf("artifact not kept: %v", ents)
+	}
+}
+
+func TestCacheShim(t *testing.T) {
+	wf := `on: push
+jobs:
+  j:
+    runs-on: self-hosted
+    steps:
+      - id: c
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/demo
+            build/out
+            !build/out/skip.txt
+          key: demo-os-1
+          restore-keys: |
+            demo-os-
+            demo-
+      - run: |
+          echo "hit=${{ steps.c.outputs.cache-hit }} primary=${{ steps.c.outputs.cache-primary-key }} matched=${{ steps.c.outputs.cache-matched-key }}"
+          if [ -f "$HOME/.cache/demo/stamp" ]; then echo "restored stamp: $(cat "$HOME/.cache/demo/stamp")"; fi
+          mkdir -p "$HOME/.cache/demo" build/out
+          echo "from-run-${RUN_NO:-1}" > "$HOME/.cache/demo/stamp"
+          echo keep > build/out/keep.txt
+          echo skip > build/out/skip.txt
+`
+	dir := actionRepo(t, wf, nil)
+	out := mustRun(t, dir, 0, "--shim", "actions/cache")
+	for _, want := range []string{"cache not found for input keys: demo-os-1, demo-os-, demo-", "hit= primary=demo-os-1", "[post step 1] Post Cache", "cache saved with key: demo-os-1 (2 files"} {
+		// 2 entries: the demo dir and its stamp, build/out and keep.txt are 4 names; just check the key
+		if want == "cache saved with key: demo-os-1 (2 files" {
+			want = "cache saved with key: demo-os-1"
+		}
+		if !strings.Contains(out, want) {
+			t.Errorf("first run lacks %q\n%s", want, out)
+		}
+	}
+	out = mustRun(t, dir, 0, "--shim", "actions/cache")
+	for _, want := range []string{"cache restored from key: demo-os-1", "hit=true primary=demo-os-1 matched=demo-os-1", "restored stamp: from-run-1", "cache hit on the primary key, not saving"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("second run lacks %q\n%s", want, out)
+		}
+	}
+	// a new key restores the previous one by prefix and saves under the new key
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-os-1", "demo-os-2")), 0o644)
+	out = mustRun(t, dir, 0, "--shim", "actions/cache")
+	for _, want := range []string{"cache restored from key: demo-os-1", "hit=false primary=demo-os-2 matched=demo-os-1", "cache saved with key: demo-os-2"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prefix run lacks %q\n%s", want, out)
+		}
+	}
+	// --cache=read-only restores but never saves; --cache=off does neither
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-os-1", "demo-os-3")), 0o644)
+	out = mustRun(t, dir, 0, "--shim", "actions/cache", "--cache=read-only")
+	if strings.Contains(out, "cache saved") || !strings.Contains(out, "read-only, not saving") {
+		t.Errorf("read-only run saved:\n%s", out)
+	}
+	out = mustRun(t, dir, 0, "--shim", "actions/cache", "--cache=off")
+	if !strings.Contains(out, "the cache is off") || strings.Contains(out, "cache restored") {
+		t.Errorf("--cache=off:\n%s", out)
+	}
+	out = mustRun(t, dir, 0, "--shim", "actions/cache", "--no-cache")
+	if !strings.Contains(out, "the cache is off") {
+		t.Errorf("--no-cache:\n%s", out)
+	}
+}
+
+func TestCacheShimRefusesPoisonedArchive(t *testing.T) {
+	wf := `on: push
+jobs:
+  j:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: poisoned
+          key: poisoned-key
+      - run: echo after
+`
+	dir := actionRepo(t, wf, nil)
+	home, _ := os.UserHomeDir()
+	victim := filepath.Join(home, ".jactionlint-poison-victim")
+	os.Remove(victim)
+	defer os.Remove(victim)
+	state := os.Getenv("JACTIONLINT_CACHE_DIR")
+	// build an entry with the version the shim computes and hostile content
+	plan, err := newCachePlan(map[string]string{"path": "poisoned", "key": "poisoned-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, hdrs := range map[string][]tar.Header{
+		"absolute": {{Name: "a/" + victim, Typeflag: tar.TypeReg, Mode: 0o644, Size: 1}},
+		"dotdot":   {{Name: "w/../../../escape", Typeflag: tar.TypeReg, Mode: 0o644, Size: 1}},
+		"prefix":   {{Name: victim, Typeflag: tar.TypeReg, Mode: 0o644, Size: 1}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			tw := tar.NewWriter(gz)
+			for _, h := range hdrs {
+				h := h
+				tw.WriteHeader(&h)
+				tw.Write([]byte("x"))
+			}
+			tw.Close()
+			gz.Close()
+			seedCache(t, state, dir, plan, buf.Bytes())
+			out := mustRun(t, dir, 1, "--shim", "actions/cache")
+			if !strings.Contains(out, "outside the workspace and the home directory") && !strings.Contains(out, "resolves outside") {
+				t.Errorf("the poisoned archive was not refused:\n%s", out)
+			}
+			if _, err := os.Stat(victim); err == nil {
+				t.Fatal("a poisoned cache wrote outside the allowed directories")
+			}
+			if _, err := os.Stat(filepath.Join(filepath.Dir(dir), "escape")); err == nil {
+				t.Fatal("a poisoned cache escaped with ..")
+			}
+		})
+	}
+}
+
+// seedCache puts an archive into the cache store of the repository at dir, as an earlier run would have.
+func seedCache(t *testing.T, state, repoDir string, plan *cachePlan, archive []byte) {
+	t.Helper()
+	cfg := &Config{CacheDir: filepath.Join(state, "cache"), In: &Inputs{Repo: readRepoInfo(repoDir)}}
+	d, err := cfg.repoCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := cache.Open(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := BaseEnv(cfg.In).Contexts["github"].(map[string]any)["ref"].(string)
+	if es, _ := st.List(); len(es) > 0 {
+		st.Remove("*")
+	}
+	p, err := st.Reserve(ref, plan.key, plan.version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p.Path, archive, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Commit(p, -1); err != nil {
+		t.Fatal(err)
 	}
 }

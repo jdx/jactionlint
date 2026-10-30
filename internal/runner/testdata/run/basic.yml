@@ -29,7 +29,7 @@ jobs:
       - name: environment is scrubbed
         run: |
           echo "AWS=${AWS_SECRET_ACCESS_KEY:-unset} SSH=${SSH_AUTH_SOCK:-unset} GH=${GITHUB_TOKEN:-unset}"
-          case "$HOME" in */.jactionlint/run/*) echo "home-is-fake=yes" ;; esac
+          case "$HOME" in */home/*/home) echo "home-is-fake=yes" ;; esac
   test:
     needs: build
     runs-on: ${{ matrix.os }}

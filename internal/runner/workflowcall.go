@@ -123,7 +123,7 @@ func (e *Engine) runReusable(ctx context.Context, pj *PlannedJob, cell *Cell, jr
 	sub := &Engine{
 		cfg: &cfg, plan: plan, wf: callee, rd: e.rd, masker: e.masker, pr: e.pr,
 		results: map[string]*jobResult{}, warned: map[string]bool{}, node: e.node,
-		parent: e, prefix: jr.name + " / ", depth: e.depth + 1,
+		parent: e, prefix: jr.name + " / ", depth: e.depth + 1, cacheSvc: e.cacheSvc, cacheStore: e.cacheStore,
 	}
 	ok := sub.runJobs(ctx)
 

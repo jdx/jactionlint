@@ -147,10 +147,11 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	root.jobSeq++
 	seq := root.jobSeq
 	root.mu.Unlock()
-	rd, err := e.rd.Job(seq)
+	rd, release, err := e.rd.Job(seq)
 	if err != nil {
 		return e.failJob(jr, start, fmt.Sprintf("cannot create the run directory: %v", err))
 	}
+	defer release()
 	jr.rd = rd
 	jr.work = rd.Work
 	if e.cfg.InPlace {
@@ -547,6 +548,15 @@ func (jr *jobRun) policyFor(files fileSet, workdir string, finalPath string) *sa
 		Workspace: jr.work, Home: jr.rd.Home, Temp: jr.rd.Temp, ToolCache: jr.rd.ToolCache,
 		PathDirs: sandbox.PathDirs(finalPath), RealHome: userHome(), Net: cfg.Net,
 		ExtraRead: cfg.AllowRead, ExtraWrite: cfg.AllowWrite,
+	}
+	if cfg.Net == sandbox.NetProxy {
+		// the proxy and the cache service are the only places a step may connect to
+		if cfg.Proxy != nil {
+			opts.ConnectPorts = append(opts.ConnectPorts, cfg.Proxy.Port())
+		}
+		if svc := jr.e.root().cacheSvc; svc != nil {
+			opts.ConnectPorts = append(opts.ConnectPorts, svc.Port())
+		}
 	}
 	pol := sandbox.DefaultPolicy(opts)
 	// The files a step talks to the runner through are writable one by one: it cannot replace them.
