@@ -42,6 +42,17 @@ func seatbeltProfile(p *Policy) string {
 	}
 	w("(allow file-write* (literal \"/dev/null\") (literal \"/dev/dtracehelper\") (literal \"/dev/tty\") (regex #\"^/dev/ttys[0-9]+$\"))")
 
+	// mkdir -p tries to create every directory of a path and expects "exists" for the ones that are there; a denied
+	// parent would answer "not permitted" and the tool would stop. Creating the ancestors themselves is allowed (they
+	// exist, so nothing is created), their other children stay closed.
+	seen := map[string]bool{}
+	for _, wp := range cleanPaths(p.Write) {
+		for d := wp; d != "/" && d != "." && !seen[d]; d = parentDir(d) {
+			seen[d] = true
+			w("(allow file-write-create (literal %s))", q(d))
+		}
+	}
+
 	w(";; files: the places with personal data are closed, then what the step may read is opened again")
 	w("(deny file-read* (subpath \"/Users\") (subpath \"/Volumes\") (subpath \"/private/var/root\") (subpath \"/Library/Keychains\"))")
 	if len(allowed) > 0 {
@@ -69,4 +80,12 @@ func seatbeltProfile(p *Policy) string {
 		w(";; network: open")
 	}
 	return b.String()
+}
+
+func parentDir(p string) string {
+	i := strings.LastIndex(p, "/")
+	if i <= 0 {
+		return "/"
+	}
+	return p[:i]
 }

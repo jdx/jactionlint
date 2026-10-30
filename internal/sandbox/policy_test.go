@@ -152,6 +152,18 @@ func TestSeatbeltProfile(t *testing.T) {
 			t.Errorf("profile lacks %s\n%s", want, s)
 		}
 	}
+	// every ancestor of an allowed directory may be "created", so that mkdir -p finds them existing instead of denied
+	for _, want := range []string{`(allow file-write-create (literal "/work dir"))`, `(allow file-write-create (literal "/we\"ird"))`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("profile lacks %s", want)
+		}
+	}
+	p2 := &Policy{Version: 1, Net: NetOpen, Argv: []string{"x"}, Write: []string{"/a/b/c"}}
+	for _, want := range []string{`(literal "/a/b/c")`, `(literal "/a/b")`, `(literal "/a")`} {
+		if !strings.Contains(seatbeltProfile(p2), want) {
+			t.Errorf("ancestor %s is missing", want)
+		}
+	}
 	// the last rule that matches wins, so each allow comes after the deny it opens up
 	if strings.Index(s, "(deny file-write*)") > strings.Index(s, "(allow file-write* (subpath") ||
 		strings.Index(s, "(deny file-read* (subpath \"/Users\")") > strings.Index(s, "(allow file-read* (subpath") ||
