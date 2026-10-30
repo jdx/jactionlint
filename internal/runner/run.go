@@ -194,6 +194,7 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "jactionlint run: %s is not a valid workflow\n", relPath(root, path))
 		return ExitError
 	}
+	in.applyDispatch(w)
 	in.WorkflowPath = relPath(root, path)
 	in.Workflow = in.WorkflowPath
 	if w.Name != nil {
