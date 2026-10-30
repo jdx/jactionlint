@@ -1,6 +1,6 @@
 [job] build
-  [step 1] Run echo "$GREETING ${{ vars.WHO }} on $RUNNER_OS, CI=$CI"
-    hello world on Linux, CI=true
+  [step 1] Run echo "$GREETING ${{ vars.WHO }}, CI=$CI, runner.name=${{ runner.name }}"
+    hello world, CI=true, runner.name=jactionlint
   [step 1] success
   [step 2] Run echo "version=1.2.3" >> "$GITHUB_OUTPUT"
   [step 2] success
