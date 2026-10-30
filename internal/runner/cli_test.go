@@ -39,10 +39,11 @@ func TestListGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := os.ReadFile("testdata/list/ci.golden")
+	wantRaw, err := os.ReadFile("testdata/list/ci.golden")
 	if err != nil {
 		t.Fatal(err)
 	}
+	want := []byte(strings.ReplaceAll(string(wantRaw), "\r\n", "\n")) // git on Windows may check the golden out with CRLF
 	dir := repoWith(t, map[string]string{"ci.yml": string(src)})
 	for _, arg := range []string{"ci", "ci.yml", filepath.Join(dir, ".github", "workflows", "ci.yml")} {
 		code, out, errOut := runMain(t, dir, "--list", arg)
