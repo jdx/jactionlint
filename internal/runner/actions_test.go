@@ -570,7 +570,7 @@ func TestCacheShim(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - id: c
         uses: actions/cache@v4
@@ -579,9 +579,9 @@ jobs:
             ~/.cache/demo
             build/out
             !build/out/skip.txt
-          key: demo-${{ runner.os }}-1
+          key: demo-os-1
           restore-keys: |
-            demo-${{ runner.os }}-
+            demo-os-
             demo-
       - run: |
           echo "hit=${{ steps.c.outputs.cache-hit }} primary=${{ steps.c.outputs.cache-primary-key }} matched=${{ steps.c.outputs.cache-matched-key }}"
@@ -593,31 +593,31 @@ jobs:
 `
 	dir := actionRepo(t, wf, nil)
 	out := mustRun(t, dir, 0, "--shim", "actions/cache")
-	for _, want := range []string{"cache not found for input keys: demo-Linux-1, demo-Linux-, demo-", "hit= primary=demo-Linux-1", "[post step 1] Post Cache", "cache saved with key: demo-Linux-1 (2 files"} {
+	for _, want := range []string{"cache not found for input keys: demo-os-1, demo-os-, demo-", "hit= primary=demo-os-1", "[post step 1] Post Cache", "cache saved with key: demo-os-1 (2 files"} {
 		// 2 entries: the demo dir and its stamp, build/out and keep.txt are 4 names; just check the key
-		if want == "cache saved with key: demo-Linux-1 (2 files" {
-			want = "cache saved with key: demo-Linux-1"
+		if want == "cache saved with key: demo-os-1 (2 files" {
+			want = "cache saved with key: demo-os-1"
 		}
 		if !strings.Contains(out, want) {
 			t.Errorf("first run lacks %q\n%s", want, out)
 		}
 	}
 	out = mustRun(t, dir, 0, "--shim", "actions/cache")
-	for _, want := range []string{"cache restored from key: demo-Linux-1", "hit=true primary=demo-Linux-1 matched=demo-Linux-1", "restored stamp: from-run-1", "cache hit on the primary key, not saving"} {
+	for _, want := range []string{"cache restored from key: demo-os-1", "hit=true primary=demo-os-1 matched=demo-os-1", "restored stamp: from-run-1", "cache hit on the primary key, not saving"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("second run lacks %q\n%s", want, out)
 		}
 	}
 	// a new key restores the previous one by prefix and saves under the new key
-	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-${{ runner.os }}-1", "demo-${{ runner.os }}-2")), 0o644)
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-os-1", "demo-os-2")), 0o644)
 	out = mustRun(t, dir, 0, "--shim", "actions/cache")
-	for _, want := range []string{"cache restored from key: demo-Linux-1", "hit=false primary=demo-Linux-2 matched=demo-Linux-1", "cache saved with key: demo-Linux-2"} {
+	for _, want := range []string{"cache restored from key: demo-os-1", "hit=false primary=demo-os-2 matched=demo-os-1", "cache saved with key: demo-os-2"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prefix run lacks %q\n%s", want, out)
 		}
 	}
 	// --cache=read-only restores but never saves; --cache=off does neither
-	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-${{ runner.os }}-1", "demo-${{ runner.os }}-3")), 0o644)
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte(strings.ReplaceAll(wf, "demo-os-1", "demo-os-3")), 0o644)
 	out = mustRun(t, dir, 0, "--shim", "actions/cache", "--cache=read-only")
 	if strings.Contains(out, "cache saved") || !strings.Contains(out, "read-only, not saving") {
 		t.Errorf("read-only run saved:\n%s", out)
@@ -636,7 +636,7 @@ func TestCacheShimRefusesPoisonedArchive(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/cache/restore@v4
         with:
