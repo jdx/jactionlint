@@ -38,7 +38,17 @@ type runOptions struct {
 	shims      []string
 	allowNet   []string
 	learn      bool
-	noShim     []string
+
+	parallel               int
+	dryRun                 bool
+	container              string // "" off, "default" for --container, or an image
+	images                 []string
+	platform               string
+	engine                 string
+	noContainers           bool
+	trustImages            bool
+	unsafeContainerOptions bool
+	noShim                 []string
 }
 
 // parseKV turns NAME=VALUE flags into a map.
@@ -177,7 +187,7 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "jactionlint run: --sandbox must be on or off, not %q\n", ro.sandbox)
 		return ExitUsage
 	}
-	if useSandbox {
+	if useSandbox && !ro.dryRun {
 		if err := sandbox.Available(net); err != nil {
 			fmt.Fprintf(stderr, "jactionlint run: steps cannot run isolated on this machine: %v\n", err)
 			fmt.Fprintln(stderr, "jactionlint run: nothing was run. To run without isolation (the steps get your environment and can read your files), pass --sandbox=off")
@@ -214,6 +224,26 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		return ExitError
 	}
 	in.applyDispatch(w)
+	if ro.container != "" && ro.noContainers {
+		fmt.Fprintln(stderr, "jactionlint run: --container and --no-containers contradict each other")
+		return ExitUsage
+	}
+	if ro.parallel < 1 {
+		fmt.Fprintln(stderr, "jactionlint run: --parallel must be at least 1")
+		return ExitUsage
+	}
+	images, err := parseKV("image", ro.images)
+	if err != nil {
+		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)
+		return ExitUsage
+	}
+	for k, v := range images {
+		images[strings.ToLower(k)] = v
+	}
+	containerImage := ""
+	if ro.container != "" && ro.container != "default" {
+		containerImage = ro.container
+	}
 	cacheMode := ro.cache
 	if ro.noCache {
 		cacheMode = "off"
@@ -267,9 +297,12 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 	cfg := &Config{
 		Root: root, In: in, Secrets: secrets, EnvFile: envFile,
 		Sandbox: useSandbox, Net: net, InPlace: ro.inPlace, PassEnv: ro.passEnv, AllowRead: ro.allowRead, AllowWrite: ro.allowWrite,
+		ContainerEngine: ro.engine, NoContainers: ro.noContainers, ContainerMode: ro.container != "", ContainerImage: containerImage,
+		Images: images, Platform: ro.platform, TrustImages: ro.trustImages, UnsafeContainerOptions: ro.unsafeContainerOptions,
+		Parallel: ro.parallel, DryRun: ro.dryRun,
 		Proxy: proxy, TrustActions: ro.trust, NoShim: ro.noShim, EnableShim: ro.shims, Cache: cacheMode, CacheDir: ro.cacheDir, CacheSize: cacheSize, Debug: ro.debug, Timings: ro.timings, Keep: ro.keep, ParentEnv: os.Environ(), Out: stdout,
 	}
-	if !useSandbox {
+	if !useSandbox && !ro.dryRun {
 		fmt.Fprintln(stdout, "note: running without the sandbox (--sandbox=off): steps can read and write what you can")
 	}
 	eng := NewEngine(cfg, plan)

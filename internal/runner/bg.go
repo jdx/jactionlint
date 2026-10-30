@@ -27,7 +27,7 @@ type bgStep struct {
 func (jr *jobRun) startBackground(n label, name string, step *jactionlint.Step, ex *jactionlint.ExecRun, ev *eval.Env) *bgStep {
 	ctx, cancel := context.WithCancel(jr.ctx)
 	b := &bgStep{n: n, name: name, step: step, cancel: cancel, done: make(chan struct{}), start: time.Now()}
-	jr.e.pr.Note(n.indent(), "[%s] %s (running in the background)", n, name)
+	jr.pr.Note(n.indent(), "[%s] %s (running in the background)", n, name)
 	jr.bgOrder = append(jr.bgOrder, b)
 	if step.ID != nil && step.ID.Value != "" {
 		jr.bg[step.ID.Value] = b
@@ -47,9 +47,9 @@ func (jr *jobRun) join(b *bgStep) {
 		return
 	}
 	b.joined = true
-	jr.e.pr.StepStart(b.n, b.name)
+	jr.pr.StepStart(b.n, b.name)
 	for _, l := range b.lines {
-		jr.e.pr.StepOutput(b.n, l)
+		jr.pr.StepOutput(b.n, l)
 	}
 	jr.finishStep(b.n, b.step, b.res, b.eff, b.start)
 }
@@ -64,8 +64,7 @@ func (jr *jobRun) joinAll() {
 }
 
 func (jr *jobRun) wait(n label, name string, ex *jactionlint.ExecWait) {
-	e := jr.e
-	e.pr.StepStart(n, name)
+	jr.pr.StepStart(n, name)
 	var targets []*bgStep
 	if ex.All {
 		for _, b := range jr.bgOrder {
@@ -77,9 +76,9 @@ func (jr *jobRun) wait(n label, name string, ex *jactionlint.ExecWait) {
 		for _, nm := range ex.Names {
 			b := jr.bg[nm.Value]
 			if b == nil {
-				e.pr.Note(n.indent()+1, "error: no background step with the id %q", nm.Value)
+				jr.pr.Note(n.indent()+1, "error: no background step with the id %q", nm.Value)
 				jr.failed = true
-				e.pr.StepEnd(n, "failure", "unknown step", 0)
+				jr.pr.StepEnd(n, "failure", "unknown step", 0)
 				return
 			}
 			targets = append(targets, b)
@@ -88,32 +87,30 @@ func (jr *jobRun) wait(n label, name string, ex *jactionlint.ExecWait) {
 	for _, b := range targets {
 		jr.join(b)
 	}
-	e.pr.StepEnd(n, "success", "", 0)
+	jr.pr.StepEnd(n, "success", "", 0)
 }
 
 func (jr *jobRun) cancelBG(n label, name string, ex *jactionlint.ExecCancel) {
-	e := jr.e
-	e.pr.StepStart(n, name)
+	jr.pr.StepStart(n, name)
 	b := jr.bg[ex.Name.Value]
 	if b == nil {
-		e.pr.Note(n.indent()+1, "error: no background step with the id %q", ex.Name.Value)
+		jr.pr.Note(n.indent()+1, "error: no background step with the id %q", ex.Name.Value)
 		jr.failed = true
-		e.pr.StepEnd(n, "failure", "unknown step", 0)
+		jr.pr.StepEnd(n, "failure", "unknown step", 0)
 		return
 	}
 	b.cancel()
 	<-b.done
-	e.pr.StepEnd(n, "success", "cancelled "+ex.Name.Value, 0)
+	jr.pr.StepEnd(n, "success", "cancelled "+ex.Name.Value, 0)
 }
 
 func (jr *jobRun) parallel(n label, name string, step *jactionlint.Step, ex *jactionlint.ExecParallel) {
-	e := jr.e
-	e.pr.StepStart(n, name+" ("+itoa(len(ex.Steps))+" steps)")
+	jr.pr.StepStart(n, name+" ("+itoa(len(ex.Steps))+" steps)")
 	var started []*bgStep
 	for _, sub := range ex.Steps {
 		run, ok := sub.Exec.(*jactionlint.ExecRun)
 		if !ok {
-			e.pr.Note(n.indent()+1, "skipped: only run steps can be part of parallel: yet")
+			jr.pr.Note(n.indent()+1, "skipped: only run steps can be part of parallel: yet")
 			continue
 		}
 		sn := jr.nextLabel()
@@ -123,7 +120,7 @@ func (jr *jobRun) parallel(n label, name string, step *jactionlint.Step, ex *jac
 	for _, b := range started {
 		jr.join(b)
 	}
-	e.pr.StepEnd(n, "success", "", 0)
+	jr.pr.StepEnd(n, "success", "", 0)
 }
 
 func itoa(n int) string { return strings.TrimSpace(eval.FormatNumber(float64(n))) }

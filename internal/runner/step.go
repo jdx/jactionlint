@@ -131,7 +131,7 @@ func (jr *jobRun) prepareEnv(n label, step *jactionlint.Step, ev *eval.Env, extr
 		all[k] = v
 	}
 	parentPath := ""
-	for _, kv := range cfg.ParentEnv {
+	for _, kv := range jr.parentEnv() {
 		if v, ok := strings.CutPrefix(kv, "PATH="); ok {
 			parentPath = v
 		}
@@ -141,7 +141,7 @@ func (jr *jobRun) prepareEnv(n label, step *jactionlint.Step, ev *eval.Env, extr
 	}
 	finalPath := jr.pathWith(parentPath)
 	all["PATH"] = finalPath
-	env := sandbox.ScrubEnv(cfg.ParentEnv, append(append([]string{}, sandbox.DefaultPassEnv...), cfg.PassEnv...), all)
+	env := sandbox.ScrubEnv(jr.parentEnv(), append(append([]string{}, sandbox.DefaultPassEnv...), cfg.PassEnv...), all)
 	return &prepared{files: files, env: env, finalPath: finalPath}, nil
 }
 
@@ -196,6 +196,11 @@ func (jr *jobRun) execRun(n label, step *jactionlint.Step, ex *jactionlint.ExecR
 
 // launch starts a process of a step in the sandbox and collects its output, its exit status and the files it wrote.
 func (jr *jobRun) launch(n label, step *jactionlint.Step, pr *prepared, argv []string, dir string, extraRead []string, emit func(string), ctx context.Context) (stepResult, *effects) {
+	return jr.launchPolicy(n, step, pr, argv, dir, extraRead, nil, emit, ctx)
+}
+
+// launchPolicy is launch, optionally with a policy that is run as it is (a docker action: the engine command line).
+func (jr *jobRun) launchPolicy(n label, step *jactionlint.Step, pr *prepared, argv []string, dir string, extraRead []string, direct *sandbox.Policy, emit func(string), ctx context.Context) (stepResult, *effects) {
 	e := jr.e
 	cfg := e.cfg
 	eff := &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
@@ -225,7 +230,18 @@ func (jr *jobRun) launch(n label, step *jactionlint.Step, pr *prepared, argv []s
 
 	var code int
 	var err error
-	if cfg.Sandbox {
+	if direct != nil {
+		code, err = sandbox.RunUnrestricted(sctx, direct, sandbox.IO{Stdout: stdout, Stderr: stderr})
+	} else if jr.inCtr() {
+		var epol *sandbox.Policy
+		if epol, err = jr.ctr.execPolicy(pol, dir); err == nil {
+			code, err = sandbox.RunUnrestricted(sctx, epol, sandbox.IO{Stdout: stdout, Stderr: stderr})
+		}
+		if sctx.Err() != nil {
+			// the command may still run inside the container: stop what is left before the next step
+			jr.ctr.eng.output(context.WithoutCancel(sctx), "exec", jr.ctr.name, "kill", "-KILL", "-1")
+		}
+	} else if cfg.Sandbox {
 		code, err = sandbox.Run(sctx, pol, sandbox.IO{Stdout: stdout, Stderr: stderr})
 	} else {
 		code, err = sandbox.RunUnrestricted(sctx, pol, sandbox.IO{Stdout: stdout, Stderr: stderr})

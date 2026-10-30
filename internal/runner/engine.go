@@ -31,6 +31,17 @@ type Config struct {
 	AllowRead  []string
 	AllowWrite []string
 
+	// ContainerEngine names docker or podman ("" finds one); NoContainers refuses every container; ContainerMode is
+	// --container (run Linux jobs in a container, with ContainerImage for all of them when set, or Images per label).
+	ContainerEngine        string
+	NoContainers           bool
+	ContainerMode          bool
+	ContainerImage         string
+	Images                 map[string]string
+	Platform               string
+	TrustImages            bool
+	UnsafeContainerOptions bool
+
 	Proxy        *Proxy   // the proxy of --net=proxy, started by the caller
 	TrustActions bool     // run actions that are not pinned to a commit SHA
 	NoShim       []string // actions/checkout etc. whose built-in replacement is turned off
@@ -40,6 +51,9 @@ type Config struct {
 	CacheDir   string
 	CacheSize  int64
 	EnableShim []string // opt-in shims, such as actions/cache
+
+	Parallel int  // how many cells run at once (1: one after the other)
+	DryRun   bool // print what would run, run nothing
 
 	Debug     bool
 	Timings   bool
@@ -77,6 +91,9 @@ type Engine struct {
 	prefix string
 	depth  int
 
+	slots      chan int // free slots of the cells that run at once; nil when they run one after the other
+	ctrEng     *ctrEngine
+	ctrSeq     int
 	cacheSvc   *cache.Service
 	cacheStore *cache.Store
 	cacheEnv   map[string]string
@@ -98,6 +115,11 @@ func NewEngine(cfg *Config, plan *Plan) *Engine {
 
 // Run runs the selected jobs in order and returns whether every one of them succeeded or was legitimately skipped.
 func (e *Engine) Run(ctx context.Context) (bool, error) {
+	if e.cfg.DryRun {
+		ok := e.runJobs(ctx)
+		e.writeSummary()
+		return ok, nil
+	}
 	rd, err := NewRunDir(e.cfg.Root)
 	if err != nil {
 		return false, err
@@ -115,6 +137,12 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 		defer rd.Remove()
 	}
 
+	if e.cfg.Parallel > 1 {
+		e.slots = make(chan int, e.cfg.Parallel)
+		for i := 0; i < e.cfg.Parallel; i++ {
+			e.slots <- i
+		}
+	}
 	ok := e.runJobs(ctx)
 	e.writeSummary()
 	e.keepArtifacts()
@@ -124,18 +152,68 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 	return ok, nil
 }
 
-// runJobs runs the selected jobs of the plan in order.
+// runJobs runs the selected jobs of the plan: in order, or with --parallel as soon as the jobs they need are done.
 func (e *Engine) runJobs(ctx context.Context) bool {
-	ok := true
+	var jobs []*PlannedJob
 	for _, pj := range e.plan.Jobs {
-		if !pj.Selected {
-			continue
+		if pj.Selected {
+			jobs = append(jobs, pj)
 		}
-		res := e.runJob(ctx, pj)
+	}
+	record := func(pj *PlannedJob, res *jobResult) {
 		e.mu.Lock()
 		e.results[strings.ToLower(pj.ID)] = res
 		e.mu.Unlock()
-		if res.Result == "failure" || res.Result == "cancelled" {
+	}
+	bad := func(res *jobResult) bool { return res.Result == "failure" || res.Result == "cancelled" }
+	if e.root().slots == nil {
+		ok := true
+		for _, pj := range jobs {
+			res := e.runJob(ctx, pj)
+			record(pj, res)
+			if bad(res) {
+				ok = false
+			}
+		}
+		return ok
+	}
+
+	type done struct {
+		pj  *PlannedJob
+		res *jobResult
+	}
+	finished := make(chan done)
+	started := map[*PlannedJob]bool{}
+	complete := map[string]bool{}
+	running := 0
+	ok := true
+	for len(complete) < len(jobs) {
+		for _, pj := range jobs {
+			if started[pj] {
+				continue
+			}
+			ready := true
+			for _, n := range pj.Needs {
+				// a need that is not selected has no result; it never blocks
+				if np := e.plan.Job(n); np != nil && np.Selected && !complete[strings.ToLower(n)] {
+					ready = false
+				}
+			}
+			if !ready {
+				continue
+			}
+			started[pj] = true
+			running++
+			go func(pj *PlannedJob) { finished <- done{pj, e.runJob(ctx, pj)} }(pj)
+		}
+		if running == 0 {
+			break // cannot happen: the plan has no cycles
+		}
+		d := <-finished
+		running--
+		record(d.pj, d.res)
+		complete[strings.ToLower(d.pj.ID)] = true
+		if bad(d.res) {
 			ok = false
 		}
 	}
@@ -288,20 +366,64 @@ func (e *Engine) runJob(ctx context.Context, pj *PlannedJob) *jobResult {
 	if s := pj.Job.Strategy; s != nil && s.FailFast != nil && s.FailFast.Expression == nil {
 		failFast = s.FailFast.Value
 	}
-	stop := false
+	maxParallel := len(cells)
+	if s := pj.Job.Strategy; s != nil && s.MaxParallel != nil && s.MaxParallel.Expression == nil && s.MaxParallel.Value > 0 {
+		maxParallel = s.MaxParallel.Value
+	}
+
+	// With --parallel the cells of a job run at once, up to max-parallel and to the free slots; a failed cell cancels
+	// the ones that still run when fail-fast is on.
+	cellCtx, cancelCells := context.WithCancel(ctx)
+	defer cancelCells()
+	results := make([]*jobResult, len(cells))
+	var wg sync.WaitGroup
+	local := make(chan struct{}, maxParallel)
+	slots := e.root().slots
+	if pj.Job.WorkflowCall != nil {
+		slots = nil // the jobs of a called workflow take the slots; the call itself must not hold one
+	}
+	concurrent := e.root().slots != nil
 	for i, c := range cells {
-		if stop {
+		local <- struct{}{}
+		if cellCtx.Err() != nil && ctx.Err() == nil {
+			<-local
 			e.pr.JobSkip(e.prefix+c.jobName(pj), "an earlier matrix cell failed (fail-fast)")
 			e.addSummary(e.prefix+c.jobName(pj), "skipped", "fail-fast")
 			continue
 		}
-		cr := e.runCell(ctx, pj, c, i, len(cells), env)
+		slot := 0
+		if slots != nil {
+			slot = <-slots
+		}
+		run := func(i int, c *Cell, slot int) {
+			defer func() {
+				<-local
+				if slots != nil {
+					slots <- slot
+				}
+				wg.Done()
+			}()
+			cr := e.runCell(cellCtx, pj, c, i, len(cells), env, slot)
+			results[i] = cr
+			if failFast && (cr.Result == "failure" || cr.Result == "cancelled") {
+				cancelCells()
+			}
+		}
+		wg.Add(1)
+		if !concurrent {
+			run(i, c, slot)
+		} else {
+			go run(i, c, slot)
+		}
+	}
+	wg.Wait()
+	for _, cr := range results {
+		if cr == nil {
+			continue
+		}
 		switch {
 		case cr.Result == "failure" || cr.Result == "cancelled":
 			res.Result = cr.Result
-			if failFast {
-				stop = true
-			}
 		case cr.Result == "success" && res.Result == "skipped":
 			res.Result = "success"
 		}
@@ -454,4 +576,33 @@ func (e *Engine) startCache() (*cache.Service, error) {
 	}
 	e.cacheStore = st
 	return svc, nil
+}
+
+// containerEngine finds the engine once and checks that it answers.
+func (e *Engine) containerEngine(ctx context.Context) (*ctrEngine, error) {
+	r := e.root()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ctrEng != nil {
+		return r.ctrEng, nil
+	}
+	if r.cfg.NoContainers {
+		return nil, fmt.Errorf("this needs a container, and --no-containers is set")
+	}
+	eng, err := detectEngine(r.cfg.ContainerEngine)
+	if err != nil {
+		return nil, err
+	}
+	if err := eng.available(ctx); err != nil {
+		return nil, err
+	}
+	r.ctrEng = eng
+	return eng, nil
+}
+
+func (e *Engine) nextContainerSeq() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.ctrSeq++
+	return e.ctrSeq
 }

@@ -41,7 +41,7 @@ What runs today:
 - **`runs-on`:** a job runs on this machine when its label names this machine's operating system (`ubuntu-*` on Linux, `macos-*` on macOS) or says nothing about it; otherwise it is skipped with the reason. Cells of a matrix are decided one by one.
 - **Ctrl-C** cancels the run: the process groups of the steps get `SIGTERM` and then `SIGKILL`, and steps with `if: always()` or `if: cancelled()` still run for up to five minutes.
 
-Not there yet, and reported as skipped with the reason: Docker actions, `container:` and `services:`. Not modelled: `concurrency`, `permissions`, `environment` and OIDC; the output does not tell you that a workflow would pass on GitHub, only what happened here.
+Not modelled: `concurrency`, `permissions`, `environment` and OIDC; the output does not tell you that a workflow would pass on GitHub, only what happened here.
 
 | Option | Meaning |
 | --- | --- |
@@ -58,6 +58,10 @@ Not there yet, and reported as skipped with the reason: Docker actions, `contain
 | `--shim ACTION` | Turn on a built-in replacement that is off by default (`actions/cache`). |
 | `--trust-actions` | Run actions and reusable workflows that are not pinned to a commit SHA, see [Actions](#actions-and-reusable-workflows). |
 | `--no-shim ACTION` | Run the real `actions/checkout`, `actions/upload-artifact` or `actions/download-artifact` instead of the built-in replacement. |
+| `--container[=IMAGE]`, `--image LABEL=IMAGE`, `--platform P` | Run Linux jobs in a container, see [Containers](#containers). |
+| `--container-engine docker\|podman`, `--no-containers` | Pick the engine; skip everything that needs a container. |
+| `--trust-images`, `--unsafe-container-options` | Pull images that are not pinned by digest; pass `options:` as they are. |
+| `--parallel N`, `--dry-run` | Run cells at once; print the commands and run nothing. |
 | `--debug`, `--timings`, `--keep` | Show `::debug::` output, show the time of each step, keep `.jactionlint/run/<id>`. |
 
 ## See what would run
@@ -116,7 +120,7 @@ Running the steps is not implemented yet.
 - **Composite actions** run their steps in a scope of their own (`inputs`, `steps`, `github.action_path`), nested in the transcript as `[step 3.1]`. `GITHUB_ENV` and `GITHUB_PATH` of an inner step reach the job, and the outputs are the `outputs:` of `action.yml`.
 - **JavaScript actions** (`runs.using: node12` to `node24`) run `pre`, `main` and `post` with `INPUT_*` and `STATE_*`; `post` runs at the end of the job, last action first, under its `post-if`. The Node.js comes from `PATH` when its major version matches; otherwise the matching release is downloaded from nodejs.org into the tool cache and **checked against the `SHASUMS256.txt` of that release** before it is unpacked.
 - **Reusable workflows** (`uses:` on a job, a file of this repository or `owner/repo/.github/workflows/x.yml@sha`) get `with:` (booleans and numbers are typed, defaults apply, an undeclared input is an error), `secrets:` or `secrets: inherit`, and their outputs become the outputs of the calling job. Their jobs show as `caller / job`. Nesting is limited to 10 levels, as on GitHub.
-- **Docker actions** (`runs.using: docker`, `docker://`) are skipped with a reason until container support lands.
+- **Docker actions** (`runs.using: docker`, `uses: docker://image`) run through the container engine, see [Containers](#containers).
 
 Three actions only make sense on a hosted runner, so `jactionlint run` replaces them (`--no-shim` runs the real one):
 
@@ -127,6 +131,45 @@ Three actions only make sense on a hosted runner, so `jactionlint run` replaces 
 | `actions/download-artifact` | Copies an artifact of the same run into `path` (`pattern` and `merge-multiple` work). `run-id` and `repository` need the real action. |
 
 The runner reads and writes files that a step could have replaced by a link (the artifact copies, `GITHUB_ENV` and the other file commands). It never follows a link out of the workspace there, so a step cannot use the runner to read a file it is not allowed to read.
+
+## Containers
+
+`jactionlint run` never uses a container engine unless a workflow asks for one or you pass `--container`. The engine is `docker`, or `podman` when that is what is installed (`--container-engine` picks). With no engine, or with `--no-containers`, only the jobs and steps that need one are skipped, with the reason; the rest runs.
+
+**What a workflow can ask for:**
+
+- `container:` on a job runs its steps inside that image.
+- `services:` start next to the job on a private network, with the `env`, `ports` and health check of the workflow. The job waits until a service with a health check is healthy. `job.services.<id>.ports['5432']` is the port on this machine (published on `127.0.0.1` only); a job in a container reaches the service by its ID as host name. Services and the network are removed at the end of the job, also after Ctrl-C.
+- A Docker action (`runs.using: docker`, an image or a `Dockerfile`, or `uses: docker://image`) runs with the paths of a hosted runner (`/github/workspace`, `/github/home`, `/github/file_commands`) and `INPUT_*` set.
+
+**What a container gets.** Only the run directories of the job are mounted: the workspace copy, the fake home, the temp directory, the tool cache (and the downloaded actions, read-only), at the same paths as on this machine. No host home, no Docker socket, no privileged mode, no host network or PID namespace. Every capability is dropped except the nine a root userland needs (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `FSETID`, `KILL`, `SETGID`, `SETUID`, `SETPCAP`, `NET_BIND_SERVICE`) and `no-new-privileges` is set. The container is its own boundary, so the steps inside get that hardening and not the Landlock sandbox of the host; `--sandbox=off` does not relax it.
+
+**`options:` is not passed through.** It is parsed against a list: `--init`, `--user`, `--memory`, `--cpus`, `--shm-size`, `--hostname`, `--ulimit`, the `--health-*` options, `-e`, `--label`, `--dns`, `--add-host`, `--entrypoint` and a few more. Anything that widens access is refused with the reason (`--privileged`, `--cap-add`, `-v`/`--mount`, `--network host`, `--pid`, `--device`, `--security-opt`, ...), and so is an option that is not on the list. `--unsafe-container-options` passes the string through as it is.
+
+**Images must be pinned by digest** (`ubuntu:24.04@sha256:…`), because pulling an image runs someone else's code. An unpinned image stops the job with a message; `--trust-images` (or `--trust-actions`) pulls it anyway. Each pull is printed. A pinned image that is already local is not pulled again.
+
+**`--container` for cross-platform testing.** Run every job whose `runs-on` is a Linux label in a container instead of on this machine, for example the Linux cells of a matrix from a Mac:
+
+```sh
+jactionlint run ci --container                         # the default image of each ubuntu-* label
+jactionlint run ci --container=ubuntu:22.04@sha256:…   # one image for everything
+jactionlint run ci --container --image ubuntu-latest=ghcr.io/me/runner@sha256:…
+jactionlint run ci --container --platform linux/amd64  # emulate another architecture
+```
+
+`ubuntu-latest` and `ubuntu-24.04` map to `ubuntu:24.04`, `ubuntu-22.04` to `ubuntu:22.04`, both pinned by digest. These images are minimal on purpose: they lack the tools of a hosted image (`jq`, `gh`, compilers, language runtimes), so a workflow that installs its tools through `setup-*` actions or `apt-get` works, and anything heavier needs an image you choose with `--image`. The job is root in its container and `sudo` runs the command directly, so `sudo apt-get install` works as on a hosted runner (under the host sandbox it does not, by design). `macos-*` and `windows-*` cells cannot run in a container and are skipped.
+
+JavaScript actions run inside the container with the Node.js of the tool cache, which is a glibc build: images based on musl (Alpine) cannot run them.
+
+**The engine must see this machine's files.** The directories of the run are bind-mounted, so the engine has to run on this machine (Docker Desktop and Colima share the home directory; a remote daemon does not). `jactionlint run` checks that the container sees a marker file before the first step and says so when it does not.
+
+`--list` shows where each cell would run (`=> runs in a container: ubuntu:24.04@sha256:…`, `=> skipped: needs macOS`).
+
+## Parallel runs and dry runs
+
+`--parallel N` runs up to N matrix cells and independent jobs at once, respecting `needs` and `strategy.max-parallel`. When `fail-fast` is on, a failing cell cancels the ones that are still running. The output of each job is printed in one piece when the job ends. Jobs that run at once each get a home directory of their own (the first keeps the path that caches were saved with, so caches saved by the others do not match).
+
+`--dry-run` prints what would run and runs nothing: for every cell of every selected job it shows the steps with their `${{ }}` replaced, the `shell`, the `working-directory`, the `env` (secrets as `***`), the `with:` of actions, and what each `if:` evaluates to when no earlier step has produced an output. It copies no workspace, starts no cache service and needs neither the sandbox nor an engine.
 
 ## The cache
 

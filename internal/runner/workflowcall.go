@@ -22,10 +22,10 @@ func (e *Engine) runReusable(ctx context.Context, pj *PlannedJob, cell *Cell, jr
 	j := pj.Job
 	wc := j.WorkflowCall
 	start := time.Now()
-	e.pr.JobStart(jr.name + " (reusable workflow " + wc.Uses.Value + ")")
+	jr.pr.JobStart(jr.name + " (reusable workflow " + wc.Uses.Value + ")")
 	fail := func(msg string) *jobResult {
-		e.pr.Note(1, "error: %s", msg)
-		e.pr.JobEnd(jr.name, "failure", durationOf(start))
+		jr.pr.Note(1, "error: %s", msg)
+		jr.pr.JobEnd(jr.name, "failure", durationOf(start))
 		e.addSummary(jr.name, "failure", msg)
 		return &jobResult{Result: "failure", Outputs: map[string]any{}}
 	}
@@ -154,12 +154,12 @@ func (e *Engine) runReusable(ctx context.Context, pj *PlannedJob, cell *Cell, jr
 		}
 		v, err := oenv.Interpolate(o.Value.Value)
 		if err != nil {
-			e.pr.Note(1, "warning: output %s: %v", name, err)
+			jr.pr.Note(1, "warning: output %s: %v", name, err)
 			continue
 		}
 		out[name] = v
 	}
-	e.pr.JobEnd(jr.name, result, durationOf(start))
+	jr.pr.JobEnd(jr.name, result, durationOf(start))
 	e.addSummary(jr.name, result, "reusable workflow")
 	return &jobResult{Result: result, Outputs: out}
 }

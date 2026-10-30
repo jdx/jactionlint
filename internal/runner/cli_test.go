@@ -6,6 +6,7 @@ import (
 	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -94,7 +95,7 @@ func TestListJSON(t *testing.T) {
 			test = &plans[0].Jobs[i]
 		}
 	}
-	if test == nil || !test.Selected || len(test.Cells) != 3 || test.Cells[2].Matrix["os"] != "macos-latest" {
+	if test == nil || !test.Selected || len(test.Cells) != 3 || test.Cells[2].Matrix["os"] != "my-runner" {
 		t.Fatalf("test job = %+v", test)
 	}
 }
@@ -396,5 +397,111 @@ jobs:
 	_, out, _ = runMain(t, dir2, "--list", "w", "-e", "workflow_dispatch")
 	if l := line("by-event-input"); !strings.Contains(l, "=> if is true") {
 		t.Errorf("github.event.inputs is not filled: %s", l)
+	}
+}
+
+func TestDryRun(t *testing.T) {
+	src := `name: dry
+on: push
+env:
+  WORKFLOW_ENV: from-workflow
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - id: v
+        run: |
+          echo "version=1" >> "$GITHUB_OUTPUT"
+          echo "building on ${{ matrix.os }} as ${{ github.actor }} in ${{ github.repository }}"
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          PLAIN: x
+      - if: failure()
+        run: echo "only after a failure"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache
+          key: k-${{ matrix.os }}
+      - run: echo "the output is '${{ steps.v.outputs.version }}'"
+        shell: python
+        working-directory: sub
+`
+	dir := repoWith(t, map[string]string{"dry.yml": src})
+	marker := filepath.Join(dir, "must-not-exist")
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "dry.yml"), []byte(strings.Replace(src, `echo "version=1" >> "$GITHUB_OUTPUT"`, `touch `+marker+`; echo "version=1" >> "$GITHUB_OUTPUT"`, 1)), 0o644)
+	code, out, errOut := runMain(t, dir, "dry", "--dry-run", "--no-lint", "--secret", "TOKEN=hunter2")
+	if code != ExitOK {
+		t.Fatalf("code %d\n%s\n%s", code, out, errOut)
+	}
+	for _, want := range []string{
+		"[job] build (ubuntu-latest)  [dry run, on this machine]",
+		`building on ubuntu-latest as `,
+		"env TOKEN=***",
+		"env PLAIN=x",
+		"if: failure()  => false",
+		"uses: actions/cache@v4",
+		"with key=k-ubuntu-latest",
+		"with path=~/.cache",
+		"shell: python {0}",
+		"working-directory: sub",
+		"the output is ''",
+		"[job] build (macos-latest): skipped (runs-on macos-latest needs macOS",
+	} {
+		if !strings.Contains(out, want) && runtime.GOOS == "linux" {
+			t.Errorf("dry run lacks %q\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "hunter2") {
+		t.Errorf("a secret leaked into the dry run\n%s", out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a dry run ran a step")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".jactionlint")); err == nil {
+		t.Error("a dry run created a run directory")
+	}
+}
+
+func TestListShowsWhereCellsRun(t *testing.T) {
+	src := `on: push
+jobs:
+  j:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps: [{run: e}]
+  boxed:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps: [{run: e}]
+  db:
+    runs-on: ubuntu-latest
+    services:
+      pg:
+        image: postgres
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"w.yml": src})
+	_, out, _ := runMain(t, dir, "--list", "w", "--container")
+	for _, want := range []string{
+		"j (ubuntu-latest)   runs-on: ubuntu-latest   => runs in a container: ubuntu:24.04@sha256:fe81",
+		"j (macos-latest)   runs-on: macos-latest   => skipped: needs macOS",
+		"j (windows-latest)   runs-on: windows-latest   => skipped: needs Windows",
+		"=> runs in the job container ubuntu:24.04",
+	} {
+		if !strings.Contains(out, want) && runtime.GOOS != "darwin" {
+			t.Errorf("--list lacks %q\n%s", want, out)
+		}
+	}
+	_, out, _ = runMain(t, dir, "--list", "w")
+	if !strings.Contains(out, "=> runs on this machine with its services in containers") {
+		t.Errorf("--list lacks the note about services\n%s", out)
+	}
+	if runtime.GOOS == "darwin" && !strings.Contains(out, "j (ubuntu-latest)   runs-on: ubuntu-latest   => skipped: needs Linux (--container runs it in a Linux container)") {
+		t.Errorf("on macOS a Linux cell says how to run it\n%s", out)
 	}
 }

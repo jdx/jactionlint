@@ -215,18 +215,23 @@ func copyEntry(src, dst string) error {
 
 // Job returns the scratch area of one job: its own workspace and temp directories and an empty home, like a fresh
 // machine. The home is shared with the other jobs of this repository, one at a time: release gives it back.
-func (r *RunDir) Job(n int) (j *RunDir, release func(), err error) {
+func (r *RunDir) Job(n, slot int) (j *RunDir, release func(), err error) {
 	root := filepath.Join(r.Root, "jobs", fmt.Sprintf("%d", n))
-	unlock, err := cache.LockDir(r.HomeBase)
+	// Cells that run at once each have a home of their own; the first slot keeps the path that caches were saved with.
+	base := r.HomeBase
+	if slot > 0 {
+		base = fmt.Sprintf("%s-%d", r.HomeBase, slot)
+	}
+	unlock, err := cache.LockDir(base)
 	if err != nil {
-		if mkErr := os.MkdirAll(r.HomeBase, 0o755); mkErr != nil {
+		if mkErr := os.MkdirAll(base, 0o755); mkErr != nil {
 			return nil, nil, mkErr
 		}
-		if unlock, err = cache.LockDir(r.HomeBase); err != nil {
+		if unlock, err = cache.LockDir(base); err != nil {
 			return nil, nil, err
 		}
 	}
-	home := filepath.Join(r.HomeBase, "home")
+	home := filepath.Join(base, "home")
 	if err := os.RemoveAll(home); err != nil {
 		unlock()
 		return nil, nil, fmt.Errorf("cannot empty %s: %w", home, err)
