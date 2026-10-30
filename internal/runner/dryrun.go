@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,8 +12,9 @@ import (
 
 // dryRunCell prints what a cell would run, with the expressions replaced, and runs nothing. Outputs of steps and jobs
 // that did not run are empty, so a command that uses one shows an empty string there.
-func (e *Engine) dryRunCell(pj *PlannedJob, jr *jobRun, where string) *jobResult {
+func (e *Engine) dryRunCell(ctx context.Context, pj *PlannedJob, jr *jobRun, where string) *jobResult {
 	j := pj.Job
+	jr.ctx = ctx
 	jr.work = e.cfg.Root
 	jr.baseEnv = map[string]string{}
 	for k, v := range e.cfg.EnvFile {

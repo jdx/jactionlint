@@ -505,3 +505,31 @@ jobs:
 		t.Errorf("on macOS a Linux cell says how to run it\n%s", out)
 	}
 }
+
+// The workflows of this repository go through --list and --dry-run in CI, which catches regressions of the evaluator and
+// of the matrix expansion without running a step.
+func TestOwnWorkflowsPlanAndDryRun(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(root, ".github", "workflows", "*.y*ml"))
+	if len(files) == 0 {
+		t.Skip("no workflows in " + root)
+	}
+	for _, f := range files {
+		name := filepath.Base(f)
+		t.Run(name, func(t *testing.T) {
+			for _, args := range [][]string{{"--list"}, {"--list", "--json"}, {"--dry-run", "--no-lint"}} {
+				var out, errOut bytes.Buffer
+				code := Main(append([]string{"-C", root, name}, args...), strings.NewReader(""), &out, &errOut)
+				if code != ExitOK {
+					t.Errorf("%s %v: exit %d\n%s\n%s", name, args, code, out.String(), errOut.String())
+				}
+				if out.Len() == 0 {
+					t.Errorf("%s %v: no output", name, args)
+				}
+			}
+		})
+	}
+}

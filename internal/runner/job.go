@@ -164,7 +164,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 				where = "in " + ctrImage
 			}
 		}
-		return e.dryRunCell(pj, jr, where)
+		return e.dryRunCell(ctx, pj, jr, where)
 	}
 	if wantsContainer && j.WorkflowCall == nil {
 		if e.cfg.NoContainers {
