@@ -169,7 +169,7 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 	if err := os.WriteFile(marker, []byte("x"), 0o644); err == nil {
 		if _, err := eng.output(ctx, "exec", jc.name, "test", "-f", marker); err != nil {
 			jc.stop(context.WithoutCancel(ctx))
-			return nil, fmt.Errorf("the container cannot see the directories of this run (%s): the engine runs on another machine or in another file system namespace, so jactionlint cannot mount the workspace into it", jr.rd.Root)
+			return nil, fmt.Errorf("the container cannot see the directories of this run (%s): the engine runs on another machine or in another file system namespace, so jactionlint cannot mount the workspace into it%s", jr.rd.Root, explainRef("container-mount-invisible"))
 		}
 	}
 	return jc, nil

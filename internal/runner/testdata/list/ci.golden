@@ -8,3 +8,4 @@
     shards (matrix known at run time: ${{ fromJSON(needs.lint.outputs.matrix) }})   needs: lint   runs-on: self-hosted
   stage 3
     release   needs: test, shards   calls: ./.github/workflows/release.yml
+  note: a matrix that depends on another job's output is expanded when its turn comes (jactionlint run --explain dynamic-matrix)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -197,7 +198,11 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 	}
 	if useSandbox && !ro.dryRun {
 		if err := sandbox.Available(net); err != nil {
-			fmt.Fprintf(stderr, "jactionlint run: steps cannot run isolated on this machine: %v\n", err)
+			ref := explainRef("sandbox-unavailable")
+			if runtime.GOOS == "windows" {
+				ref = explainRef("windows")
+			}
+			fmt.Fprintf(stderr, "jactionlint run: steps cannot run isolated on this machine: %v%s\n", err, ref)
 			fmt.Fprintln(stderr, "jactionlint run: nothing was run. To run without isolation (the steps get your environment and can read your files), pass --sandbox=off")
 			return ExitError
 		}
@@ -354,6 +359,6 @@ func reportProxy(w io.Writer, p *Proxy, learn bool) {
 		return
 	}
 	if denied := p.Denied(); len(denied) > 0 {
-		fmt.Fprintf(w, "\nnetwork: --net=proxy refused %d host(s): %s\nallow them with --allow-net %s\n", len(denied), strings.Join(denied, ", "), strings.Join(denied, ","))
+		fmt.Fprintf(w, "\nnetwork: --net=proxy refused %d host(s): %s\nallow them with --allow-net %s%s\n", len(denied), strings.Join(denied, ", "), strings.Join(denied, ","), explainRef("net-proxy-refused"))
 	}
 }

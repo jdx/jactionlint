@@ -38,6 +38,8 @@ type options struct {
 	help         bool
 	checkSandbox bool
 	noLint       bool
+	explainID    string
+	version      bool
 }
 
 func newFlagSet(o *options) *pflag.FlagSet {
@@ -84,6 +86,8 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.BoolVar(&o.ro.debug, "debug", false, "show ::debug:: output and set RUNNER_DEBUG")
 	fs.BoolVar(&o.ro.timings, "timings", false, "show how long each step took")
 	fs.BoolVar(&o.ro.keep, "keep", false, "keep the run directory under .jactionlint/run")
+	fs.BoolVar(&o.version, "version", false, "print the behavior version of the runner")
+	fs.StringVar(&o.explainID, "explain", "", "explain why jactionlint run skips, refuses or changes something (--explain list names the reasons)")
 	fs.BoolVar(&o.checkSandbox, "check-sandbox", false, "report what the sandbox can do on this machine and test it")
 	fs.BoolVarP(&o.help, "help", "h", false, "print this help")
 	return fs
@@ -110,6 +114,13 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if o.help {
 		fmt.Fprint(stdout, helpText)
 		fmt.Fprint(stdout, fs.FlagUsages())
+		return ExitOK
+	}
+	if fs.Changed("explain") {
+		return explain(stdout, o.explainID)
+	}
+	if o.version {
+		fmt.Fprintf(stdout, "jactionlint run, runner behavior version %s\n", RunnerBehaviorVersion)
 		return ExitOK
 	}
 	if o.checkSandbox {

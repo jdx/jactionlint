@@ -37,15 +37,22 @@ func writeText(w io.Writer, p *Plan, root string, o *options) {
 		fmt.Fprintf(w, "  note: the workflow has no %q trigger, GitHub would not run it for that event\n", o.event)
 	}
 	stage := 0
+	dynamic := false
 	for _, pj := range p.Jobs {
 		if !pj.Selected {
 			continue
+		}
+		if pj.Dynamic != "" {
+			dynamic = true
 		}
 		if pj.Stage != stage {
 			stage = pj.Stage
 			fmt.Fprintf(w, "  stage %d\n", stage)
 		}
 		writeJob(w, pj, o)
+	}
+	if dynamic {
+		fmt.Fprintf(w, "  note: a matrix that depends on another job's output is expanded when its turn comes%s\n", explainRef("dynamic-matrix"))
 	}
 }
 

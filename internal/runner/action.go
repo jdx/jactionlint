@@ -213,7 +213,7 @@ func (jr *jobRun) resolveAction(ctx context.Context, ref *jactionlint.UsesRef, s
 		sha := ref.Ref
 		if !reSHA.MatchString(ref.Ref) {
 			if !e.cfg.TrustActions {
-				return nil, fmt.Errorf("%s is not pinned to a commit SHA. jactionlint run executes the code of an action, so it only runs pinned actions by default. Pin it to a full commit SHA, or pass --trust-actions to run the commit that %q points to now", ref.Raw, ref.Ref)
+				return nil, fmt.Errorf("%s is not pinned to a commit SHA. jactionlint run executes the code of an action, so it only runs pinned actions by default. Pin it to a full commit SHA, or pass --trust-actions to run the commit that %q points to now%s", ref.Raw, ref.Ref, explainRef("unpinned-action"))
 			}
 			var err error
 			if sha, err = resolveRef(ctx, ref.Owner, ref.Repo, ref.Ref); err != nil {

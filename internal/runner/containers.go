@@ -107,7 +107,7 @@ func checkImageTrust(image string, trust bool) error {
 	if pinned(image) || trust {
 		return nil
 	}
-	return fmt.Errorf("the image %s is not pinned by digest. Pulling an image runs someone else's code, so jactionlint run only does it for name@sha256:… references; pass --trust-images (or --trust-actions) to pull %s anyway", image, image)
+	return fmt.Errorf("the image %s is not pinned by digest. Pulling an image runs someone else's code, so jactionlint run only does it for name@sha256:… references; pass --trust-images (or --trust-actions) to pull %s anyway%s", image, image, explainRef("unpinned-image"))
 }
 
 // pull makes the image available locally. A digest-pinned image that is already there is not pulled again.
@@ -203,10 +203,10 @@ func parseOptions(opts string, unsafe bool) ([]string, error) {
 			short = w[:2]
 		}
 		if why, bad := refusedOptions[name]; bad {
-			return nil, fmt.Errorf("the container option %s is refused: %s (--unsafe-container-options allows it)", name, why)
+			return nil, fmt.Errorf("the container option %s is refused: %s (--unsafe-container-options allows it)%s", name, why, explainRef("container-option-refused"))
 		}
 		if why, bad := refusedOptions[short]; bad && short != "" {
-			return nil, fmt.Errorf("the container option %s is refused: %s (--unsafe-container-options allows it)", short, why)
+			return nil, fmt.Errorf("the container option %s is refused: %s (--unsafe-container-options allows it)%s", short, why, explainRef("container-option-refused"))
 		}
 		opt, ok := allowedOptions[name]
 		if !ok && short != "" {

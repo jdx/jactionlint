@@ -9,7 +9,7 @@
     the password is *** indeed
     ::warning::not a command now
     warning: the set-output command is deprecated, write name=value to the file $GITHUB_OUTPUT instead
-    error: the set-env command is disabled, write to the file $GITHUB_ENV or $GITHUB_PATH instead
+    error: the set-env command is disabled, write to the file $GITHUB_ENV or $GITHUB_PATH instead (jactionlint run --explain set-env-disabled)
     encoded %0A:: stays
   [step 1] success
   [step 2] Run echo "::set-output name=answer::42"
@@ -19,14 +19,14 @@
     answer=42
   [step 3] success
   [step 4] dangerous GITHUB_ENV keys are refused
-    warning: GITHUB_ENV: NODE_OPTIONS is not allowed to be set for later steps (it changes what code a program loads)
-    warning: GITHUB_ENV: LD_PRELOAD is not allowed to be set for later steps (it changes what code a program loads)
+    warning: GITHUB_ENV: NODE_OPTIONS is not allowed to be set for later steps (it changes what code a program loads) (jactionlint run --explain github-env-refused)
+    warning: GITHUB_ENV: LD_PRELOAD is not allowed to be set for later steps (it changes what code a program loads) (jactionlint run --explain github-env-refused)
   [step 4] success
   [step 5] Run echo "SAFE=$SAFE NODE_OPTIONS=${NODE_OPTIONS:-unset} LD_PRELOAD=${LD_PRELOAD:...
     SAFE=ok NODE_OPTIONS=unset LD_PRELOAD=unset
   [step 5] success
   [step 6] GITHUB_PATH
-    warning: GITHUB_PATH: <FAKEHOME>/../outside-bin is outside the directories a step may run programs from, so it was not added
+    warning: GITHUB_PATH: <FAKEHOME>/../outside-bin is outside the directories a step may run programs from, so it was not added (jactionlint run --explain github-env-refused)
   [step 6] success
   [step 7] Run addedtool
     from-added-path
