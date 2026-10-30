@@ -156,3 +156,182 @@ func TestListJobInSomeWorkflowsOnly(t *testing.T) {
 		t.Fatalf("a job that no workflow has: code %d %q", code, errOut)
 	}
 }
+
+func TestListResolvesExpressions(t *testing.T) {
+	src := `name: dyn
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: self-hosted
+    steps: [{run: e}]
+  matrixed:
+    name: Test ${{ matrix.os }} on ${{ inputs.suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.oses) }}
+        include: ${{ fromJSON(inputs.extra) }}
+    steps: [{run: e}]
+  whole:
+    runs-on: self-hosted
+    strategy: ${{ fromJSON(inputs.strategy) }}
+    steps: [{run: e}]
+  skipped:
+    if: github.event_name == 'push'
+    runs-on: self-hosted
+    steps: [{run: e}]
+  runtime:
+    needs: build
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        n: ${{ fromJSON(needs.build.outputs.n) }}
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"dyn.yml": src})
+	code, out, errOut := runMain(t, dir, "--list", "dyn", "-e", "workflow_dispatch",
+		"-i", `oses=["box-a","box-b"]`, "-i", `extra=[{"os":"box-a","gpu":true}]`, "-i", "suffix=ci",
+		"-i", `strategy={"matrix":{"v":[1,2]}}`)
+	if code != ExitOK {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+	for _, want := range []string{
+		"matrixed (box-a, true)   runs-on: box-a   name: Test box-a on ci",
+		"matrixed (box-b)   runs-on: box-b   name: Test box-b on ci",
+		"whole (1)",
+		"whole (2)",
+		"skipped   runs-on: self-hosted   if: github.event_name == 'push'   => if is false",
+		"runtime (matrix known at run time: ${{ fromJSON(needs.build.outputs.n) }})",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestListBadInput(t *testing.T) {
+	dir := repoWith(t, map[string]string{"a.yml": "on: push\njobs:\n  j:\n    runs-on: x\n    steps: [{run: e}]\n"})
+	if code, _, errOut := runMain(t, dir, "--list", "-i", "novalue"); code != ExitUsage || !strings.Contains(errOut, "NAME=VALUE") {
+		t.Fatalf("code %d %q", code, errOut)
+	}
+	if code, _, errOut := runMain(t, dir, "--list", "--event-file", filepath.Join(dir, "missing.json")); code != ExitUsage || !strings.Contains(errOut, "missing.json") {
+		t.Fatalf("code %d %q", code, errOut)
+	}
+}
+
+func TestListWithoutTheInputsAMatrixNeeds(t *testing.T) {
+	src := `on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        type: boolean
+        default: true
+      count:
+        type: number
+        default: "3"
+      env:
+        default: staging
+jobs:
+  matrixed:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.oses) }}
+    steps: [{run: e}]
+  typed:
+    if: inputs.debug == true && inputs.count == 3 && inputs.env == 'staging'
+    runs-on: x
+    steps: [{run: e}]
+  later:
+    needs: typed
+    if: needs.typed.result == 'success'
+    runs-on: x
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"w.yml": src})
+	code, out, errOut := runMain(t, dir, "--list", "w", "-e", "workflow_dispatch")
+	if code != ExitOK {
+		t.Fatalf("a matrix that needs an input that was not given made the plan fail: %d\n%s", code, errOut)
+	}
+	for _, want := range []string{"matrixed (matrix known at run time: cannot be evaluated yet", "typed   runs-on: x   if: inputs.debug == true", "=> if is true"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q\n%s", want, out)
+		}
+	}
+	// the condition that reads needs is left alone instead of being evaluated against an empty context
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "later") && strings.Contains(line, "=> if is") {
+			t.Errorf("a condition on needs was evaluated: %s", line)
+		}
+	}
+	// a boolean given with -i is a boolean
+	_, out, _ = runMain(t, dir, "--list", "w", "-e", "workflow_dispatch", "-i", "debug=false")
+	if !strings.Contains(out, "=> if is false") {
+		t.Errorf("-i debug=false:\n%s", out)
+	}
+}
+
+func TestListSeesEventInputsAndDoesNotGuessStatuses(t *testing.T) {
+	src := `on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        default: v1
+      flag:
+        type: boolean
+        default: true
+jobs:
+  first:
+    runs-on: x
+    steps: [{run: e}]
+  by-event-input:
+    needs: first
+    if: github.event.inputs.tag == 'v1' && github.event.inputs.flag == 'true'
+    runs-on: x
+    steps: [{run: e}]
+  after-failure:
+    needs: first
+    if: failure()
+    runs-on: x
+    steps: [{run: e}]
+  always-true:
+    needs: first
+    if: failure() || true
+    runs-on: x
+    steps: [{run: e}]
+  not-pushed:
+    needs: first
+    if: github.event_name == 'push'
+    runs-on: x
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"w.yml": src})
+	_, out, _ := runMain(t, dir, "--list", "w", "-e", "workflow_dispatch")
+	line := func(job string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(l), job+" ") {
+				return l
+			}
+		}
+		return ""
+	}
+	if l := line("by-event-input"); strings.Contains(l, "=> if is") {
+		t.Errorf("success of the needed job is not known, so the condition is not decided: %s", l)
+	}
+	if l := line("after-failure"); strings.Contains(l, "=> if is") {
+		t.Errorf("failure() with needs must stay open: %s", l)
+	}
+	if l := line("always-true"); !strings.Contains(l, "=> if is true") {
+		t.Errorf("failure() || true is definite: %s", l)
+	}
+	if l := line("not-pushed"); !strings.Contains(l, "=> if is false") {
+		t.Errorf("a false condition stays false whatever the needs do: %s", l)
+	}
+	// without needs the inputs are visible in github.event.inputs
+	src2 := strings.Replace(src, "  by-event-input:\n    needs: first\n", "  by-event-input:\n", 1)
+	dir2 := repoWith(t, map[string]string{"w.yml": src2})
+	_, out, _ = runMain(t, dir2, "--list", "w", "-e", "workflow_dispatch")
+	if l := line("by-event-input"); !strings.Contains(l, "=> if is true") {
+		t.Errorf("github.event.inputs is not filled: %s", l)
+	}
+}
