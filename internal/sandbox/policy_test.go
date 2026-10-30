@@ -141,8 +141,8 @@ func TestSeatbeltProfile(t *testing.T) {
 		"(allow default)",
 		"(deny file-write*)",
 		`(allow file-write* (subpath "/we\"ird") (subpath "/work dir"))`,
-		`(deny file-read* (subpath "/Users")`,
-		`(allow file-read* (subpath "/private/etc") (subpath "/usr") (subpath "/we\"ird") (subpath "/work dir"))`,
+		`(deny file-read-data (subpath "/Users")`,
+		`(allow file-read-data (subpath "/private/etc") (subpath "/usr") (subpath "/we\"ird") (subpath "/work dir"))`,
 		`(deny network-outbound (remote unix-socket`,
 		`(deny network-outbound (remote ip))`,
 		`(allow network-outbound (remote ip "localhost:4000"))`,
@@ -166,7 +166,7 @@ func TestSeatbeltProfile(t *testing.T) {
 	}
 	// the last rule that matches wins, so each allow comes after the deny it opens up
 	if strings.Index(s, "(deny file-write*)") > strings.Index(s, "(allow file-write* (subpath") ||
-		strings.Index(s, "(deny file-read* (subpath \"/Users\")") > strings.Index(s, "(allow file-read* (subpath") ||
+		strings.Index(s, "(deny file-read-data (subpath \"/Users\")") > strings.Index(s, "(allow file-read-data (subpath") ||
 		strings.Index(s, "(deny network-outbound (remote ip))") > strings.Index(s, "(allow network-outbound (remote ip") {
 		t.Errorf("an allow comes before the deny it opens\n%s", s)
 	}

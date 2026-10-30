@@ -54,9 +54,11 @@ func seatbeltProfile(p *Policy) string {
 	}
 
 	w(";; files: the places with personal data are closed, then what the step may read is opened again")
-	w("(deny file-read* (subpath \"/Users\") (subpath \"/Volumes\") (subpath \"/private/var/root\") (subpath \"/Library/Keychains\"))")
+	// Only the contents are closed (file-read-data, which also covers listing a directory). A stat still works, as with
+	// Landlock: node's realpath and mkdir -p stat every parent directory and stop on "not permitted".
+	w("(deny file-read-data (subpath \"/Users\") (subpath \"/Volumes\") (subpath \"/private/var/root\") (subpath \"/Library/Keychains\"))")
 	if len(allowed) > 0 {
-		w("(allow file-read* %s)", subpaths(allowed))
+		w("(allow file-read-data %s)", subpaths(allowed))
 	}
 
 	w(";; unix sockets: no agent or daemon socket outside the allow list (ssh-agent, docker.sock)")
