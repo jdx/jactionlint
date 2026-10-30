@@ -27,14 +27,15 @@ func IsRunCommand(args []string) bool {
 }
 
 type options struct {
-	list      bool
-	json      bool
-	eventFile string
-	inputs    []string
-	jobs      []string
-	event     string
-	dir       string
-	help      bool
+	list         bool
+	json         bool
+	eventFile    string
+	inputs       []string
+	jobs         []string
+	event        string
+	dir          string
+	help         bool
+	checkSandbox bool
 }
 
 func newFlagSet(o *options) *pflag.FlagSet {
@@ -48,6 +49,7 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.StringVar(&o.eventFile, "event-file", "", "JSON file with the event payload (github.event)")
 	fs.StringArrayVarP(&o.inputs, "input", "i", nil, "workflow_dispatch input as NAME=VALUE (repeatable)")
 	fs.StringVarP(&o.dir, "directory", "C", "", "run as if started in this directory")
+	fs.BoolVar(&o.checkSandbox, "check-sandbox", false, "report what the sandbox can do on this machine and test it")
 	fs.BoolVarP(&o.help, "help", "h", false, "print this help")
 	return fs
 }
@@ -74,6 +76,9 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, helpText)
 		fmt.Fprint(stdout, fs.FlagUsages())
 		return ExitOK
+	}
+	if o.checkSandbox {
+		return checkSandbox(stdout, stderr)
 	}
 	if o.json && !o.list {
 		fmt.Fprintln(stderr, "jactionlint run: --json can only be used with --list")

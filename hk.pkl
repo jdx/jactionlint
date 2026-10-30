@@ -4,7 +4,7 @@ import "package://github.com/jdx/hk/releases/download/v2.4.0/hk@2.4.0#/Builtins.
 local fast = new Mapping<String, Step> {
     // Same files and plain gofmt (no -s) as the CI lint job used to check
     ["go_fmt"] {
-        glob = List("*.go", "cmd/jactionlint/*.go", "scripts/*/*.go", "playground/*.go")
+        glob = List("*.go", "cmd/jactionlint/*.go", "scripts/*/*.go", "playground/*.go", "internal/**/*.go")
         check_list_files = """
             FILES=$(gofmt -l {{files}})
             if [ -n "$FILES" ]; then
@@ -42,7 +42,7 @@ local slow = new Mapping<String, Step> {
         // staticcheck cannot read the export data introduced in Go 1.27.2. It fails with
         // "export data version 5 is greater than maximum supported version 4", so it runs on the Go
         // installed by mise, which mise.toml pins to 1.27.1. govulncheck and the builds use go.mod's.
-        check = "GOTOOLCHAIN=local staticcheck ./ ./scripts/... ./cmd/... && mise run lint:wasm"
+        check = "GOTOOLCHAIN=local staticcheck ./ ./scripts/... ./cmd/... ./internal/... && mise run lint:wasm"
     }
     ["go_vuln_check"] = Builtins.go_vuln_check
     ["rules_doc"] {

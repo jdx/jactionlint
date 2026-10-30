@@ -50,3 +50,46 @@ Differences from GitHub that you can see in the plan: a matrix built from JSON l
 | `-C`, `--directory DIR` | Run as if started in `DIR`. |
 
 Running the steps is not implemented yet.
+
+## Isolation
+
+Third-party actions and the scripts of the repository under test run as you, so they could read `~/.ssh`, `~/.aws` or your cloud credentials, write outside the repository, or send files away. `jactionlint run` therefore runs every step in a sandbox that the operating system enforces, and it refuses to run a step when it cannot apply the sandbox. There is no container engine and no image to pull.
+
+`jactionlint run --check-sandbox` says what this machine supports and tests it:
+
+```console
+$ jactionlint run --check-sandbox
+Linux: Landlock ABI 10, seccomp-bpf
+ok: a command can write to its workspace
+ok: a command cannot read a file in your home directory that is outside the workspace
+```
+
+What a step gets:
+
+- **A scrubbed environment.** Only `PATH`, `LANG`, `LC_*`, `TERM`, `TZ`, the variables the runner sets (`GITHUB_*`, `RUNNER_*`, `CI`) and the step's own `env:` reach it. Your `AWS_*`, `GITHUB_TOKEN` and `SSH_AUTH_SOCK` do not. No token is injected: `secrets.*` and `github.token` are empty unless you supply them.
+- **A throwaway home.** `HOME`, `XDG_*` and `TMPDIR` point into `.jactionlint/run/<id>/`. Your real home directory cannot be read or written.
+- **A copy of the workspace.** Steps work in `.jactionlint/run/<id>/work`: the tracked files and the untracked files that git does not ignore, plus `.git` (cloned copy-on-write where the file system can, copied otherwise, never hard-linked). Your checkout is not touched.
+- **Files it may read and run:** the system directories (`/usr`, `/bin`, `/lib*`, `/etc`, `/opt`, `/nix`, `/snap`), the directories on `PATH`, and the tool installs of mise, asdf, rustup, nvm, pyenv, sdkman and volta under your home (`~/.local/share/mise/installs` and similar).
+- **Files it may write:** the workspace copy, the fake home, the temp directories, the tool cache, `/tmp` and `/var/tmp`.
+
+### Linux
+
+The filesystem rules are Landlock (Linux 5.13 or newer; the newest ABI the kernel offers is used), applied with seccomp-bpf by a helper process that the runner starts from its own binary (`/proc/self/exe __sandbox-exec`) just before the step, so the step cannot undo it. The step gets `no_new_privs` (`sudo` and setuid programs do not work), and these system calls fail with `EPERM`: `ptrace`, `process_vm_readv/writev`, `pidfd_getfd`, `kcmp`, `bpf`, `perf_event_open`, `userfaultfd`, `io_uring_*`, `keyctl`, `add_key`, `request_key`, `kexec_*`, `reboot`, module loading, the mount family, `unshare`, `setns`, `swapon`, `swapoff`, `acct`, `syslog`, `sethostname` and `setdomainname`. Calls made through another ABI (x32) are refused.
+
+Limits you should know about:
+
+- `/proc` is not open as a whole, because `/proc/<pid>/environ` of your other processes would hold your secrets. A step can read `/proc/cpuinfo`, `/proc/meminfo`, `/proc/stat` and the like, and the `/proc/<pid>` entry of the process the sandbox started. A child process of the step cannot read its own `/proc/self`, so `ps`, `pgrep` and `lsof` do not work.
+- `/tmp` and `/var/tmp` are shared with the host, `/etc` is readable, and a file system rule does not hide a path from `stat`.
+- Connecting to a unix socket in an allowed directory (such as an `ssh-agent` socket in `/tmp`) is restricted only from Landlock ABI 9 (Linux 6.15); signals and abstract unix sockets of other processes only from ABI 6 (Linux 6.12). Older kernels still run, and `--check-sandbox` names what is missing.
+- A process that leaves the process group of the step (`setsid`) is not killed when the step times out.
+- Hosts that disable Landlock (`lsm=` without `landlock`) or run on a kernel older than 5.13 cannot run steps in the default mode. The runner says so and does not fall back; `--sandbox=off` is the explicit opt-out.
+
+### macOS
+
+The sandbox is a Seatbelt profile that `sandbox-exec` applies. It starts from "allow everything" and closes what a step must not touch: nothing is written except the workspace copy, the fake home, the temp directories and the tool cache; the contents of `/Users` (every home directory, with `~/.ssh`, `~/.aws` and the user keychain), `/Volumes` and the system keychains cannot be read, and their directories cannot be listed, except for the directories the step may use; unix sockets outside the allow list (ssh-agent, `docker.sock`) cannot be connected to; `--net=none` denies IP sockets and `--net=proxy` allows only the ports of the proxy and the cache service. A profile that denies everything first has to name every Mach service and system file that a dynamically linked program needs, and a missing one makes `bash` abort at start; the price of the shape used here is that a place the profile does not name, such as `/etc`, is readable, as on Linux.
+
+The macOS backend is new: the profile text is unit-tested everywhere and the escape test runs on macOS CI, but it has had far less use than the Linux one.
+
+### Windows
+
+Not enforced yet: the runner refuses to run steps. Use WSL2, where the Linux sandbox applies.
