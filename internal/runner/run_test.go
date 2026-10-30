@@ -204,7 +204,7 @@ func TestSandboxOffAndNet(t *testing.T) {
 		t.Skip(err)
 	}
 	// with the sandbox the same write is denied
-	code, out, _ = runIn(t, dir, "w", "--no-lint")
+	_, out, _ = runIn(t, dir, "w", "--no-lint")
 	if strings.Contains(out, "write-outside-allowed") {
 		t.Fatalf("the sandbox allowed a write outside the workspace:\n%s", out)
 	}
