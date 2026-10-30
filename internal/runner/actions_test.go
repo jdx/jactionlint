@@ -73,7 +73,7 @@ func TestLocalCompositeAction(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - id: greet
         uses: ./.github/actions/greet
@@ -129,7 +129,7 @@ func TestCompositeFailureAndContinueOnError(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - id: a
         uses: ./act
@@ -160,7 +160,7 @@ func TestNodeActionPrePostState(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - id: n
         uses: ./act
@@ -237,7 +237,7 @@ func TestRemoteActionPinningAndTrust(t *testing.T) {
 	wf := fmt.Sprintf(`on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: owner/repo@%s
         with:
@@ -259,7 +259,7 @@ jobs:
 	}
 
 	// an unpinned ref is refused unless --trust-actions
-	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte("on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: owner/repo@v1\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "w.yml"), []byte("on: push\njobs:\n  j:\n    runs-on: self-hosted\n    steps:\n      - uses: owner/repo@v1\n"), 0o644)
 	out = mustRun(t, dir, 1)
 	if !strings.Contains(out, "is not pinned to a commit SHA") || !strings.Contains(out, "--trust-actions") {
 		t.Fatalf("unpinned action was not refused:\n%s", out)
@@ -425,7 +425,7 @@ func TestReusableWorkflow(t *testing.T) {
 	caller := `on: push
 jobs:
   prep:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       tag: ${{ steps.t.outputs.tag }}
     steps:
@@ -446,7 +446,7 @@ jobs:
     secrets: inherit
   after:
     needs: [call, inherit]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: echo "call result ${{ needs.call.result }} output ${{ needs.call.outputs.built }} and ${{ needs.inherit.outputs.built }}"
 `
@@ -470,7 +470,7 @@ jobs:
         value: ${{ jobs.build.outputs.artifact }}
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       artifact: ${{ steps.b.outputs.name }}
     steps:
@@ -502,7 +502,7 @@ func TestArtifactsAndCheckoutShim(t *testing.T) {
 	wf := `on: push
 jobs:
   produce:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: |
@@ -525,7 +525,7 @@ jobs:
         continue-on-error: true
   consume:
     needs: produce
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/download-artifact@v4
         with:
