@@ -189,6 +189,7 @@ func loadPlan(path, root string, o *options, in *Inputs, stderr io.Writer) (*Pla
 		return nil, ExitError
 	}
 	wf := *in
+	wf.applyDispatch(w)
 	wf.WorkflowPath = relPath(root, path)
 	wf.Workflow = wf.WorkflowPath
 	if w.Name != nil {
@@ -296,12 +297,14 @@ func (o *options) inputsFor(root string) (*Inputs, error) {
 	}
 	if len(o.inputs) > 0 {
 		in.Inputs = map[string]any{}
+		in.Passed = map[string]string{}
 		for _, kv := range o.inputs {
 			k, v, ok := strings.Cut(kv, "=")
 			if !ok || k == "" {
 				return nil, fmt.Errorf("--input %q: want NAME=VALUE", kv)
 			}
 			in.Inputs[k] = v
+			in.Passed[k] = v
 		}
 	}
 	return in, nil

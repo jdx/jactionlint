@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/jdx/jactionlint/v2"
 	"github.com/jdx/jactionlint/v2/internal/runner/eval"
 )
 
@@ -14,10 +15,11 @@ import (
 type Inputs struct {
 	Repo         repoInfo
 	Event        string
-	EventData    map[string]any // github.event; synthesized when nil
-	Workflow     string         // name of the workflow
-	WorkflowPath string         // path relative to the root
-	Inputs       map[string]any // workflow_dispatch / workflow_call inputs
+	EventData    map[string]any    // github.event; synthesized when nil
+	Workflow     string            // name of the workflow
+	WorkflowPath string            // path relative to the root
+	Inputs       map[string]any    // workflow_dispatch / workflow_call inputs
+	Passed       map[string]string // the -i values as given
 	Vars         map[string]any
 	Secrets      map[string]any
 	Env          map[string]any // workflow-level env, filled by the caller
@@ -193,4 +195,53 @@ func syntheticEvent(event string, ri repoInfo, ref, refName string) map[string]a
 		ev["issue"] = map[string]any{"number": 1.0, "title": "", "body": "", "labels": []any{}, "user": sender}
 	}
 	return ev
+}
+
+// applyDispatch fills the inputs context of a workflow_dispatch run: the default of each declared input, then the values
+// given with -i, converted to the type the workflow declares (a boolean input is true or false, not "true").
+func (in *Inputs) applyDispatch(w *jactionlint.Workflow) {
+	if in.Event != "workflow_dispatch" {
+		return
+	}
+	out := map[string]any{}
+	declared := map[string]bool{}
+	for _, ev := range w.On {
+		wd, ok := ev.(*jactionlint.WorkflowDispatchEvent)
+		if !ok {
+			continue
+		}
+		for key, d := range wd.Inputs {
+			name := key
+			if d.Name != nil {
+				name = d.Name.Value
+			}
+			declared[strings.ToLower(name)] = true
+			raw, given := "", false
+			for k, v := range in.Passed {
+				if strings.EqualFold(k, name) {
+					raw, given = v, true
+				}
+			}
+			if !given && d.Default != nil {
+				raw, given = d.Default.Value, true
+			}
+			if !given {
+				continue
+			}
+			switch d.Type {
+			case jactionlint.WorkflowDispatchEventInputTypeBoolean:
+				out[name] = strings.EqualFold(strings.TrimSpace(raw), "true")
+			case jactionlint.WorkflowDispatchEventInputTypeNumber:
+				out[name] = eval.ToNumber(raw)
+			default:
+				out[name] = raw
+			}
+		}
+	}
+	for k, v := range in.Passed {
+		if !declared[strings.ToLower(k)] {
+			out[k] = v
+		}
+	}
+	in.Inputs = out
 }

@@ -218,3 +218,55 @@ func TestListBadInput(t *testing.T) {
 		t.Fatalf("code %d %q", code, errOut)
 	}
 }
+
+func TestListWithoutTheInputsAMatrixNeeds(t *testing.T) {
+	src := `on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        type: boolean
+        default: true
+      count:
+        type: number
+        default: "3"
+      env:
+        default: staging
+jobs:
+  matrixed:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.oses) }}
+    steps: [{run: e}]
+  typed:
+    if: inputs.debug == true && inputs.count == 3 && inputs.env == 'staging'
+    runs-on: x
+    steps: [{run: e}]
+  later:
+    needs: typed
+    if: needs.typed.result == 'success'
+    runs-on: x
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"w.yml": src})
+	code, out, errOut := runMain(t, dir, "--list", "w", "-e", "workflow_dispatch")
+	if code != ExitOK {
+		t.Fatalf("a matrix that needs an input that was not given made the plan fail: %d\n%s", code, errOut)
+	}
+	for _, want := range []string{"matrixed (matrix known at run time: cannot be evaluated yet", "typed   runs-on: x   if: inputs.debug == true", "=> if is true"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q\n%s", want, out)
+		}
+	}
+	// the condition that reads needs is left alone instead of being evaluated against an empty context
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "later") && strings.Contains(line, "=> if is") {
+			t.Errorf("a condition on needs was evaluated: %s", line)
+		}
+	}
+	// a boolean given with -i is a boolean
+	_, out, _ = runMain(t, dir, "--list", "w", "-e", "workflow_dispatch", "-i", "debug=false")
+	if !strings.Contains(out, "=> if is false") {
+		t.Errorf("-i debug=false:\n%s", out)
+	}
+}

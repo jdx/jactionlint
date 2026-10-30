@@ -85,7 +85,9 @@ func BuildPlan(w *jactionlint.Workflow, path string, only []string, env *eval.En
 		}
 		combos, dyn, err := expandMatrix(m, envResolver(env))
 		if err != nil {
-			return nil, fmt.Errorf("job %q: %w", id, err)
+			// What cannot be evaluated now (an input that was not given, a value of the wrong kind) is reported when
+			// the job's turn comes, not as a failure of the whole plan.
+			combos, dyn = nil, "cannot be evaluated yet: "+err.Error()
 		}
 		pj.Dynamic = dyn
 		for _, c := range combos {
@@ -229,7 +231,7 @@ func displayName(env *eval.Env, j *jactionlint.Job, c *Cell) string {
 
 // cellEnv returns env with the matrix context of the cell.
 func cellEnv(env *eval.Env, c *Cell) *eval.Env {
-	e := &eval.Env{Contexts: map[string]any{}, Status: env.Status}
+	e := &eval.Env{Contexts: map[string]any{}, Status: env.Status, HashFiles: env.HashFiles}
 	for k, v := range env.Contexts {
 		e.Contexts[k] = v
 	}
@@ -242,19 +244,21 @@ func evalIf(env *eval.Env, j *jactionlint.Job, c *Cell) *bool {
 		return nil
 	}
 	e := cellEnv(env, c)
-	if !e.CanEval(j.If.Value) && !eval.HasExpr(j.If.Value) {
-		// a bare condition: look at the contexts of the expression itself
-		cs, err := eval.Contexts(strings.TrimSpace(j.If.Value))
-		if err != nil {
-			return nil
-		}
-		for _, n := range cs {
-			if _, ok := e.Contexts[n]; !ok {
-				return nil
+	// A condition is written with or without ${{ }}; look at the contexts of the expression either way.
+	cs, err := eval.StringContexts(ifSource(j.If.Value))
+	if err != nil {
+		return nil
+	}
+	for _, n := range cs {
+		known := false
+		for k := range e.Contexts {
+			if strings.EqualFold(k, n) {
+				known = true
 			}
 		}
-	} else if eval.HasExpr(j.If.Value) && !e.CanEval(j.If.Value) {
-		return nil
+		if !known {
+			return nil // reads needs, steps or another context that exists only during the run
+		}
 	}
 	v, err := e.Condition(j.If.Value)
 	if err != nil {
@@ -297,4 +301,13 @@ func evalRunsOn(env *eval.Env, j *jactionlint.Job, c *Cell) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// ifSource wraps a condition that is written without ${{ }} so that its expressions can be found.
+func ifSource(v string) string {
+	t := strings.TrimSpace(v)
+	if !eval.HasExpr(t) {
+		t = "${{ " + t + " }}"
+	}
+	return t
 }

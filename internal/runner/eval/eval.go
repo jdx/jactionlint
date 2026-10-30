@@ -219,7 +219,10 @@ func index(recv, idx any) any {
 		if !ok || f != math.Trunc(f) || f < 0 || f >= float64(len(r)) {
 			return nil
 		}
-		return r[int(f)]
+		if i := int(f); i >= 0 && i < len(r) {
+			return r[i]
+		}
+		return nil
 	case map[string]any:
 		if s, ok := idx.(string); ok {
 			v, _ := lookup(r, s)
