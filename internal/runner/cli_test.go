@@ -190,14 +190,14 @@ jobs:
 `
 	dir := repoWith(t, map[string]string{"dyn.yml": src})
 	code, out, errOut := runMain(t, dir, "--list", "dyn", "-e", "workflow_dispatch",
-		"-i", `oses=["linux","mac"]`, "-i", `extra=[{"os":"linux","gpu":true}]`, "-i", "suffix=ci",
+		"-i", `oses=["box-a","box-b"]`, "-i", `extra=[{"os":"box-a","gpu":true}]`, "-i", "suffix=ci",
 		"-i", `strategy={"matrix":{"v":[1,2]}}`)
 	if code != ExitOK {
 		t.Fatalf("code %d: %s", code, errOut)
 	}
 	for _, want := range []string{
-		"matrixed (linux, true)   runs-on: linux   name: Test linux on ci",
-		"matrixed (mac)   runs-on: mac   name: Test mac on ci",
+		"matrixed (box-a, true)   runs-on: box-a   name: Test box-a on ci",
+		"matrixed (box-b)   runs-on: box-b   name: Test box-b on ci",
 		"whole (1)",
 		"whole (2)",
 		"skipped   runs-on: self-hosted   if: github.event_name == 'push'   => if is false",
