@@ -140,3 +140,19 @@ func TestInvalidWorkflow(t *testing.T) {
 		t.Fatalf("code %d: %q", code, errOut)
 	}
 }
+
+func TestListJobInSomeWorkflowsOnly(t *testing.T) {
+	dir := repoWith(t, map[string]string{
+		"a.yml": "on: push\njobs:\n  build:\n    runs-on: x\n    steps: [{run: e}]\n",
+		"b.yml": "on: push\njobs:\n  test:\n    runs-on: x\n    steps: [{run: e}]\n",
+		"c.yml": "on: push\njobs:\n  lint:\n    runs-on: x\n    steps: [{run: e}]\n",
+	})
+	code, out, errOut := runMain(t, dir, "--list", "-j", "test")
+	if code != ExitOK || !strings.Contains(out, "b.yml") || strings.Contains(out, "a.yml") || errOut != "" {
+		t.Fatalf("a job that only some workflows have: code %d\n%s\n%s", code, out, errOut)
+	}
+	code, _, errOut = runMain(t, dir, "--list", "-j", "nowhere")
+	if code != ExitUsage || !strings.Contains(errOut, "no workflow has the job nowhere") {
+		t.Fatalf("a job that no workflow has: code %d %q", code, errOut)
+	}
+}

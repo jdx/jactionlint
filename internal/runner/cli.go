@@ -125,16 +125,28 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	var plans []*Plan
 	status := ExitOK
+	missingJob := false
 	for _, p := range paths {
-		plan, code := loadPlan(p, root, &o, stderr)
+		errw := stderr
+		if len(paths) > 1 {
+			errw = &missingJobFilter{w: stderr, missing: &missingJob}
+		}
+		plan, code := loadPlan(p, root, &o, errw)
 		if code != ExitOK {
-			if len(paths) == 1 || code == ExitUsage {
+			if len(paths) == 1 {
 				return code
 			}
-			status = code
+			// with -j and no workflow named, a workflow that lacks the job is not listed; the others are
+			if code != ExitUsage {
+				status = code
+			}
 			continue
 		}
 		plans = append(plans, plan)
+	}
+	if len(plans) == 0 && missingJob {
+		fmt.Fprintf(stderr, "jactionlint run: no workflow has the job %s\n", strings.Join(o.jobs, ", "))
+		return ExitUsage
 	}
 	if o.json {
 		if err := writeJSON(stdout, plans, root, &o); err != nil {
@@ -241,4 +253,18 @@ func resolveWorkflow(cwd, root, arg string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no workflow %q (looked for the path and in .github/workflows)", arg)
+}
+
+// missingJobFilter drops the "has no job" message of a workflow when several are listed, and remembers that it happened.
+type missingJobFilter struct {
+	w       io.Writer
+	missing *bool
+}
+
+func (f *missingJobFilter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "has no job") {
+		*f.missing = true
+		return len(p), nil
+	}
+	return f.w.Write(p)
 }
