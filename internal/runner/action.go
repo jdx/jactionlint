@@ -35,7 +35,11 @@ type actionMeta struct {
 	PreIf   string
 	PostIf  string
 	Image   string
-	Steps   []*jactionlint.Step // composite
+	// Docker actions
+	Entrypoint string
+	Args       []string
+	Env        map[string]string
+	Steps      []*jactionlint.Step // composite
 }
 
 type rawAction struct {
@@ -55,6 +59,10 @@ type rawAction struct {
 		PreIf  any    `yaml:"pre-if"`
 		PostIf any    `yaml:"post-if"`
 		Image  string `yaml:"image"`
+
+		Entrypoint string         `yaml:"entrypoint"`
+		Args       []any          `yaml:"args"`
+		Env        map[string]any `yaml:"env"`
 	} `yaml:"runs"`
 }
 
@@ -101,6 +109,16 @@ func loadActionMeta(dir string) (*actionMeta, error) {
 		Name: raw.Name, Inputs: map[string]inputDef{}, Outputs: map[string]string{},
 		Using: raw.Runs.Using, Main: raw.Runs.Main, Pre: raw.Runs.Pre, Post: raw.Runs.Post, Image: raw.Runs.Image,
 		PreIf: scalarString(raw.Runs.PreIf), PostIf: scalarString(raw.Runs.PostIf),
+	}
+	m.Entrypoint = raw.Runs.Entrypoint
+	for _, a := range raw.Runs.Args {
+		m.Args = append(m.Args, scalarString(a))
+	}
+	if len(raw.Runs.Env) > 0 {
+		m.Env = map[string]string{}
+		for k, v := range raw.Runs.Env {
+			m.Env[k] = scalarString(v)
+		}
 	}
 	for k, v := range raw.Inputs {
 		m.Inputs[strings.ToLower(k)] = inputDef{Default: scalarString(v.Default), HasDefault: v.Default != nil, Required: v.Required}
@@ -228,28 +246,24 @@ func (jr *jobRun) resolveAction(ctx context.Context, ref *jactionlint.UsesRef, s
 // runAction runs a `uses:` step.
 func (jr *jobRun) runAction(n label, name string, step *jactionlint.Step, ex *jactionlint.ExecAction, ev *eval.Env) {
 	e := jr.e
-	e.pr.StepStart(n, name)
+	jr.pr.StepStart(n, name)
 	start := time.Now()
 	ind := n.indent() + 1
-	say := func(s string) { e.pr.Note(ind, "%s", s) }
-	emit := func(l string) { e.pr.StepOutput(n, l) }
+	say := func(s string) { jr.pr.Note(ind, "%s", s) }
+	emit := func(l string) { jr.pr.StepOutput(n, l) }
 
 	fail := func(note string) {
 		emit("error: " + note)
 		jr.finishStep(n, step, stepResult{Outcome: "failure", Note: note}, nil, start)
 	}
 	skip := func(why string) {
-		e.pr.StepEnd(n, "skipped", why, 0)
+		jr.pr.StepEnd(n, "skipped", why, 0)
 		jr.recordStep(step, stepResult{Outcome: "skipped", Conclusion: "skipped"})
 	}
 
 	ref := jactionlint.ParseUses(ex.Uses.Value)
 	if ref.Kind == jactionlint.UsesInvalid {
 		fail(fmt.Sprintf("invalid uses %q: %s", ex.Uses.Value, ref.Problem))
-		return
-	}
-	if ref.Kind == jactionlint.UsesDocker {
-		skip("docker actions need a container engine, which is not supported yet")
 		return
 	}
 	if ref.Kind == jactionlint.UsesReusableWorkflow {
@@ -273,6 +287,20 @@ func (jr *jobRun) runAction(n label, name string, step *jactionlint.Step, ex *ja
 		inputs[strings.ToLower(in.Name.Value)] = v
 	}
 
+	if ref.Kind == jactionlint.UsesDocker {
+		ra := &resolvedAction{spec: ref.Raw}
+		meta := &actionMeta{Using: "docker", Image: ref.Raw}
+		var res stepResult
+		var eff *effects
+		var skipWhy string
+		res, eff, skipWhy = jr.runDockerAction(n, step, ra, meta, inputs, "__"+sanitizeName(ref.Image), ev, emit, say, jr.ctx)
+		if skipWhy != "" {
+			skip(skipWhy)
+			return
+		}
+		jr.finishStep(n, step, res, eff, start)
+		return
+	}
 	ctx := jr.ctx
 	// shims for the actions that a local run replaces
 	if ref.Kind == jactionlint.UsesAction {
@@ -318,8 +346,12 @@ func (jr *jobRun) runAction(n label, name string, step *jactionlint.Step, ex *ja
 	case strings.HasPrefix(strings.ToLower(meta.Using), "node"):
 		res, eff = jr.runNode(n, step, ra, meta, inputs, id, ev, emit, say, ctx)
 	case strings.EqualFold(meta.Using, "docker"):
-		skip("docker actions need a container engine, which is not supported yet")
-		return
+		var skipWhy string
+		res, eff, skipWhy = jr.runDockerAction(n, step, ra, meta, inputs, id, ev, emit, say, ctx)
+		if skipWhy != "" {
+			skip(skipWhy)
+			return
+		}
 	default:
 		fail(fmt.Sprintf("runs.using %q is not supported", meta.Using))
 		return
@@ -354,7 +386,7 @@ func (jr *jobRun) runNode(n label, step *jactionlint.Step, ra *resolvedAction, m
 		if err != nil {
 			return stepResult{Outcome: "failure", Note: err.Error()}, &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
 		}
-		bin, err := e.node.ensure(cx, major, sandboxPathDirs(pr.finalPath), say)
+		bin, err := e.node.ensure(cx, major, jr.nodeSearchPath(pr.finalPath), say)
 		if err != nil {
 			em("error: " + err.Error())
 			return stepResult{Outcome: "failure", Note: err.Error()}, &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
@@ -444,7 +476,7 @@ func (jr *jobRun) runPosts() {
 			continue
 		}
 		if p.run != nil {
-			e.pr.StepStart(p.n, p.name)
+			jr.pr.StepStart(p.n, p.name)
 			pstart := time.Now()
 			rctx := jr.ctx
 			if jr.ctx.Err() != nil {
@@ -457,11 +489,11 @@ func (jr *jobRun) runPosts() {
 			if res.Outcome == "failure" {
 				jr.failed = true
 			}
-			e.pr.StepEnd(p.n, res.Outcome, res.Note, durationOf(pstart))
+			jr.pr.StepEnd(p.n, res.Outcome, res.Note, durationOf(pstart))
 			continue
 		}
 		ev := jr.stepEnv(p.step)
-		e.pr.StepStart(p.n, p.name)
+		jr.pr.StepStart(p.n, p.name)
 		start := time.Now()
 		runCtx := jr.ctx
 		if jr.ctx.Err() != nil {
@@ -469,7 +501,7 @@ func (jr *jobRun) runPosts() {
 			runCtx, cancel = context.WithTimeout(context.WithoutCancel(jr.ctx), cancelGrace)
 			defer cancel()
 		}
-		emit := func(l string) { e.pr.StepOutput(p.n, l) }
+		emit := func(l string) { jr.pr.StepOutput(p.n, l) }
 		scope := &actionScope{ra: p.ra, id: "post"}
 		extra := inputEnv(p.inputs)
 		for k, v := range (&jobRun{jobShared: jr.jobShared, action: scope}).actionEnv() {
@@ -485,7 +517,7 @@ func (jr *jobRun) runPosts() {
 			res = stepResult{Outcome: "failure", Note: err.Error()}
 		} else {
 			major, _ := majorOf(p.meta.Using)
-			bin, nerr := e.node.ensure(runCtx, major, sandboxPathDirs(pr.finalPath), func(s string) { e.pr.Note(p.n.indent()+1, "%s", s) })
+			bin, nerr := e.node.ensure(runCtx, major, jr.nodeSearchPath(pr.finalPath), func(s string) { jr.pr.Note(p.n.indent()+1, "%s", s) })
 			if nerr != nil {
 				res = stepResult{Outcome: "failure", Note: nerr.Error()}
 			} else {
@@ -500,7 +532,7 @@ func (jr *jobRun) runPosts() {
 		if res.Outcome == "failure" {
 			jr.failed = true
 		}
-		e.pr.StepEnd(p.n, res.Outcome, res.Note, durationOf(start))
+		jr.pr.StepEnd(p.n, res.Outcome, res.Note, durationOf(start))
 	}
 }
 

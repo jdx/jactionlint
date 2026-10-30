@@ -155,7 +155,7 @@ func saveCache(jr *jobRun, store *cache.Store, scopes []string, plan *cachePlan,
 	pend, err := store.Reserve(scopes[0], plan.key, plan.version)
 	if err != nil {
 		if errors.Is(err, cache.ErrExists) {
-			e.pr.Note(2, "unable to reserve cache with key %s, another job may be creating this cache", plan.key)
+			jr.pr.Note(2, "unable to reserve cache with key %s, another job may be creating this cache", plan.key)
 			return stepResult{Outcome: "success"}, eff
 		}
 		return stepResult{Outcome: "failure", Note: err.Error()}, eff
@@ -178,7 +178,7 @@ func saveCache(jr *jobRun, store *cache.Store, scopes []string, plan *cachePlan,
 		}
 		return stepResult{Outcome: "failure", Note: err.Error()}, eff
 	}
-	e.pr.Note(2, "cache saved with key: %s (%d files, %d bytes)", ent.Key, files, ent.Size)
+	jr.pr.Note(2, "cache saved with key: %s (%d files, %d bytes)", ent.Key, files, ent.Size)
 	return stepResult{Outcome: "success"}, eff
 }
 

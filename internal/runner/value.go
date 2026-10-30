@@ -183,3 +183,5 @@ func valueText(v any) string {
 	}
 	return string(b)
 }
+
+func jsonUnmarshal(s string, v any) error { return json.Unmarshal([]byte(s), v) }

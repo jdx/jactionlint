@@ -45,11 +45,11 @@ func writeText(w io.Writer, p *Plan, root string, o *options) {
 			stage = pj.Stage
 			fmt.Fprintf(w, "  stage %d\n", stage)
 		}
-		writeJob(w, pj)
+		writeJob(w, pj, o)
 	}
 }
 
-func writeJob(w io.Writer, pj *PlannedJob) {
+func writeJob(w io.Writer, pj *PlannedJob, o *options) {
 	var notes []string
 	if len(pj.Needs) > 0 {
 		notes = append(notes, "needs: "+strings.Join(pj.Needs, ", "))
@@ -86,6 +86,9 @@ func writeJob(w io.Writer, pj *PlannedJob) {
 		line := suffix
 		if c.RunsOn != "" && pj.Job.WorkflowCall == nil {
 			line = strings.Replace(line, "runs-on: "+runsOnText(pj.Job), "runs-on: "+c.RunsOn, 1)
+		}
+		if where := placement(o, pj, c); where != "" {
+			extra = "   => " + where + extra
 		}
 		fmt.Fprintf(w, "    %s%s%s%s\n", name, c.detail(), line, extra)
 	}
@@ -152,4 +155,60 @@ func writeJSON(w io.Writer, plans []*Plan, root string, o *options) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// placement says where a cell would run with the options given: on this machine, in a container, or nowhere.
+func placement(o *options, pj *PlannedJob, c *Cell) string {
+	j := pj.Job
+	if j.WorkflowCall != nil {
+		return ""
+	}
+	var labels []string
+	if c.RunsOn != "" {
+		for _, l := range strings.Split(c.RunsOn, ",") {
+			labels = append(labels, strings.TrimSpace(l))
+		}
+	}
+	hasServices := j.Services != nil && (len(j.Services.Value) > 0 || j.Services.Expression != nil)
+	target := targetOS(labels)
+	switch {
+	case j.Container != nil:
+		img := ""
+		if j.Container.Image != nil && !strings.Contains(j.Container.Image.Value, "${{") {
+			img = " " + j.Container.Image.Value
+		}
+		return "runs in the job container" + img
+	case o.ro.container != "" && !o.ro.noContainers && target == "linux":
+		img, err := imageForLabels(labels, containerOverride(o), o.imageMap())
+		if err != nil {
+			return "skipped: " + err.Error()
+		}
+		return "runs in a container: " + img
+	case target != "" && target != hostOS():
+		why := "skipped: needs " + hostName[target]
+		if target == "linux" {
+			why += " (--container runs it in a Linux container)"
+		}
+		return why
+	case hasServices:
+		return "runs on this machine with its services in containers"
+	}
+	return "" // on this machine, which is not worth a note on every line
+}
+
+func containerOverride(o *options) string {
+	if o.ro.container == "default" {
+		return ""
+	}
+	return o.ro.container
+}
+
+func (o *options) imageMap() map[string]string {
+	m := map[string]string{}
+	for _, kv := range o.ro.images {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			m[strings.ToLower(k)] = v
+		}
+	}
+	return m
 }

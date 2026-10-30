@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 	"github.com/jdx/jactionlint/v2/internal/sandbox"
@@ -711,5 +712,99 @@ func seedCache(t *testing.T, state, repoDir string, plan *cachePlan, archive []b
 	}
 	if _, err := st.Commit(p, -1); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestParallelCells(t *testing.T) {
+	wf := `on: push
+jobs:
+  cells:
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        n: [1, 2, 3, 4]
+    steps:
+      - run: |
+          echo "start ${{ matrix.n }}"
+          sleep 1
+          echo "end ${{ matrix.n }}"
+  other:
+    runs-on: self-hosted
+    steps:
+      - run: sleep 1 && echo other-done
+  after:
+    needs: [cells, other]
+    runs-on: self-hosted
+    steps:
+      - run: echo "after sees ${{ needs.cells.result }} ${{ needs.other.result }}"
+`
+	dir := actionRepo(t, wf, nil)
+	start := time.Now()
+	out := mustRun(t, dir, 0, "--parallel", "5")
+	elapsed := time.Since(start)
+	if elapsed > 3500*time.Millisecond {
+		t.Errorf("--parallel 5 took %v for five 1-second jobs", elapsed)
+	}
+	if !strings.Contains(out, "after sees success success") {
+		t.Errorf("the dependent job ran too early or lost its needs:\n%s", out)
+	}
+	// each job is printed in one piece: its lines are not interleaved with those of another
+	for n := 1; n <= 4; n++ {
+		a := strings.Index(out, fmt.Sprintf("start %d", n))
+		b := strings.Index(out, fmt.Sprintf("end %d", n))
+		if a < 0 || b < a {
+			t.Fatalf("cell %d is missing or reversed:\n%s", n, out)
+		}
+		if strings.Count(out[a:b], "[job]") != 0 {
+			t.Errorf("the output of cell %d is interleaved with another job:\n%s", n, out)
+		}
+	}
+	// without --parallel the same workflow takes the sum
+	start = time.Now()
+	mustRun(t, dir, 0)
+	if seq := time.Since(start); seq < 4*time.Second {
+		t.Errorf("sequential run took only %v", seq)
+	}
+}
+
+func TestParallelFailFastAndMaxParallel(t *testing.T) {
+	wf := `on: push
+jobs:
+  ff:
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - run: |
+          if [ "${{ matrix.n }}" = 1 ]; then sleep 0.3; exit 1; fi
+          sleep 30
+  serial:
+    runs-on: self-hosted
+    strategy:
+      max-parallel: 1
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - run: echo "serial ${{ matrix.n }} start" && sleep 0.4 && echo "serial ${{ matrix.n }} end"
+`
+	dir := actionRepo(t, wf, nil)
+	start := time.Now()
+	out := mustRun(t, dir, 1, "--parallel", "6")
+	if time.Since(start) > 15*time.Second {
+		t.Errorf("fail-fast did not cancel the running cells (%v)", time.Since(start))
+	}
+	if !strings.Contains(out, "failure   ff (1)") {
+		t.Errorf("summary:\n%s", out)
+	}
+	// max-parallel: 1 keeps the cells apart even with free slots
+	for n := 1; n <= 3; n++ {
+		if i, j := strings.Index(out, fmt.Sprintf("serial %d start", n)), strings.Index(out, fmt.Sprintf("serial %d end", n)); i < 0 || j < i {
+			t.Fatalf("serial %d:\n%s", n, out)
+		}
+	}
+	code, _, errOut := runIn(t, dir, "w", "--no-lint", "--parallel", "0")
+	if code != ExitUsage || !strings.Contains(errOut, "--parallel must be at least 1") {
+		t.Errorf("--parallel 0: %d %q", code, errOut)
 	}
 }

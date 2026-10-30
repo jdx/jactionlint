@@ -5,10 +5,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [self-hosted, macos-latest]
+        os: [self-hosted, my-runner]
         go: ["1.22", 1.23]
         exclude:
-          - os: macos-latest
+          - os: my-runner
             go: "1.22"
         include:
           - os: self-hosted

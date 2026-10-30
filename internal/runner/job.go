@@ -29,6 +29,8 @@ type jobShared struct {
 type jobRun struct {
 	*jobShared
 	e    *Engine
+	pr   *Printer // where this job writes; a buffer when jobs run in parallel
+	ctr  *jobContainer
 	pj   *PlannedJob
 	cell *Cell
 	name string
@@ -57,9 +59,14 @@ type stepResult struct {
 	Note       string
 }
 
-func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, total int, base *eval.Env) *jobResult {
+func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, total int, base *eval.Env, slot int) *jobResult {
 	j := pj.Job
 	jr := &jobRun{jobShared: &jobShared{ghEnv: map[string]string{}}, e: e, pj: pj, cell: cell, steps: map[string]any{}, bg: map[string]*bgStep{}}
+	jr.pr = e.pr
+	if e.root().slots != nil {
+		jr.pr = e.pr.Buffered()
+		defer jr.pr.Flush()
+	}
 	jr.env = cellEnv(base, cell)
 	jr.env.Status = nil
 	jr.env.Contexts["strategy"] = map[string]any{
@@ -77,7 +84,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	}
 	jr.name = e.prefix + jr.name
 	skip := func(why string) *jobResult {
-		e.pr.JobSkip(jr.name, why)
+		jr.pr.JobSkip(jr.name, why)
 		e.addSummary(jr.name, "skipped", why)
 		return &jobResult{Result: "skipped", Outputs: map[string]any{}}
 	}
@@ -108,9 +115,10 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		}
 	}
 
-	// Where the job would run
+	// Where the job would run: in a container when it asks for one (container:, services:) or under --container, on this
+	// machine when the labels fit its operating system, otherwise nowhere.
+	var labels []string
 	if j.RunsOn != nil {
-		var labels []string
 		if j.RunsOn.LabelsExpr != nil {
 			if v, err := jr.env.Value(j.RunsOn.LabelsExpr.Value); err == nil {
 				if l, ok := v.([]any); ok {
@@ -127,19 +135,80 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 				labels = append(labels, s)
 			}
 		}
-		if t := targetOS(labels); t != "" && t != hostOS() {
-			return skip(fmt.Sprintf("runs-on %s needs %s, this machine is %s", strings.Join(labels, ", "), hostName[t], hostName[hostOS()]))
-		}
 	}
-	if j.Container != nil || (j.Services != nil && (len(j.Services.Value) > 0 || j.Services.Expression != nil)) {
-		return skip("it needs a container engine (container: and services:), which is not supported yet")
+	wantsContainer := j.Container != nil || (j.Services != nil && (len(j.Services.Value) > 0 || j.Services.Expression != nil))
+	target := targetOS(labels)
+	rootMode := false
+	ctrImage := ""
+	switch {
+	case j.WorkflowCall != nil:
+	case wantsContainer:
+	case e.cfg.ContainerMode && (target == "linux" || target == "" && len(labels) > 0 && e.cfg.ContainerImage != ""):
+		img, err := imageForLabels(labels, e.cfg.ContainerImage, e.cfg.Images)
+		if err != nil {
+			return skip(err.Error())
+		}
+		ctrImage, rootMode, wantsContainer = img, true, true
+	case target != "" && target != hostOS():
+		why := fmt.Sprintf("runs-on %s needs %s, this machine is %s", strings.Join(labels, ", "), hostName[target], hostName[hostOS()])
+		if target == "linux" {
+			why += "; --container runs it in a Linux container"
+		}
+		return skip(why)
+	}
+	if e.cfg.DryRun && j.WorkflowCall == nil {
+		where := "on this machine"
+		if wantsContainer {
+			where = "in a container"
+			if ctrImage != "" {
+				where = "in " + ctrImage
+			}
+		}
+		return e.dryRunCell(ctx, pj, jr, where)
+	}
+	if wantsContainer && j.WorkflowCall == nil {
+		if e.cfg.NoContainers {
+			return skip("it needs a container and --no-containers is set")
+		}
+		if _, err := e.containerEngine(ctx); err != nil {
+			return skip(err.Error())
+		}
+		if ctrImage == "" && j.Container != nil {
+			switch {
+			case j.Container.Expression != nil:
+				v, err := jr.env.Value(j.Container.Expression.Value)
+				if err != nil {
+					return skip("container: " + err.Error())
+				}
+				if m, ok := v.(map[string]any); ok {
+					if img, ok := m["image"].(string); ok {
+						ctrImage = img
+					}
+				} else {
+					ctrImage = eval.ToString(v)
+				}
+			case j.Container.Image != nil:
+				img, err := jr.interp(jr.env, j.Container.Image.Value)
+				if err != nil {
+					return skip("container: " + err.Error())
+				}
+				ctrImage = img
+			}
+			if ctrImage == "" {
+				return skip("container: has no image")
+			}
+		}
+		if ctrImage == "" && !rootMode {
+			// services next to a job that runs on this machine: no job container, only the services
+			ctrImage = ""
+		}
 	}
 
 	if j.WorkflowCall != nil {
 		return e.runReusable(ctx, pj, cell, jr)
 	}
 
-	e.pr.JobStart(jr.name)
+	jr.pr.JobStart(jr.name)
 	start := time.Now()
 
 	root := e.root()
@@ -147,7 +216,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	root.jobSeq++
 	seq := root.jobSeq
 	root.mu.Unlock()
-	rd, release, err := e.rd.Job(seq)
+	rd, release, err := e.rd.Job(seq, slot)
 	if err != nil {
 		return e.failJob(jr, start, fmt.Sprintf("cannot create the run directory: %v", err))
 	}
@@ -158,6 +227,17 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		jr.work = e.cfg.Root
 	} else if err := CopyWorkspace(e.cfg.Root, rd.Work); err != nil {
 		return e.failJob(jr, start, fmt.Sprintf("cannot copy the workspace: %v", err))
+	}
+
+	if wantsContainer {
+		jr.pr.Note(1, "starting the %s", containerWhat(ctrImage, j))
+		jc, err := jr.startContainer(ctx, ctrImage, j.Container, rootMode)
+		if err != nil {
+			return e.failJob(jr, start, err.Error())
+		}
+		jr.ctr = jc
+		defer jc.stop(context.WithoutCancel(ctx))
+		jr.env.Contexts["job"] = jc.jobContext("success")
 	}
 
 	timeout := 360.0
@@ -199,7 +279,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	jr.runPosts()
 	if jctx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 		jr.failed = true
-		e.pr.Note(1, "the job timed out after %s minutes", eval.FormatNumber(timeout))
+		jr.pr.Note(1, "the job timed out after %s minutes", eval.FormatNumber(timeout))
 	}
 
 	result := "success"
@@ -209,7 +289,11 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	case jr.failed:
 		result = "failure"
 	}
-	jr.env.Contexts["job"] = map[string]any{"status": result}
+	if jr.ctr != nil {
+		jr.env.Contexts["job"] = jr.ctr.jobContext(result)
+	} else {
+		jr.env.Contexts["job"] = map[string]any{"status": result}
+	}
 
 	out := map[string]any{}
 	for name, o := range j.Outputs {
@@ -222,25 +306,25 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		}
 		v, err := jr.interp(jr.env, o.Value.Value)
 		if err != nil {
-			e.pr.Note(1, "warning: output %s: %v", key, err)
+			jr.pr.Note(1, "warning: output %s: %v", key, err)
 			continue
 		}
 		out[key] = v
 	}
 	if len(jr.summary) > 0 {
-		e.pr.Note(1, "step summary:")
+		jr.pr.Note(1, "step summary:")
 		for _, l := range jr.summary {
-			e.pr.Note(2, "%s", l)
+			jr.pr.Note(2, "%s", l)
 		}
 	}
-	e.pr.JobEnd(jr.name, result, durationOf(start))
+	jr.pr.JobEnd(jr.name, result, durationOf(start))
 	e.addSummary(jr.name, result, "")
 	return &jobResult{Result: result, Outputs: out}
 }
 
 func (e *Engine) failJob(jr *jobRun, start time.Time, msg string) *jobResult {
-	e.pr.Note(1, "error: %s", msg)
-	e.pr.JobEnd(jr.name, "failure", durationOf(start))
+	jr.pr.Note(1, "error: %s", msg)
+	jr.pr.JobEnd(jr.name, "failure", durationOf(start))
 	e.addSummary(jr.name, "failure", msg)
 	return &jobResult{Result: "failure", Outputs: map[string]any{}}
 }
@@ -344,7 +428,6 @@ func (jr *jobRun) stepEnv(step *jactionlint.Step) *eval.Env {
 
 // runStepEntry handles one step of the job, including its condition.
 func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
-	e := jr.e
 	n := jr.nextLabel()
 	ev := jr.stepEnv(step)
 	name := jr.stepName(step, ev)
@@ -353,11 +436,11 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 	if step.If != nil {
 		ok, err := ev.Condition(step.If.Value)
 		if err != nil {
-			e.pr.StepStart(n, name)
-			e.pr.Note(n.indent()+1, "error: if: %v", err)
+			jr.pr.StepStart(n, name)
+			jr.pr.Note(n.indent()+1, "error: if: %v", err)
 			jr.recordStep(step, stepResult{Outcome: "failure", Conclusion: "failure"})
 			jr.failed = true
-			e.pr.StepEnd(n, "failure", "bad if", 0)
+			jr.pr.StepEnd(n, "failure", "bad if", 0)
 			return
 		}
 		cond = ok
@@ -372,7 +455,7 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 				why = "the run was cancelled"
 			}
 		}
-		e.pr.StepSkip(n, name, why)
+		jr.pr.StepSkip(n, name, why)
 		jr.recordStep(step, stepResult{Outcome: "skipped", Conclusion: "skipped"})
 		return
 	}
@@ -384,7 +467,7 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 			jr.startBackground(n, name, step, ex, ev)
 			return
 		}
-		e.pr.StepStart(n, name)
+		jr.pr.StepStart(n, name)
 		start := time.Now()
 		// A step that still runs after a cancel (if: always()) gets a fresh context and the grace period of GitHub.
 		runCtx := jr.ctx
@@ -393,7 +476,7 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 			runCtx, cancel = context.WithTimeout(context.WithoutCancel(jr.ctx), cancelGrace)
 			defer cancel()
 		}
-		res, eff := jr.execRun(n, step, ex, ev, func(l string) { e.pr.StepOutput(n, l) }, runCtx)
+		res, eff := jr.execRun(n, step, ex, ev, func(l string) { jr.pr.StepOutput(n, l) }, runCtx)
 		jr.finishStep(n, step, res, eff, start)
 	case *jactionlint.ExecAction:
 		jr.runAction(n, name, step, ex, ev)
@@ -404,7 +487,7 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 	case *jactionlint.ExecParallel:
 		jr.parallel(n, name, step, ex)
 	default:
-		e.pr.StepSkip(n, name, "this kind of step is not supported yet")
+		jr.pr.StepSkip(n, name, "this kind of step is not supported yet")
 	}
 }
 
@@ -474,9 +557,9 @@ func (jr *jobRun) finishStep(n label, step *jactionlint.Step, res stepResult, ef
 		jr.setOutputs(step, eff.outputs)
 	}
 	shown := res.Outcome
-	e.pr.StepEnd(n, shown, res.Note, durationOf(start))
+	jr.pr.StepEnd(n, shown, res.Note, durationOf(start))
 	if res.Outcome == "failure" && eff != nil && eff.hint != "" {
-		e.pr.Note(n.indent()+1, "hint: %s", eff.hint)
+		jr.pr.Note(n.indent()+1, "hint: %s", eff.hint)
 	}
 }
 
@@ -591,4 +674,33 @@ func probeFiles(dirs ...string) []string {
 		}
 	}
 	return out
+}
+
+func containerWhat(image string, j *jactionlint.Job) string {
+	if image == "" {
+		return "services of the job"
+	}
+	if j.Container == nil {
+		return "container " + image + " (--container)"
+	}
+	return "job container " + image
+}
+
+// parentEnv is the environment a step inherits from: the caller's, or the image's inside a container.
+func (jr *jobRun) inCtr() bool { return jr.ctr != nil && jr.ctr.inContainer }
+
+func (jr *jobRun) parentEnv() []string {
+	if jr.inCtr() {
+		return jr.ctr.imageEnv
+	}
+	return jr.e.cfg.ParentEnv
+}
+
+// nodeSearchPath is where a JavaScript action may look for a node binary: the PATH of the step on this machine, but
+// inside a container only the tool cache, which is mounted there.
+func (jr *jobRun) nodeSearchPath(finalPath string) []string {
+	if jr.inCtr() {
+		return nil
+	}
+	return sandboxPathDirs(finalPath)
 }
