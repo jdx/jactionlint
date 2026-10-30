@@ -27,13 +27,12 @@ func IsRunCommand(args []string) bool {
 }
 
 type options struct {
-	list   bool
-	json   bool
-	jobs   []string
-	event  string
-	dir    string
-	help   bool
-	noLint bool
+	list  bool
+	json  bool
+	jobs  []string
+	event string
+	dir   string
+	help  bool
 }
 
 func newFlagSet(o *options) *pflag.FlagSet {
@@ -45,7 +44,6 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.StringArrayVarP(&o.jobs, "job", "j", nil, "run only this job and the jobs it needs (repeatable)")
 	fs.StringVarP(&o.event, "event", "e", "push", "name of the event that triggers the workflow")
 	fs.StringVarP(&o.dir, "directory", "C", "", "run as if started in this directory")
-	fs.BoolVar(&o.noLint, "no-lint", false, "do not refuse a workflow that jactionlint reports errors for")
 	fs.BoolVarP(&o.help, "help", "h", false, "print this help")
 	return fs
 }

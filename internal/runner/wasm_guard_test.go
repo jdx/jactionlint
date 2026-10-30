@@ -18,7 +18,11 @@ func TestPlaygroundDoesNotLinkRunner(t *testing.T) {
 	cmd.Env = append(cmd.Environ(), "GOOS=js", "GOARCH=wasm")
 	out, err := cmd.Output()
 	if err != nil {
-		t.Skipf("go list failed: %v", err)
+		var stderr string
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = string(ee.Stderr)
+		}
+		t.Fatalf("go list for the playground failed, so the guard checked nothing: %v\n%s", err, stderr)
 	}
 	for _, pkg := range strings.Fields(string(out)) {
 		for _, banned := range []string{"/internal/runner", "/internal/sandbox"} {
