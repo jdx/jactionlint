@@ -61,3 +61,50 @@ func StringContexts(s string) ([]string, error) {
 	}
 	return out, nil
 }
+
+// Refs returns the names that the expressions of the string read directly from a context, such as the NAME of
+// secrets.NAME or vars['NAME'], in lower case.
+func Refs(s, context string) []string {
+	segs, err := split(s)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(n string) {
+		n = strings.ToLower(n)
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	for _, sg := range segs {
+		if !sg.expr {
+			continue
+		}
+		n, err := Parse(sg.text)
+		if err != nil {
+			continue
+		}
+		jactionlint.VisitExprNode(n, func(n, _ jactionlint.ExprNode, entering bool) {
+			if !entering {
+				return
+			}
+			isCtx := func(r jactionlint.ExprNode) bool {
+				v, ok := r.(*jactionlint.VariableNode)
+				return ok && strings.EqualFold(v.Name, context)
+			}
+			switch n := n.(type) {
+			case *jactionlint.ObjectDerefNode:
+				if isCtx(n.Receiver) {
+					add(n.Property)
+				}
+			case *jactionlint.IndexAccessNode:
+				if s, ok := n.Index.(*jactionlint.StringNode); ok && isCtx(n.Operand) {
+					add(s.Value)
+				}
+			}
+		})
+	}
+	return out
+}

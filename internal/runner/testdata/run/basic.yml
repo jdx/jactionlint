@@ -1,0 +1,50 @@
+# args: --secret TOK=s3cr3t-value --var WHO=world
+# exit: 0
+name: basic
+on: push
+env:
+  GREETING: hello
+jobs:
+  build:
+    runs-on: self-hosted
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      multi: ${{ steps.v.outputs.multi }}
+    steps:
+      - run: echo "$GREETING ${{ vars.WHO }}, CI=$CI, runner.name=${{ runner.name }}"
+      - id: v
+        run: |
+          echo "version=1.2.3" >> "$GITHUB_OUTPUT"
+          { echo "multi<<EOF"; echo "line one"; echo "line two"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+          echo "MY_VAR=from-github-env" >> "$GITHUB_ENV"
+      - env:
+          STEP_VAR: step-wins
+          MY_VAR: step-overrides
+        run: echo "MY_VAR=$MY_VAR STEP_VAR=$STEP_VAR version=${{ steps.v.outputs.version }}"
+      - run: echo "MY_VAR=$MY_VAR"
+      - name: secrets are masked
+        run: echo "token=${{ secrets.TOK }} again=$TOK"
+        env:
+          TOK: ${{ secrets.TOK }}
+      - name: environment is scrubbed
+        run: |
+          echo "AWS=${AWS_SECRET_ACCESS_KEY:-unset} SSH=${SSH_AUTH_SOCK:-unset} GH=${GITHUB_TOKEN:-unset}"
+          case "$HOME" in */.jactionlint/run/*) echo "home-is-fake=yes" ;; esac
+  test:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [self-hosted, my-runner]
+        n: [1, 2]
+        exclude:
+          - os: my-runner
+            n: 2
+    steps:
+      - run: echo "version ${{ needs.build.outputs.version }} n=${{ matrix.n }}"
+      - run: printf '%s\n' "${{ needs.build.outputs.multi }}"
+  report:
+    needs: [build, test]
+    runs-on: self-hosted
+    steps:
+      - run: echo "test result is ${{ needs.test.result }}"

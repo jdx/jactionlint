@@ -1,0 +1,42 @@
+# args: --debug
+# exit: 0
+name: commands
+on: push
+jobs:
+  cmds:
+    runs-on: self-hosted
+    steps:
+      - run: |
+          echo "::group::Build things"
+          echo "inside the group"
+          echo "::endgroup::"
+          echo "::notice title=Heads up::a notice"
+          echo "::warning file=src/a.go,line=3,col=4::a warning"
+          echo "::error::an error does not fail the step"
+          echo "::debug::debug text"
+          echo "::add-mask::hunter2"
+          echo "the password is hunter2 indeed"
+          echo "::stop-commands::tok"
+          echo "::warning::not a command now"
+          echo "::tok::"
+          echo "::set-output name=old::deprecated"
+          echo "::set-env name=X::y"
+          echo "encoded %0A:: stays"
+      - id: legacy
+        run: echo "::set-output name=answer::42"
+      - run: echo "answer=${{ steps.legacy.outputs.answer }}"
+      - name: dangerous GITHUB_ENV keys are refused
+        run: |
+          echo "NODE_OPTIONS=--require /tmp/evil.js" >> "$GITHUB_ENV"
+          echo "LD_PRELOAD=/tmp/evil.so" >> "$GITHUB_ENV"
+          echo "SAFE=ok" >> "$GITHUB_ENV"
+      - run: echo "SAFE=$SAFE NODE_OPTIONS=${NODE_OPTIONS:-unset} LD_PRELOAD=${LD_PRELOAD:-unset}"
+      - name: GITHUB_PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\necho from-added-path\n' > "$RUNNER_TEMP/bin/addedtool"
+          chmod +x "$RUNNER_TEMP/bin/addedtool"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "$HOME/../outside-bin" >> "$GITHUB_PATH"
+      - run: addedtool
+      - run: echo "## Summary heading" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,21 @@
+# args:
+# exit: 0
+name: background
+on: push
+jobs:
+  bg:
+    runs-on: self-hosted
+    steps:
+      - id: slow
+        background: true
+        run: |
+          sleep 0.3
+          echo "done=yes" >> "$GITHUB_OUTPUT"
+          echo "background output"
+      - run: echo "foreground runs while slow is running"
+      - wait: [slow]
+      - run: echo "after wait, slow.done=${{ steps.slow.outputs.done }}"
+      - id: forever
+        background: true
+        run: sleep 60
+      - cancel: forever

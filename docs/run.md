@@ -4,6 +4,57 @@
 
 This page describes what the command does today. Each section says what is still missing.
 
+## Run a workflow
+
+```sh
+jactionlint run ci                          # every job of .github/workflows/ci.yml
+jactionlint run ci -j test                  # the job `test` and the jobs it needs
+jactionlint run ci -e pull_request --secret TOKEN=abc --var REGION=eu
+```
+
+```text
+[job] build
+  [step 1] Run echo "hello from $GITHUB_REPOSITORY on $RUNNER_OS"
+    hello from jdx/jactionlint on Linux
+  [step 1] success
+  [step 2] Run go test ./...
+    ok  	github.com/jdx/jactionlint/v2	3.1s
+  [step 2] success
+[job] build: success
+[job] test (macos-latest): skipped (runs-on macos-latest needs macOS, this machine is Linux)
+
+Summary
+  success   build
+  skipped   test (macos-latest)  (runs-on macos-latest needs macOS, this machine is Linux)
+```
+
+Before it runs anything, `jactionlint run` lints the workflow with the `correctness` profile (what actionlint checks) and stops on an error, because GitHub would reject the file too. `--no-lint` skips that. The exit status is 0 when every job succeeded or was skipped, 1 when a job failed, 2 for a wrong command line and 3 when the run could not start.
+
+What runs today:
+
+- **`run:` steps**, in the order of the file, with `if:` (an implicit `success()` when the condition has no status function), `env:` (workflow, then job, then `GITHUB_ENV`, then step), `shell:` (`bash` runs `bash --noprofile --norc -eo pipefail {0}`, `sh`, `python`, `pwsh`, `powershell`, or a command line with `{0}`), `working-directory:`, `defaults.run`, `timeout-minutes:` and `continue-on-error:`. `steps.<id>.outputs`, `.outcome` and `.conclusion`, job `outputs:` and `needs.<job>.result` and `.outputs` work. A job whose `needs` did not succeed is skipped unless its `if:` says otherwise (`always()`, `failure()`).
+- **Matrices**, also the ones that read `needs` outputs, with `fail-fast` (the remaining cells are skipped after a failure).
+- **File commands:** `GITHUB_ENV`, `GITHUB_PATH`, `GITHUB_OUTPUT`, `GITHUB_STATE` and `GITHUB_STEP_SUMMARY`. `GITHUB_ENV` refuses variables that change what code a program loads (`NODE_OPTIONS`, `LD_*`, `DYLD_*`, `BASH_ENV`, `ENV`, `PYTHONPATH`, ...), and `GITHUB_PATH` accepts only directories that a step may run programs from.
+- **Workflow commands** on standard output: `::error::`, `::warning::`, `::notice::` (with `file`, `line`, `col`, `title`), `::debug::` (with `--debug`), `::group::`/`::endgroup::`, `::add-mask::`, `::stop-commands::`, and the legacy `::set-output::` and `::save-state::` with a deprecation warning. `::set-env::` and `::add-path::` are refused, as on GitHub.
+- **Secrets are masked** in all output: every `--secret` value and every `::add-mask::` value is shown as `***`. A reference to a secret you did not supply warns once.
+- **Background steps:** `background: true`, `wait:`, `wait-all` and `cancel:`, and `parallel:` groups of `run` steps. The output of a background step is shown when the job waits for it.
+- **`runs-on`:** a job runs on this machine when its label names this machine's operating system (`ubuntu-*` on Linux, `macos-*` on macOS) or says nothing about it; otherwise it is skipped with the reason. Cells of a matrix are decided one by one.
+- **Ctrl-C** cancels the run: the process groups of the steps get `SIGTERM` and then `SIGKILL`, and steps with `if: always()` or `if: cancelled()` still run for up to five minutes.
+
+Not there yet, and reported as skipped with the reason: `uses:` steps (actions) and reusable workflows, `container:` and `services:`. Not modelled: `concurrency`, `permissions`, `environment` and OIDC; the output does not tell you that a workflow would pass on GitHub, only what happened here.
+
+| Option | Meaning |
+| --- | --- |
+| `--secret NAME=VALUE`, `--secret-file FILE` | Secrets for `secrets.NAME`. They are masked in the output. |
+| `--var NAME=VALUE` | Configuration variables for `vars.NAME`. |
+| `--env-file FILE` | `NAME=VALUE` lines that become the default `env:` of the workflow. |
+| `--pass-env NAME` | Let a variable of your environment reach the steps. Without it they get only `PATH`, `LANG`, `LC_*`, `TERM`, `TZ`. |
+| `--sandbox on\|off` | `off` runs the steps without the sandbox, see [Isolation](#isolation). |
+| `--net open\|none` | `none` denies internet sockets to the steps. |
+| `--in-place` | Work in your checkout instead of a copy. |
+| `--allow-read DIR`, `--allow-write DIR` | Let steps read and run, or write, under `DIR`. |
+| `--debug`, `--timings`, `--keep` | Show `::debug::` output, show the time of each step, keep `.jactionlint/run/<id>`. |
+
 ## See what would run
 
 ```sh

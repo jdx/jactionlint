@@ -27,6 +27,7 @@ func IsRunCommand(args []string) bool {
 }
 
 type options struct {
+	ro           runOptions
 	list         bool
 	json         bool
 	eventFile    string
@@ -36,6 +37,7 @@ type options struct {
 	dir          string
 	help         bool
 	checkSandbox bool
+	noLint       bool
 }
 
 func newFlagSet(o *options) *pflag.FlagSet {
@@ -49,6 +51,20 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.StringVar(&o.eventFile, "event-file", "", "JSON file with the event payload (github.event)")
 	fs.StringArrayVarP(&o.inputs, "input", "i", nil, "workflow_dispatch input as NAME=VALUE (repeatable)")
 	fs.StringVarP(&o.dir, "directory", "C", "", "run as if started in this directory")
+	fs.BoolVar(&o.noLint, "no-lint", false, "do not refuse a workflow that jactionlint reports errors for")
+	fs.StringVar(&o.ro.sandbox, "sandbox", "on", "on: run every step in the OS sandbox; off: run without it")
+	fs.StringVar(&o.ro.net, "net", "open", "network of the steps: open, none (no internet sockets) or proxy (not available yet)")
+	fs.BoolVar(&o.ro.inPlace, "in-place", false, "work in your checkout instead of a copy (steps can change your files)")
+	fs.StringArrayVar(&o.ro.passEnv, "pass-env", nil, "let a variable of your environment reach the steps (repeatable)")
+	fs.StringArrayVar(&o.ro.allowRead, "allow-read", nil, "let steps read and run files under this directory (repeatable)")
+	fs.StringArrayVar(&o.ro.allowWrite, "allow-write", nil, "let steps write under this directory (repeatable)")
+	fs.StringArrayVar(&o.ro.secrets, "secret", nil, "a secret as NAME=VALUE (repeatable)")
+	fs.StringVar(&o.ro.secretFile, "secret-file", "", "a file of NAME=VALUE secrets")
+	fs.StringArrayVar(&o.ro.vars, "var", nil, "a configuration variable as NAME=VALUE for vars.NAME (repeatable)")
+	fs.StringVar(&o.ro.envFile, "env-file", "", "a file of NAME=VALUE that sets the default env of the workflow")
+	fs.BoolVar(&o.ro.debug, "debug", false, "show ::debug:: output and set RUNNER_DEBUG")
+	fs.BoolVar(&o.ro.timings, "timings", false, "show how long each step took")
+	fs.BoolVar(&o.ro.keep, "keep", false, "keep the run directory under .jactionlint/run")
 	fs.BoolVar(&o.checkSandbox, "check-sandbox", false, "report what the sandbox can do on this machine and test it")
 	fs.BoolVarP(&o.help, "help", "h", false, "print this help")
 	return fs
@@ -128,8 +144,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if !o.list {
-		fmt.Fprintln(stderr, "jactionlint run: running steps is not available in this build yet, use --list to see the plan")
-		return ExitError
+		return execute(&o, &o.ro, paths[0], root, stdout, stderr)
 	}
 
 	in, err := o.inputsFor(root)

@@ -1,0 +1,59 @@
+[job] build
+  [step 1] Run echo "$GREETING ${{ vars.WHO }}, CI=$CI, runner.name=${{ runner.name }}"
+    hello world, CI=true, runner.name=jactionlint
+  [step 1] success
+  [step 2] Run echo "version=1.2.3" >> "$GITHUB_OUTPUT"
+  [step 2] success
+  [step 3] Run echo "MY_VAR=$MY_VAR STEP_VAR=$STEP_VAR version=${{ steps.v.outputs.version }}"
+    MY_VAR=step-overrides STEP_VAR=step-wins version=1.2.3
+  [step 3] success
+  [step 4] Run echo "MY_VAR=$MY_VAR"
+    MY_VAR=from-github-env
+  [step 4] success
+  [step 5] secrets are masked
+    token=*** again=***
+  [step 5] success
+  [step 6] environment is scrubbed
+    AWS=unset SSH=unset GH=unset
+    home-is-fake=yes
+  [step 6] success
+[job] build: success
+[job] test (self-hosted, 1)
+  [step 1] Run echo "version ${{ needs.build.outputs.version }} n=${{ matrix.n }}"
+    version 1.2.3 n=1
+  [step 1] success
+  [step 2] Run printf '%s\n' "${{ needs.build.outputs.multi }}"
+    line one
+    line two
+  [step 2] success
+[job] test (self-hosted, 1): success
+[job] test (self-hosted, 2)
+  [step 1] Run echo "version ${{ needs.build.outputs.version }} n=${{ matrix.n }}"
+    version 1.2.3 n=2
+  [step 1] success
+  [step 2] Run printf '%s\n' "${{ needs.build.outputs.multi }}"
+    line one
+    line two
+  [step 2] success
+[job] test (self-hosted, 2): success
+[job] test (my-runner, 1)
+  [step 1] Run echo "version ${{ needs.build.outputs.version }} n=${{ matrix.n }}"
+    version 1.2.3 n=1
+  [step 1] success
+  [step 2] Run printf '%s\n' "${{ needs.build.outputs.multi }}"
+    line one
+    line two
+  [step 2] success
+[job] test (my-runner, 1): success
+[job] report
+  [step 1] Run echo "test result is ${{ needs.test.result }}"
+    test result is success
+  [step 1] success
+[job] report: success
+
+Summary
+  success   build
+  success   test (self-hosted, 1)
+  success   test (self-hosted, 2)
+  success   test (my-runner, 1)
+  success   report
