@@ -719,7 +719,7 @@ func TestParallelCells(t *testing.T) {
 	wf := `on: push
 jobs:
   cells:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         n: [1, 2, 3, 4]
@@ -729,12 +729,12 @@ jobs:
           sleep 1
           echo "end ${{ matrix.n }}"
   other:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: sleep 1 && echo other-done
   after:
     needs: [cells, other]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: echo "after sees ${{ needs.cells.result }} ${{ needs.other.result }}"
 `
@@ -771,7 +771,7 @@ func TestParallelFailFastAndMaxParallel(t *testing.T) {
 	wf := `on: push
 jobs:
   ff:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         n: [1, 2, 3]
@@ -780,7 +780,7 @@ jobs:
           if [ "${{ matrix.n }}" = 1 ]; then sleep 0.3; exit 1; fi
           sleep 30
   serial:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       max-parallel: 1
       matrix:

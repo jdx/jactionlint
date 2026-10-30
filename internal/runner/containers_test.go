@@ -3,6 +3,7 @@ package runner
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -76,7 +77,7 @@ func TestContainerJob(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container:
       image: ` + digestImage + `
       env:
@@ -161,7 +162,7 @@ func TestRefusedOptionStopsTheJob(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container:
       image: ` + digestImage + `
       options: --privileged
@@ -188,7 +189,7 @@ func TestImageTrust(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container: ubuntu:24.04
     steps:
       - run: echo ran
@@ -212,7 +213,7 @@ func TestServices(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     services:
       pg:
         image: postgres:16@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -275,6 +276,9 @@ jobs:
 		"j (macos-latest): skipped (runs-on macos-latest needs macOS",
 		"j (windows-latest): skipped (runs-on windows-latest needs Windows",
 	} {
+		if strings.Contains(want, "macos-latest") && runtime.GOOS == "darwin" {
+			continue // on a Mac that cell runs on the host
+		}
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q\n%s", want, out)
 		}
@@ -316,17 +320,17 @@ func TestNoEngineSkipsOnlyContainerJobs(t *testing.T) {
 	wf := `on: push
 jobs:
   plain:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: echo plain job ran
   boxed:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container: ` + digestImage + `
     steps:
       - run: echo never
   after:
     needs: [plain]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: echo after ran
 `
@@ -346,7 +350,7 @@ jobs:
 func TestContainerNeedsToSeeTheRunDirectory(t *testing.T) {
 	bin, _ := fakeEngine(t)
 	t.Setenv("FAKE_DOCKER_NO_MOUNTS", "1")
-	wf := "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    container: " + digestImage + "\n    steps:\n      - run: echo never\n"
+	wf := "on: push\njobs:\n  j:\n    runs-on: self-hosted\n    container: " + digestImage + "\n    steps:\n      - run: echo never\n"
 	dir := actionRepo(t, wf, nil)
 	out := mustRun(t, dir, 1, "--container-engine", bin)
 	if !strings.Contains(out, "cannot see the directories of this run") || strings.Contains(out, "never") {
@@ -359,7 +363,7 @@ func TestDockerActions(t *testing.T) {
 	wf := `on: push
 jobs:
   j:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: ./act
         with:
