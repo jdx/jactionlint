@@ -4,7 +4,7 @@ name: commands
 on: push
 jobs:
   cmds:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: |
           echo "::group::Build things"

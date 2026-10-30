@@ -4,7 +4,7 @@ name: sandbox
 on: push
 jobs:
   deny:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: writing outside the workspace is denied
         run: echo x > "$GITHUB_WORKSPACE/../outside"
@@ -15,7 +15,7 @@ jobs:
         if: always()
         run: grep NoNewPrivs /proc/$$/status | tr -d '\t'
   timeout:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - timeout-minutes: 0.01
         run: sleep 30

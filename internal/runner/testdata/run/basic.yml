@@ -6,7 +6,7 @@ env:
   GREETING: hello
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       version: ${{ steps.v.outputs.version }}
       multi: ${{ steps.v.outputs.multi }}
@@ -35,15 +35,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [self-hosted, my-runner]
         n: [1, 2]
         exclude:
-          - os: windows-latest
+          - os: my-runner
+            n: 2
     steps:
       - run: echo "version ${{ needs.build.outputs.version }} n=${{ matrix.n }}"
       - run: printf '%s\n' "${{ needs.build.outputs.multi }}"
   report:
     needs: [build, test]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: echo "test result is ${{ needs.test.result }}"

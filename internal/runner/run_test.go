@@ -59,6 +59,9 @@ func TestGoldenTranscripts(t *testing.T) {
 	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), ".yml")
 		t.Run(name, func(t *testing.T) {
+			if strings.HasSuffix(name, "_linux") && runtime.GOOS != "linux" {
+				t.Skip("this transcript uses /proc")
+			}
 			srcB, err := os.ReadFile(file)
 			if err != nil {
 				t.Fatal(err)
@@ -160,7 +163,7 @@ func TestWorkspaceCopyAndInPlace(t *testing.T) {
 	if err := sandbox.Available(sandbox.NetOpen); err != nil {
 		t.Skip(err)
 	}
-	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo changed > tracked.txt && echo new > created.txt\n")
+	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: self-hosted\n    steps:\n      - run: echo changed > tracked.txt && echo new > created.txt\n")
 	if code, out, errOut := runIn(t, dir, "w", "--no-lint"); code != 0 {
 		t.Fatalf("code %d\n%s\n%s", code, out, errOut)
 	}
@@ -194,7 +197,7 @@ func TestWorkspaceCopyAndInPlace(t *testing.T) {
 
 func TestSandboxOffAndNet(t *testing.T) {
 	needSteps(t)
-	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          if echo x > \"$GITHUB_WORKSPACE/../../outside\"; then echo write-outside-allowed; fi\n")
+	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: self-hosted\n    steps:\n      - run: |\n          if echo x > \"$GITHUB_WORKSPACE/../../outside\"; then echo write-outside-allowed; fi\n")
 	t.Setenv("JACTIONLINT_CACHE_DIR", t.TempDir())
 	code, out, errOut := runIn(t, dir, "w", "--no-lint", "--sandbox=off")
 	if code != 0 || !strings.Contains(out, "running without the sandbox") || !strings.Contains(out, "write-outside-allowed") {
@@ -216,7 +219,7 @@ func TestSandboxOffAndNet(t *testing.T) {
 func TestLintBeforeRun(t *testing.T) {
 	needSteps(t)
 	// ${{ matrix.nope }} is a type error that jactionlint reports and GitHub rejects
-	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ unknown.thing }}\n")
+	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: self-hosted\n    steps:\n      - run: echo ${{ unknown.thing }}\n")
 	code, out, errOut := runIn(t, dir, "w", "--sandbox=off")
 	if code != ExitError || out != "" || !strings.Contains(errOut, `undefined variable "unknown"`) || !strings.Contains(errOut, "pass --no-lint") {
 		t.Fatalf("lint did not stop the run: code %d\n%s\n%s", code, out, errOut)
@@ -232,9 +235,25 @@ func TestFailClosedWhenSandboxUnavailable(t *testing.T) {
 	if err := sandbox.Available(sandbox.NetOpen); err == nil {
 		t.Skip("the sandbox is available here")
 	}
-	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n")
+	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: self-hosted\n    steps:\n      - run: echo hi\n")
 	code, out, errOut := runIn(t, dir, "w", "--no-lint")
 	if code != ExitError || out != "" || !strings.Contains(errOut, "nothing was run") || !strings.Contains(errOut, "--sandbox=off") {
+		t.Fatalf("code %d\n%s\n%s", code, out, errOut)
+	}
+}
+
+func TestRunsOnOfAnotherOSIsSkipped(t *testing.T) {
+	needSteps(t)
+	other, hostLabel := "macos-latest", "Linux"
+	if runtime.GOOS == "linux" {
+		hostLabel = "macOS"
+	} else {
+		other = "ubuntu-latest"
+	}
+	_ = hostLabel
+	dir := homeRepo(t, "on: push\njobs:\n  j:\n    runs-on: "+other+"\n    steps:\n      - run: echo never\n  k:\n    runs-on: [self-hosted, my-label]\n    steps:\n      - run: echo neutral labels run here\n")
+	code, out, errOut := runIn(t, dir, "w", "--no-lint", "--sandbox=off")
+	if code != 0 || !strings.Contains(out, "[job] j: skipped (runs-on "+other+" needs ") || strings.Contains(out, "never") || !strings.Contains(out, "neutral labels run here") {
 		t.Fatalf("code %d\n%s\n%s", code, out, errOut)
 	}
 }
