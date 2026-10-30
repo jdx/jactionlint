@@ -87,7 +87,7 @@ jobs:
       - run: |
           echo "env=$FROM_CONTAINER path=$PATH"
           echo "out" > made.txt
-      - run: echo "job context ${{ job.container.network }}" | sed 's/[0-9]\+-[0-9]\+/N-N/g'
+      - run: echo "job context ${{ job.container.network }}" | sed -E 's/[0-9]+-[0-9]+/N-N/g'
 `
 	dir := actionRepo(t, wf, nil)
 	out := mustRun(t, dir, 0, "--container-engine", bin)

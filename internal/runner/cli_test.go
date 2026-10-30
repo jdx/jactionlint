@@ -479,7 +479,7 @@ jobs:
     container: ubuntu:24.04
     steps: [{run: e}]
   db:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     services:
       pg:
         image: postgres
