@@ -126,6 +126,14 @@ func lintWorkflow(path, root string, stderr io.Writer) bool {
 
 // execute runs the selected jobs of one workflow.
 func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Writer) int {
+	if ro.container != "" && ro.noContainers {
+		fmt.Fprintln(stderr, "jactionlint run: --container and --no-containers contradict each other")
+		return ExitUsage
+	}
+	if ro.parallel < 1 {
+		fmt.Fprintln(stderr, "jactionlint run: --parallel must be at least 1")
+		return ExitUsage
+	}
 	secrets, err := parseKV("secret", ro.secrets)
 	if err != nil {
 		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)
@@ -224,14 +232,6 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		return ExitError
 	}
 	in.applyDispatch(w)
-	if ro.container != "" && ro.noContainers {
-		fmt.Fprintln(stderr, "jactionlint run: --container and --no-containers contradict each other")
-		return ExitUsage
-	}
-	if ro.parallel < 1 {
-		fmt.Fprintln(stderr, "jactionlint run: --parallel must be at least 1")
-		return ExitUsage
-	}
 	images, err := parseKV("image", ro.images)
 	if err != nil {
 		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)

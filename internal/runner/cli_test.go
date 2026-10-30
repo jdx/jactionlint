@@ -493,7 +493,10 @@ jobs:
 		"j (windows-latest)   runs-on: windows-latest   => skipped: needs Windows",
 		"=> runs in the job container ubuntu:24.04",
 	} {
-		if !strings.Contains(out, want) && runtime.GOOS != "darwin" {
+		if strings.Contains(want, "macos-latest") && runtime.GOOS == "darwin" || strings.Contains(want, "windows-latest") && runtime.GOOS == "windows" {
+			continue // that cell is for this machine
+		}
+		if !strings.Contains(out, want) {
 			t.Errorf("--list lacks %q\n%s", want, out)
 		}
 	}
