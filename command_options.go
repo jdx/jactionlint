@@ -488,6 +488,9 @@ Examples:
   jactionlint --format sarif                SARIF for code scanning and hk
   jactionlint --profile correctness         what actionlint checks
   jactionlint --online=cache                online checks from the cache only
+
+Subcommands (each has its own --help):
+  jactionlint run [WORKFLOW]                run the jobs of a workflow on this machine
 `)
 	for _, g := range cliGroups {
 		fmt.Fprintf(out, "\n%s:\n", g)

@@ -1,0 +1,141 @@
+package runner
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func repoWith(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range files {
+		p := filepath.Join(dir, ".github", "workflows", name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func runMain(t *testing.T, dir string, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code := Main(append([]string{"-C", dir}, args...), strings.NewReader(""), &out, &errOut)
+	return code, out.String(), errOut.String()
+}
+
+func TestListGolden(t *testing.T) {
+	src, err := os.ReadFile("testdata/list/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile("testdata/list/ci.golden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := repoWith(t, map[string]string{"ci.yml": string(src)})
+	for _, arg := range []string{"ci", "ci.yml", filepath.Join(dir, ".github", "workflows", "ci.yml")} {
+		code, out, errOut := runMain(t, dir, "--list", arg)
+		if code != ExitOK || out != string(want) {
+			t.Fatalf("run --list %s: code %d\n--- got ---\n%s\n--- want ---\n%s\nstderr: %s", arg, code, out, want, errOut)
+		}
+	}
+	code, out, _ := runMain(t, dir, "--list")
+	if code != ExitOK || out != string(want) {
+		t.Fatalf("run --list (no workflow): code %d\n%s", code, out)
+	}
+}
+
+func TestListJobSelection(t *testing.T) {
+	src, _ := os.ReadFile("testdata/list/ci.yml")
+	dir := repoWith(t, map[string]string{"ci.yml": string(src)})
+	code, out, errOut := runMain(t, dir, "--list", "-j", "shards")
+	if code != ExitOK {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "shards") || !strings.Contains(out, "lint") || strings.Contains(out, "test (") || strings.Contains(out, "release") {
+		t.Fatalf("selection wrong:\n%s", out)
+	}
+	code, _, errOut = runMain(t, dir, "--list", "-j", "nope")
+	if code != ExitUsage || !strings.Contains(errOut, `no job "nope"`) {
+		t.Fatalf("unknown job: code %d: %s", code, errOut)
+	}
+}
+
+func TestListJSON(t *testing.T) {
+	src, _ := os.ReadFile("testdata/list/ci.yml")
+	dir := repoWith(t, map[string]string{"ci.yml": string(src)})
+	code, out, errOut := runMain(t, dir, "--list", "--json", "-j", "test")
+	if code != ExitOK {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+	var plans []jsonPlan
+	if err := json.Unmarshal([]byte(out), &plans); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(plans) != 1 || len(plans[0].Jobs) != 4 {
+		t.Fatalf("plans = %+v", plans)
+	}
+	var test *jsonJob
+	for i := range plans[0].Jobs {
+		if plans[0].Jobs[i].ID == "test" {
+			test = &plans[0].Jobs[i]
+		}
+	}
+	if test == nil || !test.Selected || len(test.Cells) != 3 || test.Cells[2].Matrix["os"] != "macos-latest" {
+		t.Fatalf("test job = %+v", test)
+	}
+}
+
+func TestEventNote(t *testing.T) {
+	dir := repoWith(t, map[string]string{"a.yml": "on: pull_request\njobs:\n  j:\n    runs-on: x\n    steps: [{run: e}]\n"})
+	_, out, _ := runMain(t, dir, "--list", "--event", "push")
+	if !strings.Contains(out, `no "push" trigger`) {
+		t.Fatalf("no note:\n%s", out)
+	}
+	_, out, _ = runMain(t, dir, "--list", "--event", "pull_request")
+	if strings.Contains(out, "note:") {
+		t.Fatalf("unexpected note:\n%s", out)
+	}
+}
+
+func TestUsageErrors(t *testing.T) {
+	dir := repoWith(t, map[string]string{"a.yml": "on: push\njobs:\n  j:\n    runs-on: x\n    steps: [{run: e}]\n", "b.yml": "on: push\njobs:\n  j:\n    runs-on: x\n    steps: [{run: e}]\n"})
+	for name, tc := range map[string]struct {
+		args []string
+		code int
+		msg  string
+	}{
+		"two workflows without --list": {nil, ExitUsage, "2 workflows"},
+		"unknown workflow":             {[]string{"--list", "zzz"}, ExitUsage, `no workflow "zzz"`},
+		"json without list":            {[]string{"--json", "a"}, ExitUsage, "--json can only be used with --list"},
+		"unknown flag":                 {[]string{"--bogus"}, ExitUsage, "bogus"},
+		"two args":                     {[]string{"--list", "a", "b"}, ExitUsage, "one workflow"},
+		"run is not there yet":         {[]string{"a"}, ExitError, "not available"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			code, _, errOut := runMain(t, dir, tc.args...)
+			if code != tc.code || !strings.Contains(errOut, tc.msg) {
+				t.Fatalf("code %d (want %d), stderr %q (want %q)", code, tc.code, errOut, tc.msg)
+			}
+		})
+	}
+}
+
+func TestInvalidWorkflow(t *testing.T) {
+	dir := repoWith(t, map[string]string{"bad.yml": "on: push\njobs:\n  j:\n    steps: [{run: e}\n"})
+	code, _, errOut := runMain(t, dir, "--list", "bad")
+	if code != ExitError || !strings.Contains(errOut, "not a valid workflow") {
+		t.Fatalf("code %d: %q", code, errOut)
+	}
+}

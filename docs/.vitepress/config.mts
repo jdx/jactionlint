@@ -156,7 +156,7 @@ export default defineConfig({
       {
         text: "Guide",
         link: "/install",
-        activeMatch: "^/(install|usage|ignore|baseline|fix|ci|hooks|online|config|cli|output)",
+        activeMatch: "^/(install|usage|ignore|baseline|fix|ci|hooks|online|run|config|cli|output)",
       },
       { text: "Checks", link: "/checks" },
       { text: "Go API", link: "/api" },

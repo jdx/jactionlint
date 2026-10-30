@@ -19,6 +19,7 @@ export const sidebar: SidebarItem[] = [
       { text: "Run in CI", link: "/ci" },
       { text: "Git hooks and editors", link: "/hooks" },
       { text: "Online checks", link: "/online" },
+      { text: "Run workflows locally", link: "/run" },
     ],
   },
   {
