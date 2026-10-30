@@ -1,0 +1,22 @@
+[job] bg
+  [step 1] Run sleep 0.3 (running in the background)
+  [step 2] Run echo "foreground runs while slow is running"
+    foreground runs while slow is running
+  [step 2] success
+  [step 3] wait
+  [step 1] Run sleep 0.3
+    background output
+  [step 1] success
+  [step 3] success
+  [step 4] Run echo "after wait, slow.done=${{ steps.slow.outputs.done }}"
+    after wait, slow.done=yes
+  [step 4] success
+  [step 5] Run sleep 60 (running in the background)
+  [step 6] cancel
+  [step 6] success (cancelled forever)
+  [step 5] Run sleep 60
+  [step 5] cancelled
+[job] bg: success
+
+Summary
+  success   bg

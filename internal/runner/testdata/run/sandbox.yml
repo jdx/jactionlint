@@ -1,0 +1,23 @@
+# args: --pass-env REAL_HOME_FILE
+# exit: 1
+name: sandbox
+on: push
+jobs:
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - name: writing outside the workspace is denied
+        run: echo x > "$GITHUB_WORKSPACE/../outside"
+      - name: reading the real home is denied
+        if: always()
+        run: cat "$REAL_HOME_FILE"
+      - name: no new privileges
+        if: always()
+        run: grep NoNewPrivs /proc/$$/status | tr -d '\t'
+  timeout:
+    runs-on: ubuntu-latest
+    steps:
+      - timeout-minutes: 0.01
+        run: sleep 30
+      - run: echo "runs after a timeout only with if"
+        if: always()

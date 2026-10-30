@@ -1,0 +1,47 @@
+[job] first
+  [step 1] Run echo before
+    before
+  [step 1] success
+  [step 2] Run echo "about to fail" >&2
+    about to fail
+  [step 2] failure (exit status 7)
+  [step 3] skipped because an earlier step failed: skipped (an earlier step failed)
+  [step 4] Run echo "failure() sees steps.boom.outcome=${{ steps.boom.outcome }} conclusion=...
+    failure() sees steps.boom.outcome=failure conclusion=failure
+  [step 4] success
+  [step 5] Run echo "always runs"
+    always runs
+  [step 5] success
+  [step 6] Run echo never: skipped (if is false)
+[job] first: failure
+[job] tolerated
+  [step 1] Run exit 1
+  [step 1] failure (exit status 1, continue-on-error)
+  [step 2] Run echo "outcome=${{ steps.flaky.outcome }} conclusion=${{ steps.flaky.conclusio...
+    outcome=failure conclusion=success
+  [step 2] success
+[job] tolerated: success
+[job] after-success
+  [step 1] Run echo "tolerated job passed"
+    tolerated job passed
+  [step 1] success
+[job] after-success: success
+[job] after-failure: skipped (a job it needs did not succeed)
+[job] only-on-failure
+  [step 1] Run echo "runs because first failed"
+    runs because first failed
+  [step 1] success
+[job] only-on-failure: success
+[job] cleanup
+  [step 1] Run echo "first=${{ needs.first.result }} after-failure=${{ needs.after-failure.r...
+    first=failure after-failure=skipped
+  [step 1] success
+[job] cleanup: success
+
+Summary
+  failure   first
+  success   tolerated
+  success   after-success
+  skipped   after-failure  (a job it needs did not succeed)
+  success   only-on-failure
+  success   cleanup

@@ -203,3 +203,19 @@ func copyEntry(src, dst string) error {
 	}
 	return nil
 }
+
+// Job returns the scratch area of one job: its own workspace, home and temp directories, like a fresh machine.
+func (r *RunDir) Job(n int) (*RunDir, error) {
+	root := filepath.Join(r.Root, "jobs", fmt.Sprintf("%d", n))
+	j := &RunDir{
+		Root: root, Work: filepath.Join(root, "work"), Home: filepath.Join(root, "home"),
+		Temp: filepath.Join(root, "temp"), Files: filepath.Join(root, "files"), ToolCache: r.ToolCache,
+	}
+	for _, d := range []string{j.Work, j.Home, j.Temp, j.Files,
+		filepath.Join(j.Home, ".config"), filepath.Join(j.Home, ".cache"), filepath.Join(j.Home, ".local", "share"), filepath.Join(j.Home, ".local", "state")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	return j, nil
+}

@@ -1,0 +1,41 @@
+[job] cmds
+  [step 1] Run echo "::group::Build things"
+    ▼ Build things
+    inside the group
+    notice: Heads up: a notice
+    warning: src/a.go:3:4: a warning
+    error: an error does not fail the step
+    debug: debug text
+    the password is *** indeed
+    ::warning::not a command now
+    warning: the set-output command is deprecated, write name=value to the file $GITHUB_OUTPUT instead
+    error: the set-env command is disabled, write to the file $GITHUB_ENV or $GITHUB_PATH instead
+    encoded %0A:: stays
+  [step 1] success
+  [step 2] Run echo "::set-output name=answer::42"
+    warning: the set-output command is deprecated, write name=value to the file $GITHUB_OUTPUT instead
+  [step 2] success
+  [step 3] Run echo "answer=${{ steps.legacy.outputs.answer }}"
+    answer=42
+  [step 3] success
+  [step 4] dangerous GITHUB_ENV keys are refused
+    warning: GITHUB_ENV: NODE_OPTIONS is not allowed to be set for later steps (it changes what code a program loads)
+    warning: GITHUB_ENV: LD_PRELOAD is not allowed to be set for later steps (it changes what code a program loads)
+  [step 4] success
+  [step 5] Run echo "SAFE=$SAFE NODE_OPTIONS=${NODE_OPTIONS:-unset} LD_PRELOAD=${LD_PRELOAD:...
+    SAFE=ok NODE_OPTIONS=unset LD_PRELOAD=unset
+  [step 5] success
+  [step 6] GITHUB_PATH
+    warning: GITHUB_PATH: <RUN>/home/../outside-bin is outside the directories a step may run programs from, so it was not added
+  [step 6] success
+  [step 7] Run addedtool
+    from-added-path
+  [step 7] success
+  [step 8] Run echo "## Summary heading" >> "$GITHUB_STEP_SUMMARY"
+  [step 8] success
+  step summary:
+    ## Summary heading
+[job] cmds: success
+
+Summary
+  success   cmds

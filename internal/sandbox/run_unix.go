@@ -24,9 +24,6 @@ type SetupError struct{ Reason string }
 
 func (e *SetupError) Error() string { return "sandbox: " + e.Reason }
 
-// killGrace is how long a command gets between SIGTERM and SIGKILL when its context ends.
-var killGrace = 3 * time.Second
-
 // launch is a prepared start of the command inside the sandbox (see prepare in the file of each OS).
 type launch struct {
 	cmd *exec.Cmd

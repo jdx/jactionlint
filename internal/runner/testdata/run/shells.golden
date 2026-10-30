@@ -1,0 +1,27 @@
+[job] shells
+  [step 1] Run pwd | sed 's|.*/work|WORK|'
+    WORK/sub
+  [step 1] success
+  [step 2] Run echo "sh runs with -e"
+    sh runs with -e
+  [step 2] failure (exit status 1, continue-on-error)
+  [step 3] Run set +e
+    bash pipefail is on: 1
+  [step 3] success
+  [step 4] Run echo "custom shell, no -e"; false; echo "still running"
+    custom shell, no -e
+    still running
+  [step 4] success
+  [step 5] Run pwd | sed 's|.*/work|WORK|'
+    WORK
+  [step 5] success
+  [step 6] Run echo never
+    error: shell "nonsense" must be bash, sh, python, pwsh, powershell, cmd, or a command line with {0} for the script file
+  [step 6] failure (shell "nonsense" must be bash, sh, python, pwsh, powershell, cmd, or a command line with {0} for the script file)
+  [step 7] working directory that does not exist
+    error: the working directory missing does not exist
+  [step 7] failure (the working directory missing does not exist)
+[job] shells: failure
+
+Summary
+  failure   shells

@@ -1,0 +1,36 @@
+# args:
+# exit: 1
+name: shells
+on: push
+defaults:
+  run:
+    shell: sh
+jobs:
+  shells:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sub
+    steps:
+      - run: pwd | sed 's|.*/work|WORK|'
+      - run: |
+          echo "sh runs with -e"
+          false
+          echo not-reached
+        continue-on-error: true
+      - shell: bash
+        run: |
+          set +e
+          false | true
+          echo "bash pipefail is on: ${PIPESTATUS[0]}"
+      - shell: bash {0}
+        run: echo "custom shell, no -e"; false; echo "still running"
+      - shell: sh
+        working-directory: sub/..
+        run: pwd | sed 's|.*/work|WORK|'
+      - shell: nonsense
+        run: echo never
+      - name: working directory that does not exist
+        if: always()
+        working-directory: missing
+        run: echo never

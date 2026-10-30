@@ -1,0 +1,50 @@
+# args:
+# exit: 1
+name: failure
+on: push
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo before
+      - id: boom
+        run: |
+          echo "about to fail" >&2
+          exit 7
+      - name: skipped because an earlier step failed
+        run: echo never
+      - if: failure()
+        run: echo "failure() sees steps.boom.outcome=${{ steps.boom.outcome }} conclusion=${{ steps.boom.conclusion }}"
+      - if: always()
+        run: echo "always runs"
+      - if: success()
+        run: echo never
+  tolerated:
+    runs-on: ubuntu-latest
+    steps:
+      - id: flaky
+        continue-on-error: true
+        run: exit 1
+      - run: echo "outcome=${{ steps.flaky.outcome }} conclusion=${{ steps.flaky.conclusion }}"
+  after-success:
+    needs: tolerated
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "tolerated job passed"
+  after-failure:
+    needs: first
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo never
+  cleanup:
+    needs: [first, after-failure]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "first=${{ needs.first.result }} after-failure=${{ needs.after-failure.result }}"
+  only-on-failure:
+    needs: first
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "runs because first failed"

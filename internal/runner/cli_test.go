@@ -122,7 +122,9 @@ func TestUsageErrors(t *testing.T) {
 		"json without list":            {[]string{"--json", "a"}, ExitUsage, "--json can only be used with --list"},
 		"unknown flag":                 {[]string{"--bogus"}, ExitUsage, "bogus"},
 		"two args":                     {[]string{"--list", "a", "b"}, ExitUsage, "one workflow"},
-		"run is not there yet":         {[]string{"a"}, ExitError, "not available"},
+		"net proxy is not there yet":   {[]string{"--net=proxy", "--no-lint", "a"}, ExitUsage, "not available in this build"},
+		"bad sandbox value":            {[]string{"--sandbox=maybe", "--no-lint", "a"}, ExitUsage, "--sandbox must be on or off"},
+		"bad secret":                   {[]string{"--secret", "nope", "a"}, ExitUsage, "NAME=VALUE"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, _, errOut := runMain(t, dir, tc.args...)
