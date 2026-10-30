@@ -26,7 +26,7 @@
     SAFE=ok NODE_OPTIONS=unset LD_PRELOAD=unset
   [step 5] success
   [step 6] GITHUB_PATH
-    warning: GITHUB_PATH: <RUN>/home/../outside-bin is outside the directories a step may run programs from, so it was not added
+    warning: GITHUB_PATH: <FAKEHOME>/../outside-bin is outside the directories a step may run programs from, so it was not added
   [step 6] success
   [step 7] Run addedtool
     from-added-path

@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,7 +123,8 @@ func TestUsageErrors(t *testing.T) {
 		"json without list":            {[]string{"--json", "a"}, ExitUsage, "--json can only be used with --list"},
 		"unknown flag":                 {[]string{"--bogus"}, ExitUsage, "bogus"},
 		"two args":                     {[]string{"--list", "a", "b"}, ExitUsage, "one workflow"},
-		"net proxy is not there yet":   {[]string{"--net=proxy", "--no-lint", "a"}, ExitUsage, "not available in this build"},
+		"allow-net without proxy":      {[]string{"--allow-net", "x.example", "--no-lint", "a"}, ExitUsage, "only applies to --net=proxy"},
+		"learn with none":              {[]string{"--learn", "--net=none", "--no-lint", "a"}, ExitUsage, "--learn needs --net=proxy"},
 		"bad sandbox value":            {[]string{"--sandbox=maybe", "--no-lint", "a"}, ExitUsage, "--sandbox must be on or off"},
 		"bad secret":                   {[]string{"--secret", "nope", "a"}, ExitUsage, "NAME=VALUE"},
 	} {
@@ -270,6 +272,64 @@ jobs:
 	_, out, _ = runMain(t, dir, "--list", "w", "-e", "workflow_dispatch", "-i", "debug=false")
 	if !strings.Contains(out, "=> if is false") {
 		t.Errorf("-i debug=false:\n%s", out)
+}
+
+func TestCacheCommand(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("JACTIONLINT_CACHE_DIR", state)
+	dir := repoWith(t, nil)
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{In: &Inputs{Repo: readRepoInfo(findRepoRoot(dir))}}
+	repoDir, err := cfg.repoCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := cache.Open(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"go-a", "go-b", "rust-a"} {
+		p, _ := st.Reserve("refs/heads/main", k, "v")
+		os.WriteFile(p.Path, []byte("12345"), 0o600)
+		if _, err := st.Commit(p, 5); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(args ...string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		code := CacheMain(args, &out, &errOut)
+		return code, out.String(), errOut.String()
+	}
+	if code, out, _ := run("path"); code != 0 || strings.TrimSpace(out) != repoDir {
+		t.Fatalf("path: %d %q", code, out)
+	}
+	code, out, _ := run("ls")
+	if code != 0 || !strings.Contains(out, "go-a") || !strings.Contains(out, "rust-a") || !strings.Contains(out, "5 B") || !strings.Contains(out, "main") {
+		t.Fatalf("ls: %d\n%s", code, out)
+	}
+	if code, out, _ := run("rm", "go-*"); code != 0 || !strings.Contains(out, "removed 2 entries") {
+		t.Fatalf("rm prefix: %d %q", code, out)
+	}
+	if code, _, _ := run("rm", "nothing"); code != ExitFailure {
+		t.Fatalf("rm of nothing must fail, got %d", code)
+	}
+	if code, out, _ := run("prune"); code != 0 || !strings.Contains(out, "removed") {
+		t.Fatalf("prune: %d %q", code, out)
+	}
+	if code, out, _ := run("ls", "--all"); code != 0 || !strings.Contains(out, "rust-a") {
+		t.Fatalf("ls --all: %d %q", code, out)
+	}
+	for _, args := range [][]string{{}, {"nope"}, {"rm"}, {"--bogus"}, {"ls", "--cache-size", "x"}} {
+		if code, _, _ := run(args...); code != ExitUsage {
+			t.Errorf("%v: exit %d, want usage", args, code)
+		}
+	}
+	if code, out, _ := run("--help"); code != 0 || !strings.Contains(out, "prune") {
+		t.Errorf("help: %d", code)
 	}
 }
 

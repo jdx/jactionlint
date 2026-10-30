@@ -119,6 +119,14 @@ func (jr *jobRun) prepareEnv(n label, step *jactionlint.Step, ev *eval.Env, extr
 	for k, v := range merged {
 		all[k] = v
 	}
+	for k, v := range jr.e.root().cacheEnv {
+		all[k] = v
+	}
+	if cfg.Proxy != nil {
+		for k, v := range cfg.Proxy.Env() {
+			all[k] = v
+		}
+	}
 	for k, v := range extra {
 		all[k] = v
 	}

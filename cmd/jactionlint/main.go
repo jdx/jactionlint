@@ -14,6 +14,9 @@ func main() {
 	if runner.IsRunCommand(os.Args) {
 		os.Exit(runner.Main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
+	if runner.IsCacheCommand(os.Args) {
+		os.Exit(runner.CacheMain(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	cmd := jactionlint.Command{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,

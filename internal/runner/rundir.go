@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 )
 
 // RunDir is the scratch area of one run, under <repo>/.jactionlint/run/<id>: the copy of the workspace the steps work
@@ -24,6 +28,10 @@ type RunDir struct {
 	Files string
 	// ToolCache is persistent and shared between runs (RUNNER_TOOL_CACHE).
 	ToolCache string
+	// HomeBase is the persistent place of the fake home of this repository. The home is emptied before each job, but its
+	// path stays the same from run to run, because the version of a cache entry is computed from the paths that it holds
+	// (~/.cargo, ~/.local/share/mise): a home somewhere new every time would never hit.
+	HomeBase string
 }
 
 // StateDir returns the persistent directory of jactionlint (the cache service, the tool cache, action checkouts):
@@ -58,7 +66,8 @@ func NewRunDir(repoRoot string) (*RunDir, error) {
 		return nil, err
 	}
 	rd := &RunDir{
-		Root: root, Work: filepath.Join(root, "work"), Home: filepath.Join(root, "home"),
+		HomeBase: filepath.Join(state, "home", sanitizeName(filepath.Base(repoRoot))+"-"+shortHash(repoRoot)),
+		Root:     root, Work: filepath.Join(root, "work"), Home: filepath.Join(root, "home"),
 		Temp: filepath.Join(root, "temp"), Files: filepath.Join(root, "files"),
 		ToolCache: filepath.Join(state, "toolcache", runtime.GOOS+"-"+runtime.GOARCH),
 	}
@@ -204,18 +213,39 @@ func copyEntry(src, dst string) error {
 	return nil
 }
 
-// Job returns the scratch area of one job: its own workspace, home and temp directories, like a fresh machine.
-func (r *RunDir) Job(n int) (*RunDir, error) {
+// Job returns the scratch area of one job: its own workspace and temp directories and an empty home, like a fresh
+// machine. The home is shared with the other jobs of this repository, one at a time: release gives it back.
+func (r *RunDir) Job(n int) (j *RunDir, release func(), err error) {
 	root := filepath.Join(r.Root, "jobs", fmt.Sprintf("%d", n))
-	j := &RunDir{
-		Root: root, Work: filepath.Join(root, "work"), Home: filepath.Join(root, "home"),
-		Temp: filepath.Join(root, "temp"), Files: filepath.Join(root, "files"), ToolCache: r.ToolCache,
+	unlock, err := cache.LockDir(r.HomeBase)
+	if err != nil {
+		if mkErr := os.MkdirAll(r.HomeBase, 0o755); mkErr != nil {
+			return nil, nil, mkErr
+		}
+		if unlock, err = cache.LockDir(r.HomeBase); err != nil {
+			return nil, nil, err
+		}
+	}
+	home := filepath.Join(r.HomeBase, "home")
+	if err := os.RemoveAll(home); err != nil {
+		unlock()
+		return nil, nil, fmt.Errorf("cannot empty %s: %w", home, err)
+	}
+	j = &RunDir{
+		Root: root, Work: filepath.Join(root, "work"), Home: home,
+		Temp: filepath.Join(root, "temp"), Files: filepath.Join(root, "files"), ToolCache: r.ToolCache, HomeBase: r.HomeBase,
 	}
 	for _, d := range []string{j.Work, j.Home, j.Temp, j.Files,
 		filepath.Join(j.Home, ".config"), filepath.Join(j.Home, ".cache"), filepath.Join(j.Home, ".local", "share"), filepath.Join(j.Home, ".local", "state")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
-			return nil, err
+			unlock()
+			return nil, nil, err
 		}
 	}
-	return j, nil
+	return j, unlock, nil
+}
+
+func shortHash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:4])
 }

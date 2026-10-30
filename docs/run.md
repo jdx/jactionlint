@@ -50,9 +50,12 @@ Not there yet, and reported as skipped with the reason: Docker actions, `contain
 | `--env-file FILE` | `NAME=VALUE` lines that become the default `env:` of the workflow. |
 | `--pass-env NAME` | Let a variable of your environment reach the steps. Without it they get only `PATH`, `LANG`, `LC_*`, `TERM`, `TZ`. |
 | `--sandbox on\|off` | `off` runs the steps without the sandbox, see [Isolation](#isolation). |
-| `--net open\|none` | `none` denies internet sockets to the steps. |
 | `--in-place` | Work in your checkout instead of a copy. |
 | `--allow-read DIR`, `--allow-write DIR` | Let steps read and run, or write, under `DIR`. |
+| `--net open\|none\|proxy` | `open` (default), `none`, or `proxy` (see [Restricting the network](#restricting-the-network)). |
+| `--allow-net HOST[,HOST...]`, `--learn` | With `--net=proxy`: hosts to let through, or print the hosts that steps contact. |
+| `--cache on\|read-only\|off`, `--no-cache`, `--cache-dir DIR`, `--cache-size SIZE` | The local [actions cache](#the-cache). |
+| `--shim ACTION` | Turn on a built-in replacement that is off by default (`actions/cache`). |
 | `--trust-actions` | Run actions and reusable workflows that are not pinned to a commit SHA, see [Actions](#actions-and-reusable-workflows). |
 | `--no-shim ACTION` | Run the real `actions/checkout`, `actions/upload-artifact` or `actions/download-artifact` instead of the built-in replacement. |
 | `--debug`, `--timings`, `--keep` | Show `::debug::` output, show the time of each step, keep `.jactionlint/run/<id>`. |
@@ -124,6 +127,52 @@ Three actions only make sense on a hosted runner, so `jactionlint run` replaces 
 | `actions/download-artifact` | Copies an artifact of the same run into `path` (`pattern` and `merge-multiple` work). `run-id` and `repository` need the real action. |
 
 The runner reads and writes files that a step could have replaced by a link (the artifact copies, `GITHUB_ENV` and the other file commands). It never follows a link out of the workspace there, so a step cannot use the runner to read a file it is not allowed to read.
+
+## The cache
+
+Without a cache every run downloads the toolchains again, and the throwaway home starts empty. `jactionlint run` therefore starts a **local cache service** on `127.0.0.1` (random port, random token for each run) and points every step at it, the way a hosted runner does (`ACTIONS_CACHE_URL`, `ACTIONS_RESULTS_URL`, `ACTIONS_CACHE_SERVICE_V2`, `ACTIONS_RUNTIME_TOKEN`). Actions that cache through `@actions/cache` work **unmodified**: `actions/cache`, the `setup-*` actions, `Swatinem/rust-cache`, `jdx/mise-action`.
+
+```console
+$ jactionlint run ci          # first run
+    mise cache not found for mise-v0-linux-x64-975071a9...
+    Cache saved from ...
+$ jactionlint run ci          # second run
+    Cache hit for: mise-v0-linux-x64-975071a9...
+    mise cache restored from key: mise-v0-linux-x64-975071a9...
+```
+
+The service speaks both protocols of the library, because actions bundle different versions of it: the REST protocol of `@actions/cache` 3.x (`actions/cache@v3`, and the fallback of every newer version), and the Twirp protocol of 4.x and later, whose upload goes to a "signed URL" with the three blob operations of the Azure SDK (Put Blob up to 128 MiB, Put Block and Put Block List above). It was checked with the real library, 3.3.0, 4.0.5 and 6.3.0, on archives of 300 KB and 140 MiB (`TestRealActionsCache` in `internal/runner/cache`).
+
+- **Matching** follows GitHub: the exact `key` first, then each `restore-keys` entry as a prefix, in order, newest entry of a prefix first. An entry matches only the same *version* (a hash of the cached paths and the compression method that the library computes). Keys are immutable: saving an existing key is skipped, as on GitHub.
+- **Scope:** a cache is saved for the ref of the run (`refs/heads/feature`) and read from that ref and then from the default branch, so a throwaway branch cannot poison the cache of `main`.
+- **Eviction:** entries unread for 7 days expire, and the least recently used entries go when the store is over 10 GB (`--cache-size`).
+- **Where:** `~/.cache/jactionlint/cache/<owner>-<repo>/` (`--cache-dir`). The store is not in the sandbox's allow lists: a step reaches it only through the service, and a cache entry is only ever unpacked by a later sandboxed step.
+- **The home keeps its path.** The fake home is emptied before every job but lives at `~/.cache/jactionlint/home/<repo>/home` each time, because the version of a cache entry includes the absolute paths it holds (`~/.cargo`, `~/.local/share/mise`). Jobs of one repository share that directory one at a time.
+- **`RUNNER_TOOL_CACHE`** is a persistent directory, `~/.cache/jactionlint/toolcache/<os>-<arch>`, where `setup-*` actions and the Node.js downloads go.
+
+```sh
+jactionlint run ci --cache=read-only        # restore but never save
+jactionlint run ci --no-cache               # no cache service at all
+jactionlint cache ls                        # the entries of this repository (--all: every repository)
+jactionlint cache rm 'rust-*'               # remove by key or prefix
+jactionlint cache prune                     # expire entries and apply the size limit
+jactionlint cache path
+```
+
+The service is reachable with `--net=open` and `--net=proxy`; with `--net=none` steps cannot reach it, so nothing is cached.
+
+**A native `actions/cache`** is available with `--shim actions/cache`: it needs no Node.js and the runner itself writes and reads its archives (gzip, with entries under the workspace and the home only, so a poisoned entry cannot write anywhere else). It has the inputs and outputs of the real action, including `actions/cache/restore` and `actions/cache/save`, and saves in a post step when the job succeeded and the primary key missed. Its entries have a version of their own and are not shared with the real action's.
+
+## Restricting the network
+
+`--net=open` (the default) does not restrict the network, which keeps `npm install` and `cargo build` working, but a hostile step can then send away whatever it can read. `--net=proxy` is the strict mode: on Linux with Landlock ABI 4 (kernel 6.7) or newer, a step may connect only to the runner's proxy and the cache service, UDP and raw sockets are denied, and tools that ignore `HTTP_PROXY` fail. The proxy lets through the hosts GitHub needs and the common package registries (npm, PyPI, crates.io, the Go proxy, RubyGems, Maven Central, nodejs.org, mise.jdx.dev), refuses the rest with a message, never connects to loopback or private addresses (unless you named the host), and lists the refused hosts at the end of the run.
+
+```sh
+jactionlint run ci --learn                         # nothing refused; prints the hosts the steps contacted
+jactionlint run ci --net=proxy --allow-net registry.example.com,cdn.example.com
+```
+
+`--learn` is how to move from `open` to `proxy`: it prints the ready-to-paste `--allow-net` list. `--net=none` denies internet sockets altogether; unix sockets keep working.
 
 ## Isolation
 

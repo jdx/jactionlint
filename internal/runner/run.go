@@ -31,6 +31,13 @@ type runOptions struct {
 	timings    bool
 	keep       bool
 	trust      bool
+	cache      string
+	noCache    bool
+	cacheDir   string
+	cacheSize  string
+	shims      []string
+	allowNet   []string
+	learn      bool
 	noShim     []string
 }
 
@@ -138,6 +145,17 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 			return ExitUsage
 		}
 	}
+	if ro.learn && ro.net != "proxy" && ro.net != "open" && ro.net != "" {
+		fmt.Fprintln(stderr, "jactionlint run: --learn needs --net=proxy")
+		return ExitUsage
+	}
+	if ro.learn {
+		ro.net = "proxy"
+	}
+	if len(ro.allowNet) > 0 && ro.net != "proxy" {
+		fmt.Fprintln(stderr, "jactionlint run: --allow-net only applies to --net=proxy")
+		return ExitUsage
+	}
 	var net sandbox.Net
 	switch ro.net {
 	case "open", "":
@@ -145,8 +163,7 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 	case "none":
 		net = sandbox.NetNone
 	case "proxy":
-		fmt.Fprintln(stderr, "jactionlint run: --net=proxy is not available in this build yet, use --net=open or --net=none")
-		return ExitUsage
+		net = sandbox.NetProxy
 	default:
 		fmt.Fprintf(stderr, "jactionlint run: --net must be open, none or proxy, not %q\n", ro.net)
 		return ExitUsage
@@ -197,6 +214,27 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		return ExitError
 	}
 	in.applyDispatch(w)
+	cacheMode := ro.cache
+	if ro.noCache {
+		cacheMode = "off"
+	}
+	switch cacheMode {
+	case "on", "read-only", "off":
+	case "":
+		cacheMode = "on"
+	default:
+		fmt.Fprintf(stderr, "jactionlint run: --cache must be on, read-only or off, not %q\n", ro.cache)
+		return ExitUsage
+	}
+	var cacheSize int64
+	if ro.cacheSize != "" {
+		n, err := parseSize(ro.cacheSize)
+		if err != nil {
+			fmt.Fprintf(stderr, "jactionlint run: --cache-size: %v\n", err)
+			return ExitUsage
+		}
+		cacheSize = n
+	}
 	in.WorkflowPath = relPath(root, path)
 	in.Workflow = in.WorkflowPath
 	if w.Name != nil {
@@ -211,18 +249,34 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		fmt.Fprintf(stdout, "note: the workflow has no %q trigger, GitHub would not run it for that event\n", o.event)
 	}
 
+	var proxy *Proxy
+	if net == sandbox.NetProxy {
+		var hosts []string
+		for _, h := range ro.allowNet {
+			hosts = append(hosts, strings.Split(h, ",")...)
+		}
+		if proxy, err = StartProxy(hosts, ro.learn); err != nil {
+			fmt.Fprintf(stderr, "jactionlint run: cannot start the proxy: %v\n", err)
+			return ExitError
+		}
+		defer proxy.Close()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	cfg := &Config{
 		Root: root, In: in, Secrets: secrets, EnvFile: envFile,
 		Sandbox: useSandbox, Net: net, InPlace: ro.inPlace, PassEnv: ro.passEnv, AllowRead: ro.allowRead, AllowWrite: ro.allowWrite,
-		TrustActions: ro.trust, NoShim: ro.noShim, Debug: ro.debug, Timings: ro.timings, Keep: ro.keep, ParentEnv: os.Environ(), Out: stdout,
+		Proxy: proxy, TrustActions: ro.trust, NoShim: ro.noShim, EnableShim: ro.shims, Cache: cacheMode, CacheDir: ro.cacheDir, CacheSize: cacheSize, Debug: ro.debug, Timings: ro.timings, Keep: ro.keep, ParentEnv: os.Environ(), Out: stdout,
 	}
 	if !useSandbox {
 		fmt.Fprintln(stdout, "note: running without the sandbox (--sandbox=off): steps can read and write what you can")
 	}
 	eng := NewEngine(cfg, plan)
 	ok, err := eng.Run(ctx)
+	if proxy != nil {
+		reportProxy(stdout, proxy, ro.learn)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)
 		return ExitError
@@ -231,4 +285,42 @@ func execute(o *options, ro *runOptions, path, root string, stdout, stderr io.Wr
 		return ExitFailure
 	}
 	return ExitOK
+}
+
+// parseSize reads sizes such as 500M, 2G or a number of bytes.
+func parseSize(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	mult := int64(1)
+	for suffix, m := range map[string]int64{"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40} {
+		if strings.HasSuffix(s, suffix) || strings.HasSuffix(s, suffix+"B") {
+			s = strings.TrimSuffix(strings.TrimSuffix(s, "B"), suffix)
+			mult = m
+			break
+		}
+	}
+	var n float64
+	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%g", &n); err != nil || n < 0 {
+		return 0, fmt.Errorf("%q is not a size (use 500M, 2G or bytes)", s)
+	}
+	return int64(n * float64(mult)), nil
+}
+
+// reportProxy tells what the proxy saw: the hosts to allow (--learn) or the hosts that were refused.
+func reportProxy(w io.Writer, p *Proxy, learn bool) {
+	if learn {
+		hosts := p.Hosts()
+		if len(hosts) == 0 {
+			fmt.Fprintln(w, "\nnetwork: the steps contacted no host through the proxy")
+			return
+		}
+		fmt.Fprintf(w, "\nnetwork: the steps contacted %d host(s) through the proxy:\n", len(hosts))
+		for _, h := range hosts {
+			fmt.Fprintf(w, "  %s\n", h)
+		}
+		fmt.Fprintf(w, "to run with --net=proxy and allow them: --allow-net %s\n", strings.Join(hosts, ","))
+		return
+	}
+	if denied := p.Denied(); len(denied) > 0 {
+		fmt.Fprintf(w, "\nnetwork: --net=proxy refused %d host(s): %s\nallow them with --allow-net %s\n", len(denied), strings.Join(denied, ", "), strings.Join(denied, ","))
+	}
 }

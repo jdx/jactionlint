@@ -152,6 +152,8 @@ type postStep struct {
 	meta   *actionMeta
 	inputs map[string]string
 	state  map[string]string
+	// run, when set, is the whole post step (the native cache shim); the fields above are for JavaScript actions.
+	run func(ctx context.Context) (stepResult, *effects)
 }
 
 func (jr *jobRun) actionEnv() map[string]string {
@@ -431,15 +433,34 @@ func (jr *jobRun) runPosts() {
 	e := jr.e
 	for i := len(jr.posts) - 1; i >= 0; i-- {
 		p := jr.posts[i]
-		ev := jr.stepEnv(p.step)
-		cond := p.meta.PostIf
+		cond := ""
+		if p.meta != nil {
+			cond = p.meta.PostIf
+		}
 		if cond == "" {
 			cond = "always()"
 		}
-		ok, err := ev.Condition(cond)
-		if err != nil || !ok {
+		if ok, err := jr.stepEnv(p.step).Condition(cond); err != nil || !ok {
 			continue
 		}
+		if p.run != nil {
+			e.pr.StepStart(p.n, p.name)
+			pstart := time.Now()
+			rctx := jr.ctx
+			if jr.ctx.Err() != nil {
+				rctx = context.WithoutCancel(jr.ctx)
+			}
+			res, eff := p.run(rctx)
+			if eff != nil {
+				eff.report(e.pr, p.n.indent()+1)
+			}
+			if res.Outcome == "failure" {
+				jr.failed = true
+			}
+			e.pr.StepEnd(p.n, res.Outcome, res.Note, durationOf(pstart))
+			continue
+		}
+		ev := jr.stepEnv(p.step)
 		e.pr.StepStart(p.n, p.name)
 		start := time.Now()
 		runCtx := jr.ctx

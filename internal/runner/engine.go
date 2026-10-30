@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jdx/jactionlint/v2"
+	"github.com/jdx/jactionlint/v2/internal/runner/cache"
 	"github.com/jdx/jactionlint/v2/internal/runner/eval"
 	"github.com/jdx/jactionlint/v2/internal/sandbox"
 )
@@ -30,8 +31,15 @@ type Config struct {
 	AllowRead  []string
 	AllowWrite []string
 
+	Proxy        *Proxy   // the proxy of --net=proxy, started by the caller
 	TrustActions bool     // run actions that are not pinned to a commit SHA
 	NoShim       []string // actions/checkout etc. whose built-in replacement is turned off
+
+	// Cache is "on", "read-only" or "off". CacheDir overrides the location, CacheSize the size limit in bytes.
+	Cache      string
+	CacheDir   string
+	CacheSize  int64
+	EnableShim []string // opt-in shims, such as actions/cache
 
 	Debug     bool
 	Timings   bool
@@ -68,6 +76,10 @@ type Engine struct {
 	parent *Engine
 	prefix string
 	depth  int
+
+	cacheSvc   *cache.Service
+	cacheStore *cache.Store
+	cacheEnv   map[string]string
 }
 
 type summaryLine struct {
@@ -92,6 +104,13 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 	}
 	e.rd = rd
 	e.node = newNodeProvider(rd.ToolCache)
+	if svc, err := e.startCache(); err != nil {
+		e.pr.Note(0, "warning: the cache service did not start, so nothing is cached: %v", err)
+	} else if svc != nil {
+		e.cacheSvc = svc
+		e.cacheEnv = svc.Env()
+		defer svc.Close()
+	}
 	if !e.cfg.Keep {
 		defer rd.Remove()
 	}
@@ -368,4 +387,71 @@ func (e *Engine) keepArtifacts() {
 		return
 	}
 	e.pr.Note(0, "artifacts kept in %s", relPath(e.cfg.Root, dst))
+}
+
+// cacheScopes are the scopes a restore reads: the current ref, then the default branch (GitHub's fallback), so that a
+// throwaway branch cannot poison the cache of main.
+func (e *Engine) cacheScopes() []string {
+	gh := BaseEnv(e.cfg.In).Contexts["github"].(map[string]any)
+	ref, _ := gh["ref"].(string)
+	scopes := []string{ref}
+	if def := e.cfg.In.Repo.DefaultBranch; def != "" && "refs/heads/"+def != ref {
+		scopes = append(scopes, "refs/heads/"+def)
+	}
+	return scopes
+}
+
+// repoCacheDir is the directory of the cache of this repository.
+func (cfg *Config) repoCacheDir() (string, error) {
+	base := cfg.CacheDir
+	if base == "" {
+		state, err := StateDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(state, "cache")
+	}
+	id := cfg.In.Repo.Owner + "-" + cfg.In.Repo.Name
+	return filepath.Join(base, sanitizeName(id)), nil
+}
+
+func sanitizeName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+// startCache starts the local cache service that actions/cache and the actions built on it talk to.
+func (e *Engine) startCache() (*cache.Service, error) {
+	mode := e.cfg.Cache
+	if mode == "off" {
+		return nil, nil
+	}
+	dir, err := e.cfg.repoCacheDir()
+	if err != nil {
+		return nil, err
+	}
+	st, err := cache.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	if e.cfg.CacheSize > 0 {
+		st.MaxBytes = e.cfg.CacheSize
+	}
+	st.ReadOnly = mode == "read-only"
+	svc, err := cache.NewService(st, e.cacheScopes())
+	if err != nil {
+		return nil, err
+	}
+	if e.cfg.Debug {
+		svc.Log = func(format string, a ...any) { e.pr.Note(0, "debug: "+format, a...) }
+	}
+	e.cacheStore = st
+	return svc, nil
 }
