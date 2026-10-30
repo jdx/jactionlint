@@ -1,0 +1,36 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ["1.22", 1.23]
+        exclude:
+          - os: macos-latest
+            go: "1.22"
+        include:
+          - os: ubuntu-latest
+            go: 1.23
+            race: true
+    steps:
+      - run: go test ./...
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request'
+    steps:
+      - run: echo lint
+  shards:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.lint.outputs.matrix) }}
+    steps:
+      - run: echo
+  release:
+    needs: [test, shards]
+    uses: ./.github/workflows/release.yml

@@ -1,0 +1,10 @@
+.github/workflows/ci.yml  (CI)
+  stage 1
+    test (ubuntu-latest, 1.22)   runs-on: ${{ matrix.os }}
+    test (ubuntu-latest, 1.23, true)   runs-on: ${{ matrix.os }}
+    test (macos-latest, 1.23)   runs-on: ${{ matrix.os }}
+    lint   runs-on: ubuntu-latest   if: github.event_name == 'push' || github.event_name == 'pull_request'   name: Lint
+  stage 2
+    shards (matrix known at run time: ${{ fromJSON(needs.lint.outputs.matrix) }})   needs: lint   runs-on: ubuntu-latest
+  stage 3
+    release   needs: test, shards   calls: ./.github/workflows/release.yml
