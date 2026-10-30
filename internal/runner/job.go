@@ -17,7 +17,17 @@ import (
 )
 
 // jobRun is the state of one cell of a job while its steps run.
+// jobShared is the state that the steps of a job, and the steps of the composite actions inside it, share.
+type jobShared struct {
+	ghEnv   map[string]string // set by GITHUB_ENV, in order of arrival
+	pathAdd []string          // set by GITHUB_PATH, newest first
+	summary []string
+	failed  bool
+	posts   []*postStep // post steps of actions, in the order their main steps ran
+}
+
 type jobRun struct {
+	*jobShared
 	e    *Engine
 	pj   *PlannedJob
 	cell *Cell
@@ -28,14 +38,13 @@ type jobRun struct {
 
 	env      *eval.Env
 	baseEnv  map[string]string // workflow env < job env, evaluated
-	ghEnv    map[string]string // set by GITHUB_ENV, in order of arrival
-	pathAdd  []string          // set by GITHUB_PATH, newest first
 	steps    map[string]any
-	failed   bool
-	summary  []string
 	bg       map[string]*bgStep
 	bgOrder  []*bgStep
 	stepNo   int
+	prefix   string // "" for the steps of the job, "step 3" inside the composite action of step 3
+	depth    int    // nesting of composite actions
+	action   *actionScope
 	defaults struct{ shell, workdir string }
 }
 
@@ -50,7 +59,7 @@ type stepResult struct {
 
 func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, total int, base *eval.Env) *jobResult {
 	j := pj.Job
-	jr := &jobRun{e: e, pj: pj, cell: cell, steps: map[string]any{}, ghEnv: map[string]string{}, bg: map[string]*bgStep{}}
+	jr := &jobRun{jobShared: &jobShared{ghEnv: map[string]string{}}, e: e, pj: pj, cell: cell, steps: map[string]any{}, bg: map[string]*bgStep{}}
 	jr.env = cellEnv(base, cell)
 	jr.env.Status = nil
 	jr.env.Contexts["strategy"] = map[string]any{
@@ -66,6 +75,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 			jr.name = s
 		}
 	}
+	jr.name = e.prefix + jr.name
 	skip := func(why string) *jobResult {
 		e.pr.JobSkip(jr.name, why)
 		e.addSummary(jr.name, "skipped", why)
@@ -125,13 +135,18 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		return skip("it needs a container engine (container: and services:), which is not supported yet")
 	}
 
+	if j.WorkflowCall != nil {
+		return e.runReusable(ctx, pj, cell, jr)
+	}
+
 	e.pr.JobStart(jr.name)
 	start := time.Now()
 
-	e.mu.Lock()
-	e.jobSeq++
-	seq := e.jobSeq
-	e.mu.Unlock()
+	root := e.root()
+	root.mu.Lock()
+	root.jobSeq++
+	seq := root.jobSeq
+	root.mu.Unlock()
 	rd, err := e.rd.Job(seq)
 	if err != nil {
 		return e.failJob(jr, start, fmt.Sprintf("cannot create the run directory: %v", err))
@@ -180,6 +195,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 		jr.runStepEntry(st)
 	}
 	jr.joinAll()
+	jr.runPosts()
 	if jctx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 		jr.failed = true
 		e.pr.Note(1, "the job timed out after %s minutes", eval.FormatNumber(timeout))
@@ -328,8 +344,7 @@ func (jr *jobRun) stepEnv(step *jactionlint.Step) *eval.Env {
 // runStepEntry handles one step of the job, including its condition.
 func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 	e := jr.e
-	jr.stepNo++
-	n := jr.stepNo
+	n := jr.nextLabel()
 	ev := jr.stepEnv(step)
 	name := jr.stepName(step, ev)
 
@@ -338,7 +353,7 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 		ok, err := ev.Condition(step.If.Value)
 		if err != nil {
 			e.pr.StepStart(n, name)
-			e.pr.Note(2, "error: if: %v", err)
+			e.pr.Note(n.indent()+1, "error: if: %v", err)
 			jr.recordStep(step, stepResult{Outcome: "failure", Conclusion: "failure"})
 			jr.failed = true
 			e.pr.StepEnd(n, "failure", "bad if", 0)
@@ -377,11 +392,10 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 			runCtx, cancel = context.WithTimeout(context.WithoutCancel(jr.ctx), cancelGrace)
 			defer cancel()
 		}
-		res, eff := jr.execRun(n, step, ex, ev, func(l string) { e.pr.StepOutput(l) }, runCtx)
+		res, eff := jr.execRun(n, step, ex, ev, func(l string) { e.pr.StepOutput(n, l) }, runCtx)
 		jr.finishStep(n, step, res, eff, start)
 	case *jactionlint.ExecAction:
-		e.pr.StepSkip(n, name, "actions are not supported yet")
-		jr.recordStep(step, stepResult{Outcome: "skipped", Conclusion: "skipped"})
+		jr.runAction(n, name, step, ex, ev)
 	case *jactionlint.ExecWait:
 		jr.wait(n, name, ex)
 	case *jactionlint.ExecCancel:
@@ -391,6 +405,15 @@ func (jr *jobRun) runStepEntry(step *jactionlint.Step) {
 	default:
 		e.pr.StepSkip(n, name, "this kind of step is not supported yet")
 	}
+}
+
+// nextLabel numbers the next step of this scope.
+func (jr *jobRun) nextLabel() label {
+	jr.stepNo++
+	if jr.prefix == "" {
+		return label(fmt.Sprintf("step %d", jr.stepNo))
+	}
+	return label(fmt.Sprintf("%s.%d", jr.prefix, jr.stepNo))
 }
 
 func (jr *jobRun) stepName(step *jactionlint.Step, ev *eval.Env) string {
@@ -420,7 +443,7 @@ func (jr *jobRun) stepName(step *jactionlint.Step, ev *eval.Env) string {
 }
 
 // finishStep records the outcome of a step and applies what it wrote through file commands.
-func (jr *jobRun) finishStep(n int, step *jactionlint.Step, res stepResult, eff *effects, start time.Time) {
+func (jr *jobRun) finishStep(n label, step *jactionlint.Step, res stepResult, eff *effects, start time.Time) {
 	e := jr.e
 	coe := false
 	if step.ContinueOnError != nil {
@@ -440,7 +463,7 @@ func (jr *jobRun) finishStep(n int, step *jactionlint.Step, res stepResult, eff 
 	}
 	if eff != nil {
 		jr.apply(eff, step)
-		eff.report(e.pr, 2)
+		eff.report(e.pr, n.indent()+1)
 	}
 	if res.Conclusion == "failure" {
 		jr.failed = true
@@ -452,7 +475,7 @@ func (jr *jobRun) finishStep(n int, step *jactionlint.Step, res stepResult, eff 
 	shown := res.Outcome
 	e.pr.StepEnd(n, shown, res.Note, durationOf(start))
 	if res.Outcome == "failure" && eff != nil && eff.hint != "" {
-		e.pr.Note(2, "hint: %s", eff.hint)
+		e.pr.Note(n.indent()+1, "hint: %s", eff.hint)
 	}
 }
 
@@ -529,9 +552,33 @@ func (jr *jobRun) policyFor(files fileSet, workdir string, finalPath string) *sa
 	// The files a step talks to the runner through are writable one by one: it cannot replace them.
 	pol.Write = append(pol.Write, files.writable()...)
 	pol.Read = append(pol.Read, files.event)
+	pol.Read = append(pol.Read, probeFiles(jr.work, workdir, jr.rd.Root)...)
 	return pol
 }
 
 var _ = filepath.Join
 var _ = runtime.GOOS
 var _ sync.Mutex
+
+// probeFiles lists the package.json files in the parent directories of the given paths. Node looks for one in every
+// parent of the script it runs and fails on a file it is denied, while a file that does not exist is fine, so these
+// files (and only these) are made readable.
+func probeFiles(dirs ...string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, d := range dirs {
+		for p := d; ; p = filepath.Dir(p) {
+			f := filepath.Join(p, "package.json")
+			if !seen[f] {
+				seen[f] = true
+				if st, err := os.Stat(f); err == nil && st.Mode().IsRegular() {
+					out = append(out, f)
+				}
+			}
+			if filepath.Dir(p) == p {
+				break
+			}
+		}
+	}
+	return out
+}

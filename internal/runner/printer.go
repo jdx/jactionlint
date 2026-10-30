@@ -46,16 +46,16 @@ func (p *Printer) JobEnd(name, result string, d time.Duration) {
 	p.line(0, "[job] %s: %s%s", name, paint(result, result), p.dur(d))
 }
 
-func (p *Printer) StepStart(n int, name string) { p.line(1, "[step %d] %s", n, name) }
-func (p *Printer) StepOutput(line string)       { p.line(2, "%s", line) }
-func (p *Printer) StepEnd(n int, result, note string, d time.Duration) {
+func (p *Printer) StepStart(n label, name string)  { p.line(n.indent(), "[%s] %s", n, name) }
+func (p *Printer) StepOutput(n label, line string) { p.line(n.indent()+1, "%s", line) }
+func (p *Printer) StepEnd(n label, result, note string, d time.Duration) {
 	if note != "" {
 		note = " (" + note + ")"
 	}
-	p.line(1, "[step %d] %s%s%s", n, paint(result, result), note, p.dur(d))
+	p.line(n.indent(), "[%s] %s%s%s", n, paint(result, result), note, p.dur(d))
 }
-func (p *Printer) StepSkip(n int, name, why string) {
-	p.line(1, "[step %d] %s: %s (%s)", n, name, paint("skipped", "skipped"), why)
+func (p *Printer) StepSkip(n label, name, why string) {
+	p.line(n.indent(), "[%s] %s: %s (%s)", n, name, paint("skipped", "skipped"), why)
 }
 func (p *Printer) Note(indent int, format string, a ...any) { p.line(indent, format, a...) }
 
@@ -65,3 +65,9 @@ func (p *Printer) dur(d time.Duration) string {
 	}
 	return fmt.Sprintf(" [%.1fs]", d.Seconds())
 }
+
+// label names a step in the transcript: "step 3", "step 3.1" for a step inside the composite action of step 3, "post 3"
+// for the post step of the action of step 3.
+type label string
+
+func (l label) indent() int { return 1 + strings.Count(string(l), ".") }

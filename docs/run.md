@@ -41,7 +41,7 @@ What runs today:
 - **`runs-on`:** a job runs on this machine when its label names this machine's operating system (`ubuntu-*` on Linux, `macos-*` on macOS) or says nothing about it; otherwise it is skipped with the reason. Cells of a matrix are decided one by one.
 - **Ctrl-C** cancels the run: the process groups of the steps get `SIGTERM` and then `SIGKILL`, and steps with `if: always()` or `if: cancelled()` still run for up to five minutes.
 
-Not there yet, and reported as skipped with the reason: `uses:` steps (actions) and reusable workflows, `container:` and `services:`. Not modelled: `concurrency`, `permissions`, `environment` and OIDC; the output does not tell you that a workflow would pass on GitHub, only what happened here.
+Not there yet, and reported as skipped with the reason: Docker actions, `container:` and `services:`. Not modelled: `concurrency`, `permissions`, `environment` and OIDC; the output does not tell you that a workflow would pass on GitHub, only what happened here.
 
 | Option | Meaning |
 | --- | --- |
@@ -53,6 +53,8 @@ Not there yet, and reported as skipped with the reason: `uses:` steps (actions) 
 | `--net open\|none` | `none` denies internet sockets to the steps. |
 | `--in-place` | Work in your checkout instead of a copy. |
 | `--allow-read DIR`, `--allow-write DIR` | Let steps read and run, or write, under `DIR`. |
+| `--trust-actions` | Run actions and reusable workflows that are not pinned to a commit SHA, see [Actions](#actions-and-reusable-workflows). |
+| `--no-shim ACTION` | Run the real `actions/checkout`, `actions/upload-artifact` or `actions/download-artifact` instead of the built-in replacement. |
 | `--debug`, `--timings`, `--keep` | Show `::debug::` output, show the time of each step, keep `.jactionlint/run/<id>`. |
 
 ## See what would run
@@ -101,6 +103,27 @@ Differences from GitHub that you can see in the plan: a matrix built from JSON l
 | `-C`, `--directory DIR` | Run as if started in `DIR`. |
 
 Running the steps is not implemented yet.
+
+## Actions and reusable workflows
+
+`uses:` steps run, in the sandbox like every other step.
+
+- **Local actions** (`uses: ./.github/actions/setup`) are read from the workspace copy of the job.
+- **Repository actions** (`uses: owner/repo/path@sha`) are downloaded at the commit into `~/.cache/jactionlint/actions/owner/repo/<sha>` and reused by every later run; nothing a step does can change that copy. **They must be pinned to a full commit SHA**, because running an action executes someone else's code with your secrets. For a tag or a branch, `jactionlint run` stops and says so; `--trust-actions` resolves the ref now, prints the commit it chose, and runs it. Set `GITHUB_TOKEN` (or `GH_TOKEN`) in your shell for private repositories and to avoid rate limits; the token goes to GitHub only and never reaches a step.
+- **Composite actions** run their steps in a scope of their own (`inputs`, `steps`, `github.action_path`), nested in the transcript as `[step 3.1]`. `GITHUB_ENV` and `GITHUB_PATH` of an inner step reach the job, and the outputs are the `outputs:` of `action.yml`.
+- **JavaScript actions** (`runs.using: node12` to `node24`) run `pre`, `main` and `post` with `INPUT_*` and `STATE_*`; `post` runs at the end of the job, last action first, under its `post-if`. The Node.js comes from `PATH` when its major version matches; otherwise the matching release is downloaded from nodejs.org into the tool cache and **checked against the `SHASUMS256.txt` of that release** before it is unpacked.
+- **Reusable workflows** (`uses:` on a job, a file of this repository or `owner/repo/.github/workflows/x.yml@sha`) get `with:` (booleans and numbers are typed, defaults apply, an undeclared input is an error), `secrets:` or `secrets: inherit`, and their outputs become the outputs of the calling job. Their jobs show as `caller / job`. Nesting is limited to 10 levels, as on GitHub.
+- **Docker actions** (`runs.using: docker`, `docker://`) are skipped with a reason until container support lands.
+
+Three actions only make sense on a hosted runner, so `jactionlint run` replaces them (`--no-shim` runs the real one):
+
+| Action | What happens locally |
+| --- | --- |
+| `actions/checkout` | The job's workspace already is a copy of your checkout, so it does nothing. A `repository`, `ref` (other than the current one) or `path` falls back to the real action. |
+| `actions/upload-artifact` | Copies the matched files into `.jactionlint/artifacts/<run>/<name>/` after the run. Symbolic links, hidden files (unless `include-hidden-files`) and `!` excluded paths are left out; an existing name is an error unless `overwrite: true`. |
+| `actions/download-artifact` | Copies an artifact of the same run into `path` (`pattern` and `merge-multiple` work). `run-id` and `repository` need the real action. |
+
+The runner reads and writes files that a step could have replaced by a link (the artifact copies, `GITHUB_ENV` and the other file commands). It never follows a link out of the workspace there, so a step cannot use the runner to read a file it is not allowed to read.
 
 ## Isolation
 

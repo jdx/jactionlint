@@ -26,8 +26,8 @@ func (f fileSet) writable() []string {
 	return []string{f.env, f.path, f.output, f.state, f.summary}
 }
 
-func (jr *jobRun) newFileSet(n int) (fileSet, error) {
-	dir := filepath.Join(jr.rd.Files, fmt.Sprintf("step-%d", n))
+func (jr *jobRun) newFileSet(n label) (fileSet, error) {
+	dir := filepath.Join(jr.rd.Files, strings.ReplaceAll(string(n), " ", "-"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fileSet{}, err
 	}
@@ -80,25 +80,21 @@ type cmdState struct {
 	notFound bool
 }
 
-func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun, ev *eval.Env, emit func(string), ctx context.Context) (stepResult, *effects) {
-	e := jr.e
-	cfg := e.cfg
-	eff := &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
-	fail := func(note string) (stepResult, *effects) {
-		emit("error: " + note)
-		return stepResult{Outcome: "failure", Note: note}, eff
-	}
+// prepared is what a process of a step needs besides its command line.
+type prepared struct {
+	files     fileSet
+	env       []string
+	finalPath string
+}
 
-	script, err := jr.interp(ev, ex.Run.Value)
-	if err != nil {
-		return fail(err.Error())
-	}
+// prepareEnv builds the environment of a process of a step: the defaults of the run directory, the GITHUB_* and
+// RUNNER_* variables, then (workflow < job < GITHUB_ENV < step) env, and extra last: the INPUT_* and STATE_* of an action.
+func (jr *jobRun) prepareEnv(n label, step *jactionlint.Step, ev *eval.Env, extra map[string]string) (*prepared, error) {
+	cfg := jr.e.cfg
 	files, err := jr.newFileSet(n)
 	if err != nil {
-		return fail("cannot prepare the step files: " + err.Error())
+		return nil, fmt.Errorf("cannot prepare the step files: %w", err)
 	}
-
-	// environment: workflow < job < GITHUB_ENV < step
 	merged := map[string]string{}
 	for k, v := range jr.baseEnv {
 		merged[k] = v
@@ -108,24 +104,23 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 	}
 	stepEnv := map[string]string{}
 	if err := jr.addEnv(stepEnv, step.Env, ev); err != nil {
-		return fail(err.Error())
+		return nil, err
 	}
 	for k, v := range stepEnv {
 		merged[k] = v
 	}
-	for _, v := range merged {
-		_ = v
-	}
-
-	extra := jr.rd.BaseEnv()
+	all := jr.rd.BaseEnv()
 	for k, v := range githubEnv(cfg.In, jr, files) {
-		extra[k] = v
+		all[k] = v
 	}
 	if cfg.Debug {
-		extra["RUNNER_DEBUG"] = "1"
+		all["RUNNER_DEBUG"] = "1"
 	}
 	for k, v := range merged {
-		extra[k] = v
+		all[k] = v
+	}
+	for k, v := range extra {
+		all[k] = v
 	}
 	parentPath := ""
 	for _, kv := range cfg.ParentEnv {
@@ -133,14 +128,29 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 			parentPath = v
 		}
 	}
-	if v, ok := extra["PATH"]; ok {
+	if v, ok := all["PATH"]; ok {
 		parentPath = v
 	}
 	finalPath := jr.pathWith(parentPath)
-	extra["PATH"] = finalPath
-	env := sandbox.ScrubEnv(cfg.ParentEnv, append(append([]string{}, sandbox.DefaultPassEnv...), cfg.PassEnv...), extra)
+	all["PATH"] = finalPath
+	env := sandbox.ScrubEnv(cfg.ParentEnv, append(append([]string{}, sandbox.DefaultPassEnv...), cfg.PassEnv...), all)
+	return &prepared{files: files, env: env, finalPath: finalPath}, nil
+}
 
-	// shell and working directory
+// execRun runs a `run:` step.
+func (jr *jobRun) execRun(n label, step *jactionlint.Step, ex *jactionlint.ExecRun, ev *eval.Env, emit func(string), ctx context.Context) (stepResult, *effects) {
+	fail := func(note string) (stepResult, *effects) {
+		emit("error: " + note)
+		return stepResult{Outcome: "failure", Note: note}, &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
+	}
+	script, err := jr.interp(ev, ex.Run.Value)
+	if err != nil {
+		return fail(err.Error())
+	}
+	pr, err := jr.prepareEnv(n, step, ev, jr.actionEnv())
+	if err != nil {
+		return fail(err.Error())
+	}
 	shellName := jr.defaults.shell
 	if ex.Shell != nil {
 		shellName = ex.Shell.Value
@@ -148,7 +158,7 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 	if shellName, err = jr.interp(ev, shellName); err != nil {
 		return fail(err.Error())
 	}
-	spec, err := resolveShell(shellName, onPath(sandbox.PathDirs(finalPath)))
+	spec, err := resolveShell(shellName, onPath(sandbox.PathDirs(pr.finalPath)))
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -169,19 +179,28 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return fail(fmt.Sprintf("the working directory %s does not exist", wd))
 	}
-
-	scriptPath := filepath.Join(jr.rd.Temp, fmt.Sprintf("step-%d%s", n, spec.ext))
+	scriptPath := filepath.Join(jr.rd.Temp, fmt.Sprintf("%s%s", strings.ReplaceAll(string(n), " ", "-"), spec.ext))
 	if err := os.WriteFile(scriptPath, []byte(spec.prelude+script+spec.postlude), 0o600); err != nil {
 		return fail("cannot write the script: " + err.Error())
 	}
+	return jr.launch(n, step, pr, spec.command(scriptPath), dir, nil, emit, ctx)
+}
 
-	pol := jr.policyFor(files, dir, finalPath)
-	pol.Argv = spec.command(scriptPath)
-	pol.Env = env
+// launch starts a process of a step in the sandbox and collects its output, its exit status and the files it wrote.
+func (jr *jobRun) launch(n label, step *jactionlint.Step, pr *prepared, argv []string, dir string, extraRead []string, emit func(string), ctx context.Context) (stepResult, *effects) {
+	e := jr.e
+	cfg := e.cfg
+	eff := &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
+
+	pol := jr.policyFor(pr.files, dir, pr.finalPath)
+	pol.Read = append(pol.Read, extraRead...)
+	pol.Exec = append(pol.Exec, jr.actionDirs()...)
+	pol.Argv = argv
+	pol.Env = pr.env
 	pol.Dir = dir
 
 	timeout := time.Duration(0)
-	if step.TimeoutMinutes != nil && step.TimeoutMinutes.Expression == nil && step.TimeoutMinutes.Value > 0 {
+	if step != nil && step.TimeoutMinutes != nil && step.TimeoutMinutes.Expression == nil && step.TimeoutMinutes.Value > 0 {
 		timeout = time.Duration(step.TimeoutMinutes.Value * float64(time.Minute))
 	}
 	sctx := ctx
@@ -197,6 +216,7 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 	stderr := &lineSink{handle: func(l string) { noteDenied(cs, l); maskedEmit(l) }}
 
 	var code int
+	var err error
 	if cfg.Sandbox {
 		code, err = sandbox.Run(sctx, pol, sandbox.IO{Stdout: stdout, Stderr: stderr})
 	} else {
@@ -232,7 +252,7 @@ func (jr *jobRun) execRun(n int, step *jactionlint.Step, ex *jactionlint.ExecRun
 		}
 	}
 
-	jr.collect(files, eff)
+	jr.collect(pr.files, eff)
 	return res, eff
 }
 

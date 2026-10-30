@@ -30,6 +30,9 @@ type Config struct {
 	AllowRead  []string
 	AllowWrite []string
 
+	TrustActions bool     // run actions that are not pinned to a commit SHA
+	NoShim       []string // actions/checkout etc. whose built-in replacement is turned off
+
 	Debug     bool
 	Timings   bool
 	Keep      bool // keep .jactionlint/run/<id>
@@ -58,6 +61,13 @@ type Engine struct {
 	summary []summaryLine
 	jobSeq  int
 	warned  map[string]bool
+	node    *nodeProvider
+
+	// parent and prefix are set for the engine of a reusable workflow: it shares the run directory, the printer and
+	// the summary with the engine of the caller, and its job names start with the name of the calling job.
+	parent *Engine
+	prefix string
+	depth  int
 }
 
 type summaryLine struct {
@@ -81,10 +91,22 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	e.rd = rd
+	e.node = newNodeProvider(rd.ToolCache)
 	if !e.cfg.Keep {
 		defer rd.Remove()
 	}
 
+	ok := e.runJobs(ctx)
+	e.writeSummary()
+	e.keepArtifacts()
+	if e.cfg.Keep {
+		e.pr.Note(0, "run directory kept: %s", rd.Root)
+	}
+	return ok, nil
+}
+
+// runJobs runs the selected jobs of the plan in order.
+func (e *Engine) runJobs(ctx context.Context) bool {
 	ok := true
 	for _, pj := range e.plan.Jobs {
 		if !pj.Selected {
@@ -98,11 +120,14 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 			ok = false
 		}
 	}
-	e.writeSummary()
-	if e.cfg.Keep {
-		e.pr.Note(0, "run directory kept: %s", rd.Root)
+	return ok
+}
+
+func (e *Engine) root() *Engine {
+	for e.parent != nil {
+		e = e.parent
 	}
-	return ok, nil
+	return e
 }
 
 func (e *Engine) writeSummary() {
@@ -118,16 +143,18 @@ func (e *Engine) writeSummary() {
 }
 
 func (e *Engine) addSummary(name, result, note string) {
-	e.mu.Lock()
-	e.summary = append(e.summary, summaryLine{name, result, note})
-	e.mu.Unlock()
+	r := e.root()
+	r.mu.Lock()
+	r.summary = append(r.summary, summaryLine{name, result, note})
+	r.mu.Unlock()
 }
 
 func (e *Engine) warnOnce(key, format string, a ...any) {
-	e.mu.Lock()
-	seen := e.warned[key]
-	e.warned[key] = true
-	e.mu.Unlock()
+	r := e.root()
+	r.mu.Lock()
+	seen := r.warned[key]
+	r.warned[key] = true
+	r.mu.Unlock()
 	if !seen {
 		e.pr.Note(0, "warning: "+format, a...)
 	}
@@ -193,14 +220,11 @@ func (e *Engine) runJob(ctx context.Context, pj *PlannedJob) *jobResult {
 	}
 
 	skip := func(why string) *jobResult {
-		e.pr.JobSkip(pj.ID, why)
-		e.addSummary(pj.ID, "skipped", why)
+		e.pr.JobSkip(e.prefix+pj.ID, why)
+		e.addSummary(e.prefix+pj.ID, "skipped", why)
 		return &jobResult{Result: "skipped", Outputs: map[string]any{}}
 	}
 
-	if pj.Job.WorkflowCall != nil {
-		return skip("reusable workflows are not supported yet")
-	}
 	// A job that does not run because of its needs or its condition.
 	if pj.Job.If != nil {
 		// matrix is not known yet: the condition is evaluated per cell below when it reads it
@@ -248,8 +272,8 @@ func (e *Engine) runJob(ctx context.Context, pj *PlannedJob) *jobResult {
 	stop := false
 	for i, c := range cells {
 		if stop {
-			e.pr.JobSkip(c.jobName(pj), "an earlier matrix cell failed (fail-fast)")
-			e.addSummary(c.jobName(pj), "skipped", "fail-fast")
+			e.pr.JobSkip(e.prefix+c.jobName(pj), "an earlier matrix cell failed (fail-fast)")
+			e.addSummary(e.prefix+c.jobName(pj), "skipped", "fail-fast")
 			continue
 		}
 		cr := e.runCell(ctx, pj, c, i, len(cells), env)
@@ -325,4 +349,23 @@ func userHome() string {
 func inDir(root, p string) bool {
 	rel, err := filepath.Rel(root, p)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// keepArtifacts moves the artifacts of the run out of the run directory, which is removed, into
+// .jactionlint/artifacts/<run>.
+func (e *Engine) keepArtifacts() {
+	src := e.artifactsDir()
+	ents, err := os.ReadDir(src)
+	if err != nil || len(ents) == 0 {
+		return
+	}
+	dst := filepath.Join(e.cfg.Root, ".jactionlint", "artifacts", filepath.Base(e.rd.Root))
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return
+	}
+	if err := os.Rename(src, dst); err != nil {
+		e.pr.Note(0, "warning: could not keep the artifacts: %v", err)
+		return
+	}
+	e.pr.Note(0, "artifacts kept in %s", relPath(e.cfg.Root, dst))
 }
