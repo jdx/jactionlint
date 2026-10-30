@@ -272,6 +272,7 @@ jobs:
 	_, out, _ = runMain(t, dir, "--list", "w", "-e", "workflow_dispatch", "-i", "debug=false")
 	if !strings.Contains(out, "=> if is false") {
 		t.Errorf("-i debug=false:\n%s", out)
+	}
 }
 
 func TestCacheCommand(t *testing.T) {
