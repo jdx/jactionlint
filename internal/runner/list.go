@@ -62,9 +62,6 @@ func writeJob(w io.Writer, pj *PlannedJob) {
 	if pj.Job.If != nil {
 		notes = append(notes, "if: "+oneLine(pj.Job.If.Value))
 	}
-	if pj.Job.Name != nil && !strings.Contains(pj.Job.Name.Value, "${{") && len(pj.Cells) <= 1 {
-		notes = append(notes, "name: "+pj.Job.Name.Value)
-	}
 	suffix := ""
 	if len(notes) > 0 {
 		suffix = "   " + strings.Join(notes, "   ")
@@ -78,7 +75,19 @@ func writeJob(w io.Writer, pj *PlannedJob) {
 		return
 	}
 	for _, c := range pj.Cells {
-		fmt.Fprintf(w, "    %s%s%s\n", c.Name, c.detail(), suffix)
+		name := c.Name
+		extra := ""
+		if c.Display != "" && c.Display != name {
+			extra = "   name: " + c.Display
+		}
+		if c.If != nil {
+			extra += fmt.Sprintf("   => if is %v", *c.If)
+		}
+		line := suffix
+		if c.RunsOn != "" && pj.Job.WorkflowCall == nil {
+			line = strings.Replace(line, "runs-on: "+runsOnText(pj.Job), "runs-on: "+c.RunsOn, 1)
+		}
+		fmt.Fprintf(w, "    %s%s%s%s\n", name, c.detail(), line, extra)
 	}
 }
 

@@ -156,3 +156,65 @@ func TestListJobInSomeWorkflowsOnly(t *testing.T) {
 		t.Fatalf("a job that no workflow has: code %d %q", code, errOut)
 	}
 }
+
+func TestListResolvesExpressions(t *testing.T) {
+	src := `name: dyn
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps: [{run: e}]
+  matrixed:
+    name: Test ${{ matrix.os }} on ${{ inputs.suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ${{ fromJSON(inputs.oses) }}
+        include: ${{ fromJSON(inputs.extra) }}
+    steps: [{run: e}]
+  whole:
+    runs-on: ubuntu-latest
+    strategy: ${{ fromJSON(inputs.strategy) }}
+    steps: [{run: e}]
+  skipped:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps: [{run: e}]
+  runtime:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        n: ${{ fromJSON(needs.build.outputs.n) }}
+    steps: [{run: e}]
+`
+	dir := repoWith(t, map[string]string{"dyn.yml": src})
+	code, out, errOut := runMain(t, dir, "--list", "dyn", "-e", "workflow_dispatch",
+		"-i", `oses=["linux","mac"]`, "-i", `extra=[{"os":"linux","gpu":true}]`, "-i", "suffix=ci",
+		"-i", `strategy={"matrix":{"v":[1,2]}}`)
+	if code != ExitOK {
+		t.Fatalf("code %d: %s", code, errOut)
+	}
+	for _, want := range []string{
+		"matrixed (linux, true)   runs-on: linux   name: Test linux on ci",
+		"matrixed (mac)   runs-on: mac   name: Test mac on ci",
+		"whole (1)",
+		"whole (2)",
+		"skipped   runs-on: ubuntu-latest   if: github.event_name == 'push'   => if is false",
+		"runtime (matrix known at run time: ${{ fromJSON(needs.build.outputs.n) }})",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestListBadInput(t *testing.T) {
+	dir := repoWith(t, map[string]string{"a.yml": "on: push\njobs:\n  j:\n    runs-on: x\n    steps: [{run: e}]\n"})
+	if code, _, errOut := runMain(t, dir, "--list", "-i", "novalue"); code != ExitUsage || !strings.Contains(errOut, "NAME=VALUE") {
+		t.Fatalf("code %d %q", code, errOut)
+	}
+	if code, _, errOut := runMain(t, dir, "--list", "--event-file", filepath.Join(dir, "missing.json")); code != ExitUsage || !strings.Contains(errOut, "missing.json") {
+		t.Fatalf("code %d %q", code, errOut)
+	}
+}

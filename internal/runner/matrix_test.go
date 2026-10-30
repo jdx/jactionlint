@@ -13,7 +13,7 @@ func planOf(t *testing.T, src string, only ...string) *Plan {
 	if len(errs) > 0 {
 		t.Fatalf("parse: %v", errs[0])
 	}
-	p, err := BuildPlan(w, "test.yml", only)
+	p, err := BuildPlan(w, "test.yml", only, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ jobs:
 	}
 
 	w, _ := jactionlint.Parse([]byte(src))
-	if _, err := BuildPlan(w, "x", []string{"nope"}); err == nil || !strings.Contains(err.Error(), `no job "nope"`) {
+	if _, err := BuildPlan(w, "x", []string{"nope"}, nil); err == nil || !strings.Contains(err.Error(), `no job "nope"`) {
 		t.Fatalf("unknown job error = %v", err)
 	}
 }
@@ -212,12 +212,12 @@ jobs:
 func TestPlanCycleAndMissingNeed(t *testing.T) {
 	cyc := "on: push\njobs:\n  a:\n    needs: b\n    runs-on: x\n    steps: [{run: e}]\n  b:\n    needs: a\n    runs-on: x\n    steps: [{run: e}]\n"
 	w, _ := jactionlint.Parse([]byte(cyc))
-	if _, err := BuildPlan(w, "x", nil); err == nil || !strings.Contains(err.Error(), "cycle") {
+	if _, err := BuildPlan(w, "x", nil, nil); err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Fatalf("cycle error = %v", err)
 	}
 	miss := "on: push\njobs:\n  a:\n    needs: zzz\n    runs-on: x\n    steps: [{run: e}]\n"
 	w, _ = jactionlint.Parse([]byte(miss))
-	if _, err := BuildPlan(w, "x", nil); err == nil || !strings.Contains(err.Error(), `"zzz"`) {
+	if _, err := BuildPlan(w, "x", nil, nil); err == nil || !strings.Contains(err.Error(), `"zzz"`) {
 		t.Fatalf("missing need error = %v", err)
 	}
 }

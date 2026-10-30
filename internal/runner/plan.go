@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jdx/jactionlint/v2"
+	"github.com/jdx/jactionlint/v2/internal/runner/eval"
 )
 
 // Cell is one run of a job: a job without a matrix has one, a matrix job has one per combination.
@@ -17,6 +18,13 @@ type Cell struct {
 	Matrix map[string]any
 	// Keys is the order of the keys of Matrix.
 	Keys []string
+	// Display is the name of the job in the cell when the workflow sets name: and the expressions in it are known.
+	Display string
+	// If is the result of the job's if: when it can be decided before the run (nil when there is no if: or it reads
+	// needs, steps or another context that only exists during the run).
+	If *bool
+	// RunsOn is the runs-on of the job in the cell with its expressions evaluated ("" when it is not known).
+	RunsOn string
 }
 
 // PlannedJob is a job of the workflow with the cells it expands to.
@@ -53,7 +61,10 @@ func (p *Plan) Job(id string) *PlannedJob {
 
 // BuildPlan expands the matrices, orders the jobs by needs and marks the ones that only (all jobs when empty) and
 // their dependencies select.
-func BuildPlan(w *jactionlint.Workflow, path string, only []string) (*Plan, error) {
+//
+// env, when not nil, resolves the expressions that only need contexts it has (a matrix built from vars or inputs,
+// the name of a job); the others stay as they are written.
+func BuildPlan(w *jactionlint.Workflow, path string, only []string, env *eval.Env) (*Plan, error) {
 	jobs := make([]*PlannedJob, 0, len(w.Jobs))
 	byID := map[string]*PlannedJob{}
 	for key, j := range w.Jobs {
@@ -69,15 +80,20 @@ func BuildPlan(w *jactionlint.Workflow, path string, only []string) (*Plan, erro
 		if j.Strategy != nil {
 			m = j.Strategy.Matrix
 			if j.Strategy.Expression != nil {
-				pj.Dynamic = j.Strategy.Expression.Value
+				m = &jactionlint.Matrix{Expression: strategyMatrixExpr(j.Strategy.Expression)}
 			}
 		}
-		if pj.Dynamic == "" {
-			combos, dyn := expandMatrix(m)
-			pj.Dynamic = dyn
-			for _, c := range combos {
-				pj.Cells = append(pj.Cells, newCell(pj.ID, j, m != nil, c))
-			}
+		combos, dyn, err := expandMatrix(m, envResolver(env))
+		if err != nil {
+			return nil, fmt.Errorf("job %q: %w", id, err)
+		}
+		pj.Dynamic = dyn
+		for _, c := range combos {
+			cell := newCell(pj.ID, j, m != nil, c)
+			cell.Display = displayName(env, j, cell)
+			cell.If = evalIf(env, j, cell)
+			cell.RunsOn = evalRunsOn(env, j, cell)
+			pj.Cells = append(pj.Cells, cell)
 		}
 		jobs = append(jobs, pj)
 		byID[strings.ToLower(id)] = pj
@@ -183,4 +199,102 @@ func (c *Cell) detail() string {
 		parts = append(parts, k+"="+valueText(c.Matrix[k]))
 	}
 	return "  [" + strings.Join(parts, " ") + "]"
+}
+
+// strategyMatrixExpr turns `strategy: ${{ fromJSON(x) }}` into the expression of the matrix inside it.
+func strategyMatrixExpr(s *jactionlint.String) *jactionlint.String {
+	inner := *s
+	inner.Value = "${{ (" + strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(s.Value), "${{"), "}}") + ").matrix }}"
+	return &inner
+}
+
+// displayName evaluates the name: of a job in a cell. It is "" when the job has no name or an expression in it needs
+// data that does not exist yet.
+func displayName(env *eval.Env, j *jactionlint.Job, c *Cell) string {
+	if j.Name == nil {
+		return ""
+	}
+	if env == nil || !eval.HasExpr(j.Name.Value) {
+		return j.Name.Value
+	}
+	e := cellEnv(env, c)
+	if !e.CanEval(j.Name.Value) {
+		return ""
+	}
+	if s, err := e.Interpolate(j.Name.Value); err == nil {
+		return s
+	}
+	return ""
+}
+
+// cellEnv returns env with the matrix context of the cell.
+func cellEnv(env *eval.Env, c *Cell) *eval.Env {
+	e := &eval.Env{Contexts: map[string]any{}, Status: env.Status}
+	for k, v := range env.Contexts {
+		e.Contexts[k] = v
+	}
+	e.Contexts["matrix"] = orEmpty(c.Matrix)
+	return e
+}
+
+func evalIf(env *eval.Env, j *jactionlint.Job, c *Cell) *bool {
+	if env == nil || j.If == nil {
+		return nil
+	}
+	e := cellEnv(env, c)
+	if !e.CanEval(j.If.Value) && !eval.HasExpr(j.If.Value) {
+		// a bare condition: look at the contexts of the expression itself
+		cs, err := eval.Contexts(strings.TrimSpace(j.If.Value))
+		if err != nil {
+			return nil
+		}
+		for _, n := range cs {
+			if _, ok := e.Contexts[n]; !ok {
+				return nil
+			}
+		}
+	} else if eval.HasExpr(j.If.Value) && !e.CanEval(j.If.Value) {
+		return nil
+	}
+	v, err := e.Condition(j.If.Value)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+func evalRunsOn(env *eval.Env, j *jactionlint.Job, c *Cell) string {
+	if env == nil || j.RunsOn == nil {
+		return ""
+	}
+	e := cellEnv(env, c)
+	var parts []string
+	if j.RunsOn.LabelsExpr != nil {
+		if !e.CanEval(j.RunsOn.LabelsExpr.Value) {
+			return ""
+		}
+		v, err := e.Value(j.RunsOn.LabelsExpr.Value)
+		if err != nil {
+			return ""
+		}
+		if l, ok := v.([]any); ok {
+			for _, x := range l {
+				parts = append(parts, eval.ToString(x))
+			}
+		} else {
+			parts = append(parts, eval.ToString(v))
+		}
+		return strings.Join(parts, ", ")
+	}
+	for _, l := range j.RunsOn.Labels {
+		if !e.CanEval(l.Value) {
+			return ""
+		}
+		s, err := e.Interpolate(l.Value)
+		if err != nil {
+			return ""
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, ", ")
 }

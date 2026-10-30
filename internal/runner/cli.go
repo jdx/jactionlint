@@ -27,12 +27,14 @@ func IsRunCommand(args []string) bool {
 }
 
 type options struct {
-	list  bool
-	json  bool
-	jobs  []string
-	event string
-	dir   string
-	help  bool
+	list      bool
+	json      bool
+	eventFile string
+	inputs    []string
+	jobs      []string
+	event     string
+	dir       string
+	help      bool
 }
 
 func newFlagSet(o *options) *pflag.FlagSet {
@@ -43,6 +45,8 @@ func newFlagSet(o *options) *pflag.FlagSet {
 	fs.BoolVar(&o.json, "json", false, "print --list as JSON")
 	fs.StringArrayVarP(&o.jobs, "job", "j", nil, "run only this job and the jobs it needs (repeatable)")
 	fs.StringVarP(&o.event, "event", "e", "push", "name of the event that triggers the workflow")
+	fs.StringVar(&o.eventFile, "event-file", "", "JSON file with the event payload (github.event)")
+	fs.StringArrayVarP(&o.inputs, "input", "i", nil, "workflow_dispatch input as NAME=VALUE (repeatable)")
 	fs.StringVarP(&o.dir, "directory", "C", "", "run as if started in this directory")
 	fs.BoolVarP(&o.help, "help", "h", false, "print this help")
 	return fs
@@ -123,6 +127,11 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return ExitError
 	}
 
+	in, err := o.inputsFor(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)
+		return ExitUsage
+	}
 	var plans []*Plan
 	status := ExitOK
 	missingJob := false
@@ -131,7 +140,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if len(paths) > 1 {
 			errw = &missingJobFilter{w: stderr, missing: &missingJob}
 		}
-		plan, code := loadPlan(p, root, &o, errw)
+		plan, code := loadPlan(p, root, &o, in, errw)
 		if code != ExitOK {
 			if len(paths) == 1 {
 				return code
@@ -164,7 +173,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return status
 }
 
-func loadPlan(path, root string, o *options, stderr io.Writer) (*Plan, int) {
+func loadPlan(path, root string, o *options, in *Inputs, stderr io.Writer) (*Plan, int) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "jactionlint run: %v\n", err)
@@ -179,7 +188,13 @@ func loadPlan(path, root string, o *options, stderr io.Writer) (*Plan, int) {
 		fmt.Fprintf(stderr, "jactionlint run: %s is not a valid workflow\n", relPath(root, path))
 		return nil, ExitError
 	}
-	plan, err := BuildPlan(w, path, o.jobs)
+	wf := *in
+	wf.WorkflowPath = relPath(root, path)
+	wf.Workflow = wf.WorkflowPath
+	if w.Name != nil {
+		wf.Workflow = w.Name.Value
+	}
+	plan, err := BuildPlan(w, path, o.jobs, BaseEnv(&wf))
 	if err != nil {
 		fmt.Fprintf(stderr, "jactionlint run: %s: %v\n", relPath(root, path), err)
 		if strings.Contains(err.Error(), "has no job") {
@@ -267,4 +282,27 @@ func (f *missingJobFilter) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	return f.w.Write(p)
+}
+
+// inputsFor builds the inputs of the contexts from the options.
+func (o *options) inputsFor(root string) (*Inputs, error) {
+	in := &Inputs{Repo: readRepoInfo(root), Event: o.event, Workspace: root}
+	if o.eventFile != "" {
+		ev, err := loadEvent(o.eventFile)
+		if err != nil {
+			return nil, err
+		}
+		in.EventData = ev
+	}
+	if len(o.inputs) > 0 {
+		in.Inputs = map[string]any{}
+		for _, kv := range o.inputs {
+			k, v, ok := strings.Cut(kv, "=")
+			if !ok || k == "" {
+				return nil, fmt.Errorf("--input %q: want NAME=VALUE", kv)
+			}
+			in.Inputs[k] = v
+		}
+	}
+	return in, nil
 }

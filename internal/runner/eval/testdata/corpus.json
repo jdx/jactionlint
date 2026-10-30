@@ -1,0 +1,500 @@
+[
+ {
+  "expr": "null == 0",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "null == false",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "null == ''",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "false == 0",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "true == 1",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'1' == 1",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'true' == true",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "'abc' == 0",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "'0x10' == 16",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'  10  ' == 10",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'1e2' == 100",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'abc' == 'ABC'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "1 == 2",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "0 == ''",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "true == '1'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "false == '0'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'a' < 'b'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'B' > 'a'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "1 < '2'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "null <= 0",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "'x' >= 'X'",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!0",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!-0",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!1",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "!''",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!'0'",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "!'false'",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "!null",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!true",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "!false",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "!0.1",
+  "source": "docs",
+  "want": false
+ },
+ {
+  "expr": "'a' && 'b'",
+  "source": "docs",
+  "want": "b"
+ },
+ {
+  "expr": "'' && 'b'",
+  "source": "docs",
+  "want": ""
+ },
+ {
+  "expr": "null || 'x'",
+  "source": "docs",
+  "want": "x"
+ },
+ {
+  "expr": "0 || null",
+  "source": "docs",
+  "want": null
+ },
+ {
+  "expr": "'a' || 'b'",
+  "source": "docs",
+  "want": "a"
+ },
+ {
+  "expr": "contains('Hello world', 'llo')",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "contains(github.event.issue.labels.*.name, 'bug')",
+  "source": "docs",
+  "context": {
+   "github": {
+    "event": {
+     "issue": {
+      "labels": [
+       {
+        "name": "bug"
+       },
+       {
+        "name": "help"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "startsWith('Hello world', 'He')",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "endsWith('Hello world', 'ld')",
+  "source": "docs",
+  "want": true
+ },
+ {
+  "expr": "format('Hello {0} {1} {2}', 'Mona', 'the', 'Octocat')",
+  "source": "docs",
+  "want": "Hello Mona the Octocat"
+ },
+ {
+  "expr": "format('{{Hello {0} {1} {2}!}}', 'Mona', 'the', 'Octocat')",
+  "source": "docs",
+  "want": "{Hello Mona the Octocat!}"
+ },
+ {
+  "expr": "join(github.event.issue.labels.*.name, ', ')",
+  "source": "docs",
+  "context": {
+   "github": {
+    "event": {
+     "issue": {
+      "labels": [
+       {
+        "name": "bug"
+       },
+       {
+        "name": "help"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "want": "bug, help"
+ },
+ {
+  "expr": "toJSON(github.event.pull_request.labels.*.name)",
+  "source": "docs",
+  "context": {
+   "github": {
+    "event": {
+     "pull_request": {
+      "labels": [
+       {
+        "name": "a"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "want": "[\n  \"a\"\n]"
+ },
+ {
+  "expr": "fromJSON('{\"a\":1}').a",
+  "source": "docs",
+  "want": 1
+ },
+ {
+  "expr": "fromJSON(env.JSON).n",
+  "source": "docs",
+  "context": {
+   "env": {
+    "JSON": "{\"n\":\"v\"}"
+   }
+  },
+  "want": "v"
+ },
+ {
+  "expr": "job.status == 'success'",
+  "source": "docs",
+  "context": {
+   "job": {
+    "status": "success"
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "steps.build.outputs.path",
+  "source": "runner",
+  "context": {
+   "steps": {
+    "build": {
+     "outputs": {
+      "path": "dist"
+     }
+    }
+   }
+  },
+  "want": "dist"
+ },
+ {
+  "expr": "steps.build.outcome == 'failure'",
+  "source": "docs",
+  "context": {
+   "steps": {
+    "build": {
+     "outcome": "failure"
+    }
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "needs.a.result == 'success' && needs.b.result != 'skipped'",
+  "source": "docs",
+  "context": {
+   "needs": {
+    "a": {
+     "result": "success"
+    },
+    "b": {
+     "result": "failure"
+    }
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "matrix.os == 'ubuntu-latest'",
+  "source": "docs",
+  "context": {
+   "matrix": {
+    "os": "ubuntu-latest"
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "matrix.version",
+  "source": "docs",
+  "context": {
+   "matrix": {
+    "version": 3.1
+   }
+  },
+  "want": 3.1
+ },
+ {
+  "expr": "format('{0}', matrix.version)",
+  "source": "docs",
+  "context": {
+   "matrix": {
+    "version": 3.1
+   }
+  },
+  "want": "3.1"
+ },
+ {
+  "expr": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
+  "source": "docs",
+  "context": {
+   "github": {
+    "ref": "refs/heads/main",
+    "event_name": "push"
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "secrets.MISSING",
+  "source": "docs",
+  "context": {
+   "secrets": {}
+  },
+  "want": null
+ },
+ {
+  "expr": "inputs.debug == true",
+  "source": "docs",
+  "context": {
+   "inputs": {
+    "debug": true
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "inputs.name || 'default'",
+  "source": "docs",
+  "context": {
+   "inputs": {}
+  },
+  "want": "default"
+ },
+ {
+  "expr": "vars.X || 'fallback'",
+  "source": "docs",
+  "context": {
+   "vars": {}
+  },
+  "want": "fallback"
+ },
+ {
+  "expr": "runner.os == 'Linux'",
+  "source": "docs",
+  "context": {
+   "runner": {
+    "os": "Linux"
+   }
+  },
+  "want": true
+ },
+ {
+  "expr": "github.event.commits[0].message",
+  "source": "docs",
+  "context": {
+   "github": {
+    "event": {
+     "commits": [
+      {
+       "message": "m"
+      }
+     ]
+    }
+   }
+  },
+  "want": "m"
+ },
+ {
+  "expr": "github.event.commits[1].message",
+  "source": "docs",
+  "context": {
+   "github": {
+    "event": {
+     "commits": [
+      {
+       "message": "m"
+      }
+     ]
+    }
+   }
+  },
+  "want": null
+ },
+ {
+  "expr": "github.event.*.id",
+  "source": "runner",
+  "context": {
+   "github": {
+    "event": {
+     "a": {
+      "id": 1
+     },
+     "b": {
+      "id": 2
+     }
+    }
+   }
+  },
+  "want": [
+   1,
+   2
+  ]
+ },
+ {
+  "expr": "nonexistent()",
+  "source": "docs",
+  "error": true
+ },
+ {
+  "expr": "format('{3}', 1)",
+  "source": "docs",
+  "error": true
+ },
+ {
+  "expr": "fromJSON('x')",
+  "source": "docs",
+  "error": true
+ },
+ {
+  "expr": "1 ==",
+  "source": "docs",
+  "error": true
+ },
+ {
+  "expr": "contains()",
+  "source": "docs",
+  "error": true
+ },
+ {
+  "expr": "(1",
+  "source": "docs",
+  "error": true
+ }
+]
