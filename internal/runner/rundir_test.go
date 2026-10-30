@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -36,7 +37,7 @@ func TestCopyWorkspaceGit(t *testing.T) {
 	write(t, src, ".gitignore", "target/\n*.log\n", 0o644)
 	write(t, src, "gone.txt", "will be deleted", 0o644)
 	if err := os.Symlink("tracked.txt", filepath.Join(src, "link")); err != nil {
-		t.Fatal(err)
+		t.Skipf("cannot create a symlink here: %v", err)
 	}
 	git("add", "-A")
 	git("commit", "-q", "-m", "init")
@@ -60,7 +61,7 @@ func TestCopyWorkspaceGit(t *testing.T) {
 			t.Errorf("%s: exists = %v, want %v", rel, err == nil, want)
 		}
 	}
-	if st, _ := os.Stat(filepath.Join(dst, "bin/run.sh")); st == nil || st.Mode().Perm()&0o100 == 0 {
+	if st, _ := os.Stat(filepath.Join(dst, "bin/run.sh")); runtime.GOOS != "windows" && (st == nil || st.Mode().Perm()&0o100 == 0) {
 		t.Error("the executable bit was lost")
 	}
 	if l, _ := os.Readlink(filepath.Join(dst, "link")); l != "tracked.txt" {
