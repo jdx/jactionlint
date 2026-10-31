@@ -1,0 +1,21 @@
+# The image that a drop-in fork of docker/build-push-action builds and loads is local, so its tag needs no digest (#327)
+name: repro
+on: pull_request
+permissions: {}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
+        with:
+          context: .
+          load: true
+          tags: app:ci
+      - run: docker run --rm app:ci true

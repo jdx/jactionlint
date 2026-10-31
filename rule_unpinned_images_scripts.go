@@ -12,6 +12,15 @@ var unpinnedImagesPolicies = RuleOption{
 	Validate: validateImagePolicies,
 }
 
+// buildPushActions are docker/build-push-action and its drop-in replacements, which take its "tags", "load", "push" and
+// "outputs" inputs: the images they build are named by "tags".
+var buildPushActions = map[string]bool{
+	"docker/build-push-action":        true,
+	"depot/build-push-action":         true,
+	"useblacksmith/build-push-action": true,
+	"warpbuilds/build-push-action":    true,
+}
+
 // VisitJobPost is callback when visiting Job node after visiting its children.
 func (rule *RuleUnpinnedImages) VisitJobPost(n *Job) error {
 	rule.leaveJob()
@@ -69,16 +78,16 @@ func (rule *RuleUnpinnedImages) collectLocalImages() {
 					return
 				}
 				name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
-				switch name {
-				case "docker/build-push-action":
+				switch {
+				case buildPushActions[name]:
 					// the tags it builds ("tags:", multi-line or separated by commas) are local images
 					rule.addImageList(e, "tags")
-				case "docker/metadata-action":
+				case name == "docker/metadata-action":
 					// its "tags" are rules for the tags of the images, not image names; "images" names the images it is for
 					rule.addImageList(e, "images")
-				case "docker/bake-action":
+				case name == "docker/bake-action":
 					rule.localUnknown = true
-				case "docker/load-action":
+				case name == "docker/load-action":
 					rule.localUnknown = true
 				}
 			}

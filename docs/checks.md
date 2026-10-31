@@ -8563,7 +8563,7 @@ The command line is read as far as its options are known. These images are not r
 
 - an image of a command with an option that jactionlint does not know, because the option could take the image as its value;
 - an image that is a variable, an expression or a command substitution, an image id, and `scratch`;
-- an image that the workflow builds itself: the name of a `docker build -t` or `--tag`, the target of a `docker tag` or `docker commit`, a `tags:` of `docker/build-push-action`, and a name which another command of the repository gets as an argument (`./build.sh app:ci`, `docker push app:ci`);
+- an image that the workflow builds itself: the name of a `docker build -t` or `--tag`, the target of a `docker tag` or `docker commit`, a `tags:` of `docker/build-push-action` or of a drop-in replacement with the same inputs (`useblacksmith/build-push-action`, `depot/build-push-action`, `warpbuilds/build-push-action`), and a name which another command of the repository gets as an argument (`./build.sh app:ci`, `docker push app:ci`);
 - every image of a workflow that loads archives (`docker load`) or uses `docker compose`, `docker/bake-action`, buildah or kaniko;
 - the `FROM` lines of a Dockerfile, which are not read. `docker build --pull` names no image and is not checked.
 

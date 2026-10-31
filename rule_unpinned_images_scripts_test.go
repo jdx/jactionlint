@@ -1,6 +1,8 @@
 package jactionlint
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -94,10 +96,28 @@ func TestUnpinnedImagesInScripts(t *testing.T) {
 		})
 	}
 
-	t.Run("an image of another step which builds it", func(t *testing.T) {
-		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: docker/build-push-action@v6\n        with:\n          tags: |\n            ghcr.io/o/app:test\n          load: true\n      - run: docker run ghcr.io/o/app:test\n"
-		if got := imageFindings(t, imagesCfg(t, ""), src); len(got) != 0 {
-			t.Errorf("want nothing, got %q", got)
+	for _, action := range []string{"docker/build-push-action", "useblacksmith/build-push-action", "depot/build-push-action", "warpbuilds/build-push-action"} {
+		t.Run("an image of another step which builds it with "+action, func(t *testing.T) {
+			src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: " + action + "@v6\n        with:\n          tags: |\n            ghcr.io/o/app:test\n          load: true\n      - run: docker run ghcr.io/o/app:test\n"
+			if got := imageFindings(t, imagesCfg(t, ""), src); len(got) != 0 {
+				t.Errorf("want nothing, got %q", got)
+			}
+		})
+	}
+	t.Run("the image of a drop-in fork of docker/build-push-action under the default profile", func(t *testing.T) {
+		// the workflow of #327, which has no other finding
+		src, err := os.ReadFile(filepath.Join("testdata", "unpinned_images", "build_push_fork.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if errs := lintFileWithConfig(t, defaultProfileConfig(), ".github/workflows/solo.yml", string(src)); len(errs) != 0 {
+			t.Errorf("want nothing, got %v", errs)
+		}
+	})
+	t.Run("an image of another step whose action is not known to build it", func(t *testing.T) {
+		src := "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: example/not-a-build-action@v1\n        with:\n          tags: app:ci\n      - run: docker run --rm app:ci true\n"
+		if got := imageFindings(t, imagesCfg(t, ""), src); len(got) != 1 || !strings.Contains(got[0], `image "app:ci" of "docker run"`) {
+			t.Errorf("want app:ci reported, got %q", got)
 		}
 	})
 	t.Run("the position is the image", func(t *testing.T) {
