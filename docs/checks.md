@@ -8143,7 +8143,7 @@ In a release job the rule reports the steps that restore a cache:
 | `jdx/mise-action` | `cache: false` |
 | `jdx/aube-action` | the `cache` input is missing or `false` (it restores `node_modules` with `actions/cache`) |
 | `gradle/actions/setup-gradle`, `gradle/gradle-build-action` | `cache-disabled: true` |
-| `docker/build-push-action` | there is no `cache-from` with `type=gha` |
+| `docker/build-push-action` | there is no `cache-from` with `type=gha` or `no-cache: true` is set (buildx then builds without using the imported cache) |
 | `oven-sh/setup-bun` | `no-cache: true` (it caches the bun executable) |
 | `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
 | `mlugg/setup-zig` | `use-cache: false` |
