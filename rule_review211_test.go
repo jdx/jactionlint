@@ -41,15 +41,16 @@ func TestImagePatternNormalizesBothSides(t *testing.T) {
 	}
 }
 
-// A script is read with the shell of its own job: an image built in a job on Linux is known to a job on Windows that runs
-// a bash step.
+// A script is read with the shell of its own job: an image built by a bash step of a job on Windows (defaults.run.shell)
+// is known to the other bash steps of that job. An image built in another job is not, since that job has a runner of its
+// own (#327).
 func TestUnpinnedImagesLocalImagesUseTheShellOfTheirJob(t *testing.T) {
-	src := "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:ci .\n  test:\n    runs-on: windows-latest\n    steps:\n      - run: docker run --rm app:ci\n        shell: bash\n"
+	src := "on: push\njobs:\n  test:\n    runs-on: windows-latest\n    defaults:\n      run:\n        shell: bash\n    steps:\n      - run: docker build -t app:ci .\n      - run: docker run --rm app:ci\n"
 	if got := imageFindings(t, imagesCfg(t, ""), src); len(got) != 0 {
 		t.Errorf("want nothing, got %q", got)
 	}
-	// the same image from a registry is reported
-	src = "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t other:ci .\n  test:\n    runs-on: windows-latest\n    steps:\n      - run: docker run --rm alpine:3\n        shell: bash\n"
+	// the same image built in another job is reported
+	src = "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:ci .\n  test:\n    runs-on: windows-latest\n    steps:\n      - run: docker run --rm app:ci\n        shell: bash\n"
 	if got := imageFindings(t, imagesCfg(t, ""), src); len(got) != 1 {
 		t.Errorf("want one finding, got %q", got)
 	}

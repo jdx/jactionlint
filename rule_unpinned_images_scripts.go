@@ -56,55 +56,44 @@ func (rule *RuleUnpinnedImages) VisitStep(n *Step) error {
 	return nil
 }
 
-// collectLocalImages reads the scripts of the workflow for the images that they build, tag or load: an image built
-// there is not one of a registry, and the registry cannot pin it.
+// collectLocalImages reads the steps of the job for the images that they build, tag or load: an image built there is
+// not one of a registry, and the registry cannot pin it. Each job runs on a runner of its own, so an image which
+// another job builds or loads is not there: it is pulled from the registry like any other.
 func (rule *RuleUnpinnedImages) collectLocalImages() {
 	rule.localDone = true
-	w := rule.wf
-	if w == nil {
+	if rule.job == nil {
 		return
 	}
-	visit := func(steps []*Step) {
-		walkSteps(steps, func(st *Step) {
-			switch e := st.Exec.(type) {
-			case *ExecRun:
-				if s, _ := rule.script(e); s != nil {
-					names, unknown := localImagesOf(s)
-					rule.local = append(rule.local, names...)
-					rule.localUnknown = rule.localUnknown || unknown
-				}
-			case *ExecAction:
-				if e.Uses == nil {
-					return
-				}
-				name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
-				switch {
-				case buildPushActions[name]:
-					// the tags it builds ("tags:", multi-line or separated by commas) are local images
-					rule.addImageList(e, "tags")
-				case name == "docker/metadata-action":
-					// its "tags" are rules for the tags of the images, not image names; "images" names the images it is for
-					rule.addImageList(e, "images")
-				case name == "docker/bake-action":
-					rule.localUnknown = true
-				case name == "docker/load-action":
-					rule.localUnknown = true
-				}
+	walkSteps(rule.job.Steps, func(st *Step) {
+		switch e := st.Exec.(type) {
+		case *ExecRun:
+			if s, _ := rule.script(e); s != nil {
+				names, unknown := localImagesOf(s)
+				rule.local = append(rule.local, names...)
+				rule.localUnknown = rule.localUnknown || unknown
 			}
-		})
-	}
-	// The shell of a script is the one of its own job (defaults.run.shell), so the job is entered for each one
-	prev := rule.job
-	defer func() { rule.job = prev }()
-	for _, j := range w.Jobs {
-		if j != nil {
-			rule.enterJob(j)
-			visit(j.Steps)
+		case *ExecAction:
+			if e.Uses == nil {
+				return
+			}
+			name := strings.ToLower(ParseUses(e.Uses.Value).CanonicalName())
+			switch {
+			case buildPushActions[name]:
+				// the tags it builds ("tags:", multi-line or separated by commas) are local images
+				rule.addImageList(e, "tags")
+			case name == "docker/metadata-action":
+				// its "tags" are rules for the tags of the images, not image names; "images" names the images it is for
+				rule.addImageList(e, "images")
+			case name == "docker/bake-action":
+				rule.localUnknown = true
+			case name == "docker/load-action":
+				rule.localUnknown = true
+			}
 		}
-	}
+	})
 }
 
-// isLocalImage reports whether the image is one of the images that the workflow builds: the same literal name, whatever
+// isLocalImage reports whether the image is one of the images that the job builds: the same literal name, whatever
 // the tag. A name which is written with an expression or a shell variable is not one that can be compared, so it
 // suppresses nothing: the suppression is only for an image that is provably built here.
 func (rule *RuleUnpinnedImages) isLocalImage(ref string) bool {
