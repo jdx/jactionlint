@@ -135,6 +135,34 @@ func TestUnpinnedImagesInScripts(t *testing.T) {
 			t.Error("no finding")
 		}
 	})
+
+	// Each job runs on a runner of its own, so only the images which its own steps build or load are local (#327)
+	const twoJobs = "on: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n%s\n  use:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker run --rm app:ci true\n"
+	for _, tc := range []struct{ name, steps string }{
+		{"built by docker/build-push-action", "      - uses: docker/build-push-action@v7\n        with:\n          context: .\n          load: true\n          tags: app:ci"},
+		{"built by a script", "      - run: docker build -t app:ci ."},
+		{"tagged by a script", "      - run: docker tag base app:ci"},
+		{"after loading archives", "      - run: docker load -i app.tar"},
+		{"after docker/bake-action", "      - uses: docker/bake-action@v6"},
+	} {
+		t.Run("an image of another job "+tc.name, func(t *testing.T) {
+			got := imageFindings(t, imagesCfg(t, ""), strings.Replace(twoJobs, "%s", tc.steps, 1))
+			if len(got) != 1 || !strings.Contains(got[0], `image "app:ci" of "docker run"`) {
+				t.Errorf("want app:ci reported, got %q", got)
+			}
+		})
+	}
+	t.Run("an image of the same job when another job builds it too", func(t *testing.T) {
+		src := strings.Replace(twoJobs, "%s", "      - run: docker build -t app:ci .", 1) +
+			"  again:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:ci .\n      - run: docker run --rm app:ci true\n"
+		got := imageFindings(t, imagesCfg(t, ""), src)
+		if len(got) != 1 {
+			t.Fatalf("want only the image of job use, got %q", got)
+		}
+		if errs := errsWithID(lintFileWithConfig(t, imagesCfg(t, ""), "ci.yaml", src), "unpinned-images"); errs[0].Line != 10 {
+			t.Errorf("want the finding at line 10 (job use), got line %d", errs[0].Line)
+		}
+	})
 	t.Run("composite action", func(t *testing.T) {
 		// the steps of a composite action are checked too (see TestActionScopeIsComplete)
 		if scope := actionRuleScope["unpinned-images"]; scope.scope != actionApplies {

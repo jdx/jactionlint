@@ -18,8 +18,8 @@ import (
 type RuleUnpinnedImages struct {
 	RuleBase
 	runContext
-	// local are the images that the scripts of the workflow build or tag, and localUnknown is true when they also load
-	// images some other way (see localImagesOf). It is worked out when the first image of a script is found.
+	// local are the images that the steps of the job build or tag, and localUnknown is true when they also load images
+	// some other way (see localImagesOf). It is worked out when the first image of a script of the job is found.
 	local        []string
 	localDone    bool
 	localUnknown bool
@@ -46,7 +46,6 @@ var imageExprRegex = regexp.MustCompile(`\$\{\{(.*?)\}\}`)
 // and a Dockerfile otherwise.
 func (rule *RuleUnpinnedImages) VisitWorkflowPre(n *Workflow) error {
 	rule.enterWorkflow(n)
-	rule.local, rule.localDone, rule.localUnknown = nil, false, false
 	if n.Action == nil || n.Action.Runs == nil || n.Action.Runs.Image == nil || !rule.Config().RuleEnabled("unpinned-images") {
 		return nil
 	}
@@ -60,6 +59,7 @@ func (rule *RuleUnpinnedImages) VisitWorkflowPre(n *Workflow) error {
 // VisitJobPre is callback when visiting Job node before visiting its children.
 func (rule *RuleUnpinnedImages) VisitJobPre(n *Job) error {
 	rule.enterJob(n)
+	rule.local, rule.localDone, rule.localUnknown = nil, false, false
 	if !rule.Config().RuleEnabled("unpinned-images") {
 		return nil
 	}
