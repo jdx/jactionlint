@@ -279,6 +279,9 @@ type RuleEnv struct {
 	lockWorkflows []string
 	// actionsLock is the Actions lock file of the project, nil when it has none (see Linter.actionsLockOf).
 	actionsLock *actionsLock
+	// checkWorkflows are the workflows of the project as they are on the disk, set only when the config declares
+	// "required-checks" (see Linter.checkWorkflowsOf).
+	checkWorkflows checkWorkflows
 
 	log  func(args ...interface{})
 	name string // the factory being run

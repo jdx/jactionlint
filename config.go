@@ -239,6 +239,11 @@ type Config struct {
 	// reusable workflow) which must be used at least once in every checked workflow. The check is disabled
 	// when the list is empty.
 	RequiredActions []RequiredActionRule `yaml:"required-actions"`
+	// RequiredChecks is the "required-checks" list: the check names that branch protection or a ruleset requires,
+	// and the events they are required for. The unreachable-required-check rule reports a declared check that no job
+	// reports, and a trigger filter of a workflow that keeps GitHub from starting the job which reports it. The lists
+	// of the files listed in "extends" are replaced, not merged.
+	RequiredChecks []RequiredCheck `yaml:"required-checks"`
 	// AssumeDefaultPermissions controls how the workflow-call permission check treats a caller that
 	// has no `permissions:` block at the workflow level and none on the calling job. Unset, nothing
 	// is assumed (the default token is a setting of the repository): only a scope that no default
@@ -495,6 +500,9 @@ func readConfigFile(path string, stack []string) (*Config, error) {
 	for i := range c.Ignores {
 		c.Ignores[i].Path = path
 	}
+	for i := range c.RequiredChecks {
+		c.RequiredChecks[i].Path = path
+	}
 	for i, d := range c.Deprecations {
 		c.Deprecations[i] = fmt.Sprintf("config file %q: %s", path, d)
 	}
@@ -578,6 +586,9 @@ func (c *Config) merge(over *Config) {
 	c.Ignores = append(c.Ignores, over.Ignores...)
 	if over.present["required-actions"] {
 		c.RequiredActions = over.RequiredActions
+	}
+	if over.present["required-checks"] {
+		c.RequiredChecks = over.RequiredChecks
 	}
 	if over.present["platform"] {
 		c.Platform = over.Platform
