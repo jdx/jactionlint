@@ -3211,7 +3211,7 @@ Output:
 
 **What is reported.** Each finding is a proven way for the check to stay pending, located where the fix goes, with a change that shows it:
 
-- At the declaration in the config file: no job of the repository reports the name. The message suggests a reported name that differs only in case, that a reusable workflow prefixes with its caller, such as `ci / unit` for `unit`, or that a matrix expands. The declaration is judged against the workflows as they are linted, so the content that an editor passes in counts, not only the files on the disk. This finding needs the config file, so it is reported when you lint files of the repository, and not for an example that passes the configuration directly. A [baseline](./baseline.md) can accept it like any other finding.
+- At the declaration in the config file: no job of the repository reports the name. The message suggests a reported name that differs only in case, that a reusable workflow prefixes with its caller, such as `ci / unit` for `unit`, or that a matrix expands. The declaration is judged against the workflows as they are linted, so the content that an editor passes in counts, not only the files on the disk. This finding needs the config file, so it is reported when you lint files of the repository, and not for an example that passes the configuration directly. A [baseline](./baseline.md), `paths` and `ignores` of the configuration, and `--ignore` apply to it like to any other finding.
 - At `on:`: no workflow that reports the check runs on an event in `events`.
 - At `types`: a `pull_request` or `pull_request_target` filter without `opened` or `synchronize`. A pushed commit then gets no check.
 - At `branches` or at an entry of `branches-ignore`: the filter excludes a branch listed in `branches` of the declaration.
@@ -3227,8 +3227,8 @@ A matrix job or a reusable workflow call that GitHub skips reports its bare name
 
 **Cannot determine.** When the answer depends on something the rule does not evaluate, it reports a finding at level `info` at the declaration instead of an error. It says what it could not decide:
 
-- a job name with an expression other than the matrix context, or a matrix that is not a literal list (an expression, `include` or `exclude`);
-- a reusable workflow of another repository, or one that is not in the repository;
+- a job name with an expression other than the matrix context, or a matrix that is not a literal list (an expression, `include` or `exclude`, or a value such as an unquoted `1.10`, which GitHub prints as `1.1`);
+- a reusable workflow of another repository, one that is not in the repository, a cycle of calls, or calls that expand to too many jobs;
 - an entry of a filter with `${{ }}`, an entry that starts with `!` (GitHub applies negations in order), a pattern the rule cannot translate, or a match that depends on the case of letters;
 - a `branches` or `branches-ignore` filter when the declaration has no `branches`, and a branch filter of `push`, which matches the pushed branch;
 - `paths` filters that every example change passes but that do not match every file (`**`), unless a workflow with only `paths-ignore` lists the same entries;

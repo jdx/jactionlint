@@ -1,7 +1,9 @@
 package jactionlint
 
 import (
+	"bytes"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -387,4 +389,201 @@ func TestRequiredCheckDeclarationFindingsInTheBaseline(t *testing.T) {
 	if got := ofRule(errs, "unreachable-required-check"); len(got) != 0 {
 		t.Fatalf("the baseline accepts the finding of the declaration, but got: %s", got[0].Message)
 	}
+}
+
+// writeRepo writes the files of a repository under a new temporary directory and returns its root.
+func writeRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	files[".git/HEAD"] = "ref: refs/heads/main\n"
+	for p, body := range files {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestRequiredCheckReusableWorkflowCycleEnds(t *testing.T) {
+	// A workflow that calls itself four times would expand to 4^10 names without cycle detection
+	self := "on: [pull_request, workflow_call]\njobs:\n" +
+		"  a:\n    uses: ./.github/workflows/ci.yaml\n  b:\n    uses: ./.github/workflows/ci.yaml\n" +
+		"  c:\n    uses: ./.github/workflows/ci.yaml\n  d:\n    uses: ./.github/workflows/ci.yaml\n"
+	done := make(chan []string, 1)
+	go func() {
+		done <- lintRequiredChecks(t, "required-checks:\n  - name: a / b / c\n", map[string]string{"ci.yaml": self})
+	}()
+	select {
+	case got := <-done:
+		expectFindings(t, got, []string{".github/jactionlint.yaml:2: info: ", "which is already on the path of calls (a cycle)"})
+	case <-time.After(20 * time.Second):
+		t.Fatal("the expansion of a reusable workflow that calls itself does not end")
+	}
+}
+
+func TestRequiredCheckSharedWorkflowsLintedInParallel(t *testing.T) {
+	// The files are linted in parallel and share the parsed workflows of the repository; run with -race
+	wf := func(n int) string {
+		return fmt.Sprintf("on: pull_request\njobs:\n  prep:\n    if: github.event.pull_request.draft == false\n    runs-on: ubuntu-latest\n    steps:\n      - run: make prep\n"+
+			"  test%d:\n    needs: [prep]\n    if: ${{ !cancelled() && github.actor != 'bot' }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n    runs-on: ${{ matrix.os }}\n    steps:\n      - run: make test\n", n)
+	}
+	ws := map[string]string{}
+	cfg := "required-checks:\n"
+	for i := range 8 {
+		ws[fmt.Sprintf("ci%d.yaml", i)] = wf(i)
+		cfg += fmt.Sprintf("  - name: test%d\n  - name: test%d (ubuntu-latest)\n", i, i)
+	}
+	for _, f := range lintRequiredChecks(t, cfg, ws) {
+		if !strings.Contains(f, "info: ") {
+			t.Errorf("unexpected finding: %s", f)
+		}
+	}
+}
+
+func TestRequiredCheckDeclarationsWithFix(t *testing.T) {
+	root := ignoreProject(t, "required-checks:\n  - name: missing\n", map[string]string{"ci.yaml": gateWorkflow})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	res, err := l.FixFilesWithOptions([]string{filepath.Join(root, ".github", "workflows", "ci.yaml")}, nil, FixOptions{Mode: FixModeSafe, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(res.Errors, "unreachable-required-check"); len(got) != 1 {
+		t.Fatalf("--fix reports %d findings of the declaration, want 1", len(got))
+	}
+}
+
+func TestRequiredCheckOneConfigForSeveralRepositories(t *testing.T) {
+	// --config-file applies one config to two repositories: each is judged with its own workflows
+	shared := filepath.Join(t.TempDir(), "jactionlint.yaml")
+	if err := os.WriteFile(shared, []byte("required-checks:\n  - name: CI gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withGate := writeRepo(t, map[string]string{".github/workflows/ci.yaml": gateWorkflow})
+	without := writeRepo(t, map[string]string{".github/workflows/ci.yaml": "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"})
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{ConfigFile: shared})
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := l.LintFiles([]string{filepath.Join(withGate, ".github/workflows/ci.yaml"), filepath.Join(without, ".github/workflows/ci.yaml")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unreachable-required-check"); len(got) != 1 || !strings.Contains(got[0].Message, `reports the required check "CI gate"`) {
+		t.Fatalf("want one finding for the repository without the job, got %d", len(got))
+	}
+}
+
+func TestRequiredCheckBaselineEntryOfAFixedDeclarationIsUnused(t *testing.T) {
+	root := ignoreProject(t, "baseline: auto\nrequired-checks:\n  - name: missing\n", map[string]string{"ci.yaml": gateWorkflow})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	if _, err := l.WriteBaseline(nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	// The declaration is fixed: the entry of the baseline matches nothing
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: auto\nrequired-checks:\n  - name: CI gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{WorkingDir: root, ConfigFile: filepath.Join(root, ".github", "jactionlint.yaml"), BaselineCheck: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unused-baseline-entry"); len(got) != 1 || !strings.Contains(got[0].Message, "unreachable-required-check") {
+		t.Fatalf("want the entry of the fixed declaration reported as unused, got %d", len(got))
+	}
+}
+
+func TestRequiredCheckExpressionWithBracesInAString(t *testing.T) {
+	// The "}}" in the string does not end the expression
+	wf := "on: pull_request\njobs:\n  build:\n    name: \"${{ github.event.pull_request.draft && '}}' || 'ci' }} build\"\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: ci build\n", map[string]string{"ci.yaml": wf}),
+		[]string{".github/jactionlint.yaml:2: info: ", "has a name computed at runtime"})
+}
+
+func TestRequiredCheckOnlyWorkflowFilesCount(t *testing.T) {
+	// A file in .github/workflows that GitHub does not run (not .yml or .yaml) reports no check, also when it is linted
+	root := ignoreProject(t, "required-checks:\n  - name: CI gate\n", map[string]string{"ci.yaml": "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	p, err := NewProject(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := l.Lint(filepath.Join(root, ".github", "workflows", "ci.yaml.bak"), []byte(gateWorkflow), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unreachable-required-check"); len(got) != 1 {
+		t.Fatalf("a backup file must not report the check, got %d findings", len(got))
+	}
+}
+
+func TestRequiredCheckMatrixValuesAsGitHubPrintsThem(t *testing.T) {
+	// GitHub prints the unquoted 1.10 as 1.1: the rule does not claim that "test (1.10)" is reported
+	wf := "on: pull_request\njobs:\n  test:\n    strategy:\n      matrix:\n        go: [1.10]\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test (1.10)\n", map[string]string{"ci.yaml": wf}),
+		[]string{".github/jactionlint.yaml:2: info: ", "has a matrix that is not a literal list of values"})
+}
+
+func TestRequiredCheckUnknownNamesOfWorkflowsThatDoNotStart(t *testing.T) {
+	// The job with a dynamic name runs only on push, so it cannot report the check of a pull request
+	release := "on: push\njobs:\n  build:\n    name: ${{ github.ref_name }}\n    runs-on: ubuntu-latest\n    steps:\n      - run: make\n"
+	ci := "on:\n  pull_request:\n    paths: ['src/**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"release.yaml": release, "ci.yaml": ci}),
+		[]string{".github/workflows/ci.yaml:3: ", `no entry of "paths" of "pull_request" matches "README.md"`})
+}
+
+func TestRequiredCheckDeclarationFindingsFollowTheIgnores(t *testing.T) {
+	for _, cfg := range []string{
+		"paths:\n  .github/jactionlint.yaml:\n    ignore: [unreachable-required-check]\nrequired-checks:\n  - name: missing\n",
+		"ignores:\n  - rule: unreachable-required-check\n    file: .github/jactionlint.yaml\n    reason: the check is added later\nrequired-checks:\n  - name: missing\n",
+	} {
+		root := ignoreProject(t, cfg, map[string]string{"ci.yaml": gateWorkflow})
+		errs := lintIgnoreProject(t, root, time.Now())
+		for _, e := range errs {
+			if e.ID == "unreachable-required-check" || e.ID == "unused-ignore" {
+				t.Errorf("config %q: unexpected finding: %s", cfg, e.Message)
+			}
+		}
+	}
+}
+
+func TestRequiredCheckExplicitSuccessMayRunAfterASkippedJob(t *testing.T) {
+	job := func(cond string) string {
+		return "on: pull_request\njobs:\n  never:\n    if: false\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n" +
+			"  test:\n    needs: [never]\n" + cond + "    strategy:\n      matrix:\n        os: [ubuntu-latest]\n    runs-on: ${{ matrix.os }}\n    steps:\n      - run: make test\n"
+	}
+	cfg := "required-checks:\n  - name: test (ubuntu-latest)\n"
+	expectFindings(t, lintRequiredChecks(t, cfg, map[string]string{"ci.yaml": job("")}),
+		[]string{`job "test" needs job "never", which never runs`})
+	expectFindings(t, lintRequiredChecks(t, cfg, map[string]string{"ci.yaml": job("    if: ${{ !success() }}\n")}))
+}
+
+func TestRequiredCheckMatrixNameSharedByCombinations(t *testing.T) {
+	// Two combinations have the name "test on ubuntu-latest": the names are still known
+	wf := "on: pull_request\njobs:\n  test:\n    name: test on ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n        node: [20, 22]\n    runs-on: ${{ matrix.os }}\n    steps:\n      - run: make test\n"
+	ws := map[string]string{"ci.yaml": wf}
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test on ubuntu-latest\n", ws))
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test on windows-latest\n", ws),
+		[]string{".github/jactionlint.yaml:2: ", `reports the required check "test on windows-latest"`})
+}
+
+func TestRequiredCheckPathGapWithANegation(t *testing.T) {
+	// "**" does not cover every file when a later "!" entry removes some: the rule cannot tell
+	wide := "on:\n  pull_request:\n    paths: ['**', '!private/**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	// named covers every example change (x is the example of "**"), so only the proof of coverage is left
+	named := "on:\n  pull_request:\n    paths: ['*.md', 'docs/**', 'src/**', '*.json', '.github/**', x]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"wide.yaml": wide, "named.yaml": named}),
+		[]string{".github/jactionlint.yaml:2: info: ", `cannot evaluate the path filters of "pull_request" in .github/workflows/wide.yaml`})
 }

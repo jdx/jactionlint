@@ -374,7 +374,7 @@ func (l *Linter) FixFilesWithOptions(filepaths []string, project *Project, opts 
 		}
 	}
 
-	results = l.withBaselineResults(l.finishIgnoreRun(results)) // after the fixes: a config file is no file to fix
+	results = l.withBaselineResults(l.finishIgnoreRun(l.finishRequiredChecksRun(results))) // after the fixes: a config file is no file to fix
 	for _, r := range results {
 		res.Errors = append(res.Errors, r.errs...)
 	}

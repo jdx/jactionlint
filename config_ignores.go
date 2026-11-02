@@ -742,10 +742,24 @@ func (l *Linter) finishIgnoreRun(results []fileResult) []fileResult {
 			errs = kept
 		}
 		if len(errs) > 0 {
-			results = append(results, fileResult{file: p, path: display, src: src, errs: errs})
+			results = appendFileErrors(results, fileResult{file: p, path: display, src: src, errs: errs})
 		}
 	}
 	return results
+}
+
+// appendFileErrors adds the findings of a file which the run reports (a config file), to the result of the file when
+// the run has one already.
+func appendFileErrors(results []fileResult, r fileResult) []fileResult {
+	for i := range results {
+		if results[i].path == r.path {
+			results[i].errs = append(results[i].errs, r.errs...)
+			results[i].baselined = append(results[i].baselined, r.baselined...)
+			slices.SortFunc(results[i].errs, compareErrors)
+			return results
+		}
+	}
+	return append(results, r)
 }
 
 // errorAt makes an error located at the entry in the config file. id is "expired-ignore" or

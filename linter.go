@@ -687,7 +687,9 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 // finishRun adds the results which belong to the run and not to a file: the problems of the ignores of
 // the config files (expired and unused entries) and the unused entries of the baseline files.
 func (l *Linter) finishRun(results []fileResult) []fileResult {
-	return l.filterChanged(l.withBaselineResults(l.finishRequiredChecksRun(l.finishIgnoreRun(results))))
+	// The required checks first: the "ignores" of the config apply to their findings, which tells whether an entry is
+	// unused
+	return l.filterChanged(l.withBaselineResults(l.finishIgnoreRun(l.finishRequiredChecksRun(results))))
 }
 
 // lintFilesQuietly lints the files in parallel and returns the results without printing them. The

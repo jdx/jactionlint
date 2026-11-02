@@ -281,7 +281,7 @@ type RuleEnv struct {
 	actionsLock *actionsLock
 	// checkWorkflows are the workflows of the project as they are on the disk, set only when the config declares
 	// "required-checks" (see Linter.checkWorkflowsOf).
-	checkWorkflows checkWorkflows
+	checkWorkflows *lazyCheckWorkflows
 	// checkRel is the path of the linted workflow relative to the root of the project, empty when GitHub does not run
 	// the file as a workflow. It is set with checkWorkflows.
 	checkRel string

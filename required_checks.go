@@ -169,8 +169,11 @@ func (ws checkWorkflows) sortedPaths() []string {
 	return ps
 }
 
+// lazyCheckWorkflows are the workflows of a repository, read once per run and shared by the files linted in parallel.
+// The syntax trees cache what they parse (String.exprCache) without a lock, so whoever reads them holds mu.
 type lazyCheckWorkflows struct {
 	once sync.Once
+	mu   sync.Mutex
 	ws   checkWorkflows
 }
 
@@ -241,8 +244,10 @@ func literalMatrix(m *Matrix) ([]map[string]string, bool) {
 		var next []map[string]string
 		for _, c := range combos {
 			for _, v := range row.Values {
+				// GitHub prints a value from what it means: an unquoted 1.10 is the number 1.1. A value whose text is not
+				// what GitHub prints is not literal.
 				s, ok := v.(*RawYAMLString)
-				if !ok || ContainsExpression(s.Value) || strings.Contains(s.Value, ", ") || strings.ContainsAny(s.Value, "()") {
+				if !ok || !isStableMatrixString(s) || strings.Contains(s.Value, ", ") || strings.ContainsAny(s.Value, "()") {
 					return nil, false
 				}
 				n := make(map[string]string, len(c)+1)
@@ -272,20 +277,20 @@ func valueSetKey(vs []string) string {
 func templateRegexp(name string, matrix bool) *regexp.Regexp {
 	var b strings.Builder
 	b.WriteString("^")
-	rest := name
-	for {
-		i := strings.Index(rest, "${{")
-		if i < 0 {
-			b.WriteString(regexp.QuoteMeta(rest))
-			break
-		}
-		b.WriteString(regexp.QuoteMeta(rest[:i]))
+	// The expression lexer finds where each expression ends, also when a string in it has "}}". A fresh String keeps
+	// the parse out of the caches of the shared syntax trees.
+	c := (&String{Value: name}).placeholders()
+	pos := 0
+	for _, p := range c.list {
+		start := p.after - len("${{")
+		b.WriteString(regexp.QuoteMeta(name[pos:start]))
 		b.WriteString("(?s:.*)")
-		j := strings.Index(rest[i:], "}}")
-		if j < 0 {
-			break
-		}
-		rest = rest[i+j+2:]
+		pos = p.after + p.n
+	}
+	if c.failed {
+		b.WriteString("(?s:.*)") // an expression that does not parse: anything from it on
+	} else {
+		b.WriteString(regexp.QuoteMeta(name[pos:]))
 	}
 	if matrix {
 		b.WriteString(`(?: \(.*\))?`)
@@ -329,6 +334,10 @@ func bareNames(file string, w *Workflow, job *Job) nameCandidate {
 		re = templateRegexp(name, false)
 	}
 	return nameCandidate{chain: []checkJob{cj}, why: jobLabel(file, job) + " reports its unexpanded name only when GitHub skips it", match: func(s string) reach {
+		never := neverRuns(w, job, map[*Job]bool{}) != nil
+		if !never && !maySkip(job) {
+			return reachNo // the job always runs, so it is always expanded
+		}
 		if re != nil {
 			if re.MatchString(s) {
 				return reachUnknown // what GitHub shows for the name of a skipped job is not documented
@@ -338,12 +347,10 @@ func bareNames(file string, w *Workflow, job *Job) nameCandidate {
 		switch {
 		case s != name:
 			return reachNo
-		case neverRuns(w, job, map[*Job]bool{}) != nil:
+		case never:
 			return reachYes
-		case maySkip(job):
-			return reachUnknown
 		}
-		return reachNo
+		return reachUnknown
 	}}
 }
 
@@ -377,18 +384,16 @@ func ownNames(file string, w *Workflow, job *Job) nameCandidate {
 		// A name that is text and matrix values only is computed for each combination; any other expression is not
 		if literal && !ContainsExpression(reMatrixRef.ReplaceAllString(name, "")) {
 			names := map[string]bool{}
+			resolved := true // every reference names a key of the matrix
 			for _, c := range combos {
-				ok := true
 				n := reMatrixRef.ReplaceAllStringFunc(name, func(ref string) string {
 					v, found := c[strings.ToLower(reMatrixRef.FindStringSubmatch(ref)[1])]
-					ok = ok && found
+					resolved = resolved && found
 					return v
 				})
-				if ok {
-					names[n] = true
-				}
+				names[n] = true // combinations may share a name
 			}
-			if len(names) == len(combos) {
+			if resolved {
 				return nameCandidate{chain: []checkJob{cj}, match: func(s string) reach {
 					if names[s] {
 						return reachYes
@@ -463,8 +468,35 @@ func callNames(caller nameCandidate, callee nameCandidate) nameCandidate {
 // maxReusableNesting is how deep reusable workflows can be nested on GitHub.
 const maxReusableNesting = 10
 
-// jobCandidates returns the names that the job reports, following the local reusable workflow it calls.
-func jobCandidates(ws checkWorkflows, file string, w *Workflow, job *Job, depth int) []nameCandidate {
+// maxNameCandidates bounds the names that the reusable workflows of one job expand to. A workflow that calls others
+// many times multiplies them; beyond the bound the names of the job are unknown.
+const maxNameCandidates = 2000
+
+// candidateWalk is the state of the expansion of the names of the jobs of one workflow.
+type candidateWalk struct {
+	ws checkWorkflows
+	// active are the workflows on the path of calls being expanded: a workflow that calls itself is a cycle, which
+	// GitHub rejects.
+	active map[string]bool
+	n      int // the candidates made so far
+}
+
+// jobCandidates returns the names that the job reports, following the local reusable workflows it calls.
+func jobCandidates(ws checkWorkflows, file string, w *Workflow, job *Job) []nameCandidate {
+	cw := &candidateWalk{ws: ws, active: map[string]bool{file: true}}
+	cs := cw.job(file, w, job, 0)
+	if cw.n > maxNameCandidates {
+		return []nameCandidate{{chain: []checkJob{{file: file, w: w, job: job}}, why: jobLabel(file, job) + " calls reusable workflows that expand to too many jobs", match: func(string) reach { return reachUnknown }}}
+	}
+	return cs
+}
+
+func (cw *candidateWalk) job(file string, w *Workflow, job *Job, depth int) []nameCandidate {
+	ws := cw.ws
+	if cw.n > maxNameCandidates {
+		return nil
+	}
+	cw.n++
 	own := ownNames(file, w, job)
 	calls := job.WorkflowCall != nil && job.WorkflowCall.Uses != nil
 	var bare []nameCandidate
@@ -489,9 +521,14 @@ func jobCandidates(ws checkWorkflows, file string, w *Workflow, job *Job, depth 
 	if !ok {
 		return unknownCallee(fmt.Sprintf("%s calls %q, which is not a workflow of the repository", jobLabel(file, job), uses))
 	}
+	if cw.active[target.path] {
+		return unknownCallee(fmt.Sprintf("%s calls %q, which is already on the path of calls (a cycle)", jobLabel(file, job), uses))
+	}
+	cw.active[target.path] = true
+	defer delete(cw.active, target.path)
 	ret := bare
 	for _, id := range jobIDsInOrder(callee) {
-		for _, c := range jobCandidates(ws, target.path, callee, callee.Jobs[id], depth+1) {
+		for _, c := range cw.job(target.path, callee, callee.Jobs[id], depth+1) {
 			ret = append(ret, callNames(own, c))
 		}
 	}
@@ -523,8 +560,23 @@ type checkSource struct {
 type checkResolution struct {
 	// sources report the name for sure when their workflow runs.
 	sources []checkSource
-	// maybe are the reasons why other jobs may report it.
-	maybe []string
+	// maybe are the jobs that may report it, with the reason it is not known.
+	maybe []maybeSource
+}
+
+// maybeSource is a path from a workflow to a job that may report the check.
+type maybeSource struct {
+	root string
+	w    *Workflow
+	why  string
+}
+
+// firstMaybe returns why the first job that may report the check does, or "".
+func (r *checkResolution) firstMaybe() string {
+	if len(r.maybe) == 0 {
+		return ""
+	}
+	return r.maybe[0].why
 }
 
 func resolveCheck(ws checkWorkflows, name string) *checkResolution {
@@ -535,12 +587,12 @@ func resolveCheck(ws checkWorkflows, name string) *checkResolution {
 			continue // its jobs report checks under the names of their callers
 		}
 		for _, id := range jobIDsInOrder(w) {
-			for _, c := range jobCandidates(ws, p, w, w.Jobs[id], 0) {
+			for _, c := range jobCandidates(ws, p, w, w.Jobs[id]) {
 				switch c.match(name) {
 				case reachYes:
 					res.sources = append(res.sources, checkSource{root: p, w: w, chain: c.chain})
 				case reachUnknown:
-					res.maybe = append(res.maybe, c.why)
+					res.maybe = append(res.maybe, maybeSource{root: p, w: w, why: c.why})
 				}
 			}
 		}
@@ -640,8 +692,10 @@ func neverRuns(w *Workflow, job *Job, seen map[*Job]bool) *Job {
 	if isStaticallyFalse(job.If) {
 		return job
 	}
+	// Any status check function, success() included, replaces the implicit success(): such a job may run after a job
+	// it needs was skipped (`!success()`), so only a condition without one is known to skip it
 	cond, ok := conditionExprs(job.If)
-	if !ok || callsStatusFunction(cond, false) {
+	if !ok || callsStatusFunction(cond, true) {
 		return nil
 	}
 	for _, n := range job.Needs {
@@ -1008,7 +1062,7 @@ func analyzeRequiredCheck(ws checkWorkflows, rc *RequiredCheck, declared string)
 	res := resolveCheck(ws, rc.Name)
 	if len(res.sources) == 0 {
 		if len(res.maybe) > 0 {
-			v.unknown = "no job reports it for sure, and " + res.maybe[0]
+			v.unknown = "no job reports it for sure, and " + res.firstMaybe()
 			return v
 		}
 		v.unresolved = true
@@ -1050,7 +1104,7 @@ func analyzeRequiredCheck(ws checkWorkflows, rc *RequiredCheck, declared string)
 	}
 	if len(live) == 0 {
 		if len(res.maybe) > 0 {
-			v.unknown = "the jobs that report it never run, and " + res.maybe[0]
+			v.unknown = "the jobs that report it never run, and " + res.firstMaybe()
 			return v
 		}
 		for _, b := range dead {
@@ -1088,8 +1142,14 @@ func analyzeRequiredCheck(ws checkWorkflows, rc *RequiredCheck, declared string)
 		if reported {
 			continue
 		}
-		if unknown == "" && len(res.maybe) > 0 {
-			unknown = res.maybe[0]
+		// A job whose name is not known may report the check, but only when its workflow may start for the change
+		for _, m := range res.maybe {
+			if unknown != "" {
+				break
+			}
+			if t, _, _ := starts(m.root, m.w, sc); t != reachNo {
+				unknown = m.why
+			}
 		}
 		decided[g] = true
 		if unknown != "" {
@@ -1144,6 +1204,17 @@ func pathGap(live []checkSource, sc checkScenario) string {
 		h := eventHook(s.w, sc.event)
 		if sc.event == "merge_group" || h.Paths.IsEmpty() && h.PathsIgnore.IsEmpty() {
 			return "" // the workflow starts whatever the change
+		}
+		for _, f := range []*WebhookEventFilter{h.Paths, h.PathsIgnore} {
+			if f == nil {
+				continue
+			}
+			for _, v := range f.Values {
+				if strings.HasPrefix(v.Value, "!") || ContainsExpression(v.Value) {
+					// a negation is applied in order, and an expression is not known: nothing is proven
+					return fmt.Sprintf("jactionlint cannot evaluate the path filters of %q in %s", sc.event, s.root)
+				}
+			}
 		}
 		if h.Paths.IsEmpty() {
 			ignoreOnly = append(ignoreOnly, h.PathsIgnore)
