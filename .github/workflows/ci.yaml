@@ -51,8 +51,12 @@ jobs:
             go-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'mise.toml') }}-
       - parallel:
           - name: Test Go packages with race detector
-            if: matrix.os == 'ubuntu-latest'
+            if: matrix.os == 'ubuntu-latest' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
             run: go test -race ./...
+          # On main the same run goes through jouet so its timing is recorded.
+          - name: Test Go packages with race detector and jouet
+            if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+            run: JOUET_TEST_BASELINE=off jouet test --display human --cmd -- go test -race ./...
           - name: Test Go packages
             if: matrix.os == 'macos-latest'
             run: go test ./...
@@ -71,6 +75,16 @@ jobs:
               CGO_ENABLED: 0
           - name: Build with race instrumentation
             run: go build -race -o jactionlint-race ./cmd/jactionlint
+      - name: Bundle test timings from jouet
+        if: always() && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: git bundle create "$RUNNER_TEMP/cost-${{ github.job }}-${{ strategy.job-index }}.bundle" refs/notes/jouet-cost || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        with:
+          name: jouet-cost-${{ github.job }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/cost-${{ github.job }}-${{ strategy.job-index }}.bundle
+          if-no-files-found: ignore
       - name: Save Go build and test cache
         if: always() && steps.go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -129,6 +143,51 @@ jobs:
   # Aggregator that required-status-checks can target. If any upstream job
   # failed or was skipped, this job exits non-zero so the PR is blocked. Lets
   # the branch-protection rule depend on one name instead of the whole matrix.
+  # Pushes the timings that the Ubuntu unit-tests job recorded on main. It is its
+  # own job so the jobs that run pull request code never hold a write token, and
+  # nothing waits on it.
+  jouet-cost:
+    name: jouet-cost
+    needs: [unit-tests]
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false # the token reaches only the push step
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: jouet
+          github_token: ""  # the job token can write, so the install gets none
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          pattern: jouet-cost-*
+          merge-multiple: true
+          path: jouet-cost-bundles
+      - name: Merge and push the timings
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $auth"
+          n=0
+          for b in jouet-cost-bundles/*.bundle; do
+            [ -e "$b" ] || continue
+            jouet cost fetch "./$b"
+            n=$((n + 1))
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "No timing bundles were uploaded; nothing to push."
+            exit 0
+          fi
+          jouet cost push
+
   final:
     name: final
     needs: [unit-tests, wasm, lint, docker]
