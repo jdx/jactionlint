@@ -3227,11 +3227,11 @@ A matrix job or a reusable workflow call that GitHub skips reports its bare name
 
 **Cannot determine.** When the answer depends on something the rule does not evaluate, it reports a finding at level `info` at the declaration instead of an error. It says what it could not decide:
 
-- a job name with an expression other than the matrix context, or a matrix that is not a literal list (an expression, `include` or `exclude`, or a value such as an unquoted `1.10`, which GitHub prints as `1.1`);
-- a reusable workflow of another repository, one that is not in the repository, a cycle of calls, or calls that expand to too many jobs;
+- a job name with an expression other than the matrix context, or a matrix that is not a literal list of scalars: an expression, `include` or `exclude`, an object or a list as a value, a value with `, ` or parentheses, a value such as an unquoted `1.10` (which GitHub prints as `1.1`), or more than 256 combinations;
+- a reusable workflow of another repository, one that is not in the repository, a `uses:` with `${{ }}`, calls nested deeper than GitHub's limit of 10, a cycle of calls, or calls that expand to more than 2000 names;
 - an entry of a filter with `${{ }}`, an entry that starts with `!` (GitHub applies negations in order), a pattern the rule cannot translate, or a match that depends on the case of letters;
 - a `branches` or `branches-ignore` filter when the declaration has no `branches`, and a branch filter of `push`, which matches the pushed branch;
-- `paths` filters that every example change passes but that do not match every file (`**`), unless a workflow with only `paths-ignore` lists the same entries;
+- `paths` filters that every example change passes but that do not match every file (an entry `**`, `**/*` or `**/**`), unless a workflow with only `paths-ignore` lists the same entries;
 - the bare name of a matrix job or a reusable workflow call that may be skipped.
 
 **Path filters of actions.** Only the trigger filters of `on:` are evaluated, here and in [`unmatched-paths-filter`](#check-unmatched-paths-filter). The YAML that a step passes to an action input, such as the `filters` input of a paths-filter action, is a value of that action. It is not a GitHub trigger filter, and its globs follow the rules of that action. Neither rule reads or validates it. A job that such a step skips still reports its check.
