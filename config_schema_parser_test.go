@@ -64,12 +64,18 @@ func TestConfigSchemaAgreesWithTheParser(t *testing.T) {
 		"self-hosted-runner:\n  labels: [a]\n  strict-labels: true\n", "self-hosted-runner:\n  providers: [depot, Blacksmith, WARPBUILD]\n",
 		"self-hosted-runner:\n  providers: []\n", "self-hosted-runner:\n  providers:\n", "paths:\n  '**/*.yaml':\n    ignore: [a, 'b.*']\n",
 		"required-actions:\n  - action: actions/checkout\n    version: v4\n", "assume-default-permissions: restricted\n", "generated-files: skip\n",
+		"required-checks:\n  - name: CI gate\n", "required-checks:\n  - name: test (ubuntu-latest, 20)\n    events: [pull_request, merge_group]\n    branches: [main, release-1.2]\n",
 		"fix:\n  rules: ["+plain+"]\n", "online-options:\n  mode: cache,strict\n  retries: 3\n  cache-ttl: 1h\n  deny: [a/b]\n",
 		"rules:\n", "", "\n", "# only a comment\n", "---\n", "---\n# a comment\n", "---\n...\n", "null\n", "~\n")
 	add(false, "[]\n", "a\n", "5\n", "- profile: default\n", "profile: bogus\n", "profile: [default]\n", "online: maybe\n", "baseline: [a]\n", "extends: a.yaml\n",
 		"config-variables: A\n", "config-secrets: 1\n", "self-hosted-runner:\n  labels: a\n", "self-hosted-runner:\n  label: [a]\n",
 		"self-hosted-runner:\n  providers: [nope]\n", "self-hosted-runner:\n  providers: depot\n", "self-hosted-runner:\n  providers: [depotx]\n",
 		"paths:\n  a:\n    ignored: [a]\n", "required-actions:\n  - version: v4\n", "required-actions:\n  - action: a/b\n    extra: 1\n",
+		"required-checks:\n  - events: [pull_request]\n", "required-checks:\n  - name: ''\n", "required-checks:\n  - name: '  '\n",
+		"required-checks:\n  - name: x\n    events: []\n", "required-checks:\n  - name: x\n    events: [issues]\n",
+		"required-checks:\n  - name: x\n    branches: []\n", "required-checks:\n  - name: x\n    branches: ['release/*']\n",
+		"required-checks:\n  - name: x\n    branches: ['${{ vars.B }}']\n", "required-checks:\n  - name: x\n    workflow: ci.yaml\n",
+		"required-checks: x\n",
 		"assume-default-permissions: always\n", "generated-files: sometimes\n", "fix:\n  rules: [nope]\n", "online-options:\n  mode: sometimes\n",
 		"online-options:\n  retries: -1\n", "online-options:\n  nope: 1\n", "unknown-key: 1\n")
 

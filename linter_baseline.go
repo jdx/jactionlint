@@ -238,6 +238,8 @@ func (l *Linter) WriteBaseline(files []string, path string) (*WriteBaselineResul
 	if err != nil {
 		return nil, err
 	}
+	// The declarations of required checks are judged at the end of the run, in the config file
+	results = l.finishRequiredChecksRun(results)
 
 	bl := &Baseline{Version: baselineVersion}
 	for _, r := range results {

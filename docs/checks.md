@@ -3211,15 +3211,17 @@ Output:
 
 **What is reported.** Each finding is a proven way for the check to stay pending, located where the fix goes, with a change that shows it:
 
-- At the declaration in the config file: no job of the repository reports the name. The message suggests a reported name that differs only in case or that a reusable workflow prefixes with its caller, such as `ci / unit` for `unit`. This finding needs the config file, so it is reported when you lint files of the repository, and not for an example that passes the configuration directly.
+- At the declaration in the config file: no job of the repository reports the name. The message suggests a reported name that differs only in case, that a reusable workflow prefixes with its caller, such as `ci / unit` for `unit`, or that a matrix expands. The declaration is judged against the workflows as they are linted, so the content that an editor passes in counts, not only the files on the disk. This finding needs the config file, so it is reported when you lint files of the repository, and not for an example that passes the configuration directly. A [baseline](./baseline.md) can accept it like any other finding.
 - At `on:`: no workflow that reports the check runs on an event in `events`.
 - At `types`: a `pull_request` or `pull_request_target` filter without `opened` or `synchronize`. A pushed commit then gets no check.
 - At `branches` or at an entry of `branches-ignore`: the filter excludes a branch listed in `branches` of the declaration.
-- At `paths` or at an entry of `paths-ignore`: a pull request or push that changes only the example file starts no workflow that reports the check. The example is a common file such as `README.md`, or a file that an entry of the filter names.
+- At `paths` or at an entry of `paths-ignore`: a pull request or push that changes only the example file starts no workflow that reports the check. The example is a common file such as `README.md` or `package.json`, the workflow file itself, or a file that an entry of the filter names.
 - A `push` with only `tags` or `tags-ignore` never runs for a pushed branch.
 - At the `if:` of a matrix job or a reusable workflow call that never runs (`if: false`, or a needed job that never runs and no status check function), because GitHub reports such a skipped job under its bare name. This uses the same analysis of conditions as [`gate-job-skipped-on-failure`](#check-gate-job-skipped-on-failure).
 
-A change is reported only when every workflow that reports the check stays silent for it. GitHub's workaround of a second workflow with the same job name and the opposite `paths` filter therefore passes.
+A change is reported only when every workflow that reports the check stays silent for it, and only the workflows whose filters are the cause get a finding: a workflow with a job of the same name that does not run on the event is not told to add it when another workflow runs on it. GitHub's workaround of a second workflow with the same job name and the opposite `paths` filter therefore passes.
+
+A matrix job or a reusable workflow call that GitHub skips reports its bare name, such as `test` for `test (ubuntu-24.04)`. So a declaration of the bare name is satisfied when the job never runs, cannot be decided when the job may be skipped, and is reported as a name that no job reports when the job always runs, with an expanded name as the suggestion.
 
 **What is not reported.** GitHub creates a check for every job of a workflow that starts. A job skipped by its `if:`, or because a job it needs failed, reports a check that counts as passing. So a condition on a job never makes a required check pending, and the rule does not report conditional jobs. A gate that is skipped when a test fails passes the requirement instead of failing it: [`gate-job-skipped-on-failure`](#check-gate-job-skipped-on-failure) reports that. A check that reports does not prove that the tests ran: a skipped job reports success too.
 
@@ -3228,7 +3230,9 @@ A change is reported only when every workflow that reports the check stays silen
 - a job name with an expression other than the matrix context, or a matrix that is not a literal list (an expression, `include` or `exclude`);
 - a reusable workflow of another repository, or one that is not in the repository;
 - an entry of a filter with `${{ }}`, an entry that starts with `!` (GitHub applies negations in order), a pattern the rule cannot translate, or a match that depends on the case of letters;
-- a `branches` or `branches-ignore` filter when the declaration has no `branches`, and a branch filter of `push`, which matches the pushed branch.
+- a `branches` or `branches-ignore` filter when the declaration has no `branches`, and a branch filter of `push`, which matches the pushed branch;
+- `paths` filters that every example change passes but that do not match every file (`**`), unless a workflow with only `paths-ignore` lists the same entries;
+- the bare name of a matrix job or a reusable workflow call that may be skipped.
 
 **Path filters of actions.** Only the trigger filters of `on:` are evaluated, here and in [`unmatched-paths-filter`](#check-unmatched-paths-filter). The YAML that a step passes to an action input, such as the `filters` input of a paths-filter action, is a value of that action. It is not a GitHub trigger filter, and its globs follow the rules of that action. Neither rule reads or validates it. A job that such a step skips still reports its check.
 

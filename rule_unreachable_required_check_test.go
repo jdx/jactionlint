@@ -281,6 +281,13 @@ func TestRequiredCheckRunsInEveryProfile(t *testing.T) {
 }
 
 func TestParseRequiredChecks(t *testing.T) {
+	schema := string(ConfigSchema())
+	defer func() {
+		// An error message lists the events: it must not reorder the list the schema is made from
+		if string(ConfigSchema()) != schema {
+			t.Error("parsing a config changed the JSON Schema")
+		}
+	}()
 	c, err := ParseConfig([]byte("required-checks:\n  - name: CI gate\n    events: [pull_request, merge_group]\n    branches: [main]\n  - name: lint\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -300,5 +307,84 @@ func TestParseRequiredChecks(t *testing.T) {
 		if _, err := ParseConfig([]byte(tc.cfg)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("config %q: got error %v, want %q", tc.cfg, err, tc.want)
 		}
+	}
+}
+
+func TestRequiredCheckJudgesTheLintedContent(t *testing.T) {
+	// The workflow on the disk has no job "CI gate"; the content being linted (an editor buffer) adds it. Both the
+	// workflow pass and the declaration in the config file must judge the linted content.
+	onDisk := "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	root := ignoreProject(t, "required-checks:\n  - name: CI gate\n", map[string]string{"ci.yaml": onDisk})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	p, err := NewProject(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := l.Lint(filepath.Join(root, ".github", "workflows", "ci.yaml"), []byte(gateWorkflow), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unreachable-required-check"); len(got) != 0 {
+		t.Fatalf("the linted content reports the check, but got %d findings: %s", len(got), got[0].Message)
+	}
+}
+
+func TestRequiredCheckPathGapOutsideTheNamedPaths(t *testing.T) {
+	// Every path that a filter names is covered, but a change of another file starts no workflow
+	wf := "on:\n  pull_request:\n    paths: [README.md, 'docs/**', 'src/**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"ci.yaml": wf}),
+		[]string{".github/workflows/ci.yaml:3: ", `for a pull request which changes only "package.json", because no entry of "paths" of "pull_request" matches "package.json"`})
+
+	// When no example finds the gap, the rule says it cannot tell instead of passing
+	wide := "on:\n  pull_request:\n    paths: [README.md, 'docs/**', 'src/**', '*.json', '.github/**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"ci.yaml": wide}),
+		[]string{".github/jactionlint.yaml:2: info: ", "they may still skip a change of another file"})
+
+	// A filter that matches every file leaves no gap
+	all := "on:\n  pull_request:\n    paths: ['**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"ci.yaml": all}))
+}
+
+func TestRequiredCheckBareNameOfAMatrixJob(t *testing.T) {
+	matrix := func(cond string) string {
+		return "on: pull_request\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make lint\n  test:\n" + cond +
+			"    strategy:\n      matrix:\n        os: [ubuntu-latest, macos-latest]\n    runs-on: ${{ matrix.os }}\n    steps:\n      - run: make test\n"
+	}
+	cfg := "required-checks:\n  - name: test\n"
+	// A matrix job that never runs is reported under its bare name
+	expectFindings(t, lintRequiredChecks(t, cfg, map[string]string{"ci.yaml": matrix("    if: false\n")}))
+	// A matrix job that may be skipped reports its bare name only then
+	expectFindings(t, lintRequiredChecks(t, cfg, map[string]string{"ci.yaml": matrix("    needs: [lint]\n")}),
+		[]string{".github/jactionlint.yaml:2: info: ", `job "test" of .github/workflows/ci.yaml reports its unexpanded name only when GitHub skips it`})
+	// A matrix job that always runs never reports it: suggest an expanded name
+	expectFindings(t, lintRequiredChecks(t, cfg, map[string]string{"ci.yaml": matrix("")}),
+		[]string{".github/jactionlint.yaml:2: ", `reports the required check "test"`, `did you mean "test (ubuntu-latest)"?`})
+}
+
+func TestRequiredCheckBlamesOnlyTheWorkflowWhoseFilterIsTheCause(t *testing.T) {
+	// release.yaml has a job of the same name but does not run on pull requests: it is not told to add the event
+	release := "on:\n  push:\n    tags: ['v*']\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make release\n"
+	ci := "on:\n  pull_request:\n    paths: ['src/**']\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make build\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: build\n", map[string]string{"release.yaml": release, "ci.yaml": ci}),
+		[]string{".github/workflows/ci.yaml:3: ", `no entry of "paths" of "pull_request" matches "README.md"`})
+}
+
+func TestRequiredCheckDeclarationFindingsInTheBaseline(t *testing.T) {
+	root := ignoreProject(t, "baseline: auto\nrequired-checks:\n  - name: missing\n", map[string]string{"ci.yaml": gateWorkflow})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	res, err := l.WriteBaseline(nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Entries != 1 {
+		t.Fatalf("the baseline has %d entries, want the finding of the declaration", res.Entries)
+	}
+	l, _ = newIgnoreLinter(t, root, time.Now())
+	errs, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unreachable-required-check"); len(got) != 0 {
+		t.Fatalf("the baseline accepts the finding of the declaration, but got: %s", got[0].Message)
 	}
 }

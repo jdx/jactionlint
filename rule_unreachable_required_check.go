@@ -24,7 +24,7 @@ type RuleUnreachableRequiredCheck struct {
 
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleUnreachableRequiredCheck) VisitWorkflowPre(n *Workflow) error {
-	ws := rule.workflows.with(rule.rel, n)
+	ws := rule.workflows.with(map[string]*Workflow{rule.rel: n})
 	for i := range rule.checks {
 		rc := &rule.checks[i]
 		for _, p := range analyzeRequiredCheck(ws, rc, rule.declared(rc)).problems {
@@ -48,22 +48,50 @@ func declaredAt(root string, rc *RequiredCheck) string {
 	return fmt.Sprintf("%s:%d", p, rc.Line)
 }
 
-// requiredChecksRun records the configs which declare required checks in a run, with their project.
-type requiredChecksRun struct {
-	mu   sync.Mutex
-	cfgs map[*Config]*Project
+// checkWorkflowRel returns the path of a workflow file relative to the root of the repository, or false when GitHub
+// does not run the file as a workflow (it is not directly in .github/workflows).
+func checkWorkflowRel(root, abs string) (string, bool) {
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	name, ok := strings.CutPrefix(rel, ".github/workflows/")
+	if !ok || strings.Contains(name, "/") {
+		return "", false
+	}
+	return rel, true
 }
 
-func (l *Linter) trackRequiredChecks(cfg *Config, project *Project) {
-	if cfg == nil || project == nil || len(cfg.RequiredChecks) == 0 || !cfg.RuleEnabled("unreachable-required-check") {
-		return
-	}
+// requiredChecksRun records the configs which declare required checks in a run, with their project and the workflows
+// linted with them.
+type requiredChecksRun struct {
+	mu   sync.Mutex
+	cfgs map[*Config]*requiredChecksConfig
+}
+
+type requiredChecksConfig struct {
+	project *Project
+	// linted are the workflows as they were linted, which may differ from the files on the disk (Linter.Lint)
+	linted map[string]*Workflow
+}
+
+// trackRequiredChecks notes that a file is linted with a config which declares required checks. rel and w are the
+// workflow as it was linted, or empty and nil when the file is not a workflow GitHub runs.
+func (l *Linter) trackRequiredChecks(cfg *Config, project *Project, rel string, w *Workflow) {
 	l.requiredChecks.mu.Lock()
 	defer l.requiredChecks.mu.Unlock()
 	if l.requiredChecks.cfgs == nil {
-		l.requiredChecks.cfgs = map[*Config]*Project{}
+		l.requiredChecks.cfgs = map[*Config]*requiredChecksConfig{}
 	}
-	l.requiredChecks.cfgs[cfg] = project
+	rc := l.requiredChecks.cfgs[cfg]
+	if rc == nil {
+		rc = &requiredChecksConfig{project: project, linted: map[string]*Workflow{}}
+		l.requiredChecks.cfgs[cfg] = rc
+	}
+	if rel != "" && w != nil {
+		rc.linted[rel] = w
+	}
 }
 
 // checkWorkflowsOf returns the workflows of the project, read once per run.
@@ -72,6 +100,13 @@ func (l *Linter) checkWorkflowsOf(p *Project) checkWorkflows {
 	lw := v.(*lazyCheckWorkflows)
 	lw.once.Do(func() { lw.ws = readCheckWorkflows(p.root) })
 	return lw.ws
+}
+
+// declarationErrors are the findings located in one config file.
+type declarationErrors struct {
+	cfg     *Config
+	project *Project
+	errs    []*Error
 }
 
 // finishRequiredChecksRun reports the declarations of "required-checks" which no job can report, at the declaration in
@@ -85,16 +120,17 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 	if len(cfgs) == 0 {
 		return results
 	}
-	byPath := map[string][]*Error{}
-	for cfg, project := range cfgs {
+	byPath := map[string]*declarationErrors{}
+	for cfg, run := range cfgs {
 		level := cfg.RuleLevel("unreachable-required-check")
-		ws := l.checkWorkflowsOf(project)
+		// The declarations are judged against the content that was linted, so that both passes see the same workflows
+		ws := l.checkWorkflowsOf(run.project).with(run.linted)
 		for i := range cfg.RequiredChecks {
 			rc := &cfg.RequiredChecks[i]
 			if rc.Path == "" {
 				continue // the config was not read from a file: there is no place to report at
 			}
-			v := analyzeRequiredCheck(ws, rc, declaredAt(project.RootDir(), rc))
+			v := analyzeRequiredCheck(ws, rc, declaredAt(run.project.RootDir(), rc))
 			var msg string
 			sev := level
 			switch {
@@ -111,7 +147,12 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 			}
 			e := &Error{ID: "unreachable-required-check", Kind: "unreachable-required-check", Message: msg, Filepath: rc.Path, Line: max(rc.Line, 1), Column: max(rc.Column, 1), Severity: sev}
 			e.DocURL = ruleIndex["unreachable-required-check"].DocURL()
-			byPath[rc.Path] = append(byPath[rc.Path], e)
+			d := byPath[rc.Path]
+			if d == nil {
+				d = &declarationErrors{cfg: cfg, project: run.project}
+				byPath[rc.Path] = d
+			}
+			d.errs = append(d.errs, e)
 		}
 	}
 	paths := make([]string, 0, len(byPath))
@@ -120,8 +161,7 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 	}
 	sort.Strings(paths)
 	for _, p := range paths {
-		errs := byPath[p]
-		slices.SortFunc(errs, compareErrors)
+		d := byPath[p]
 		src, _ := os.ReadFile(p)
 		display := p
 		if l.cwd != "" {
@@ -130,26 +170,39 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 			}
 		}
 		lines := sourceLines(src)
-		for _, e := range errs {
+		for _, e := range d.errs {
 			e.Filepath = display
 			e.fillRegion(lines)
 		}
-		errs = l.filterErrors(errs, nil) // --ignore applies to these findings like to any other
+		errs := l.filterErrors(d.errs, nil) // --ignore applies to these findings like to any other
+		slices.SortFunc(errs, compareErrors)
+		// The baseline sees them like the findings of a workflow: before the minimum severity
+		bl, err := l.baselineFor(d.project, d.cfg)
+		if err != nil {
+			l.debug("The baseline is not applied to %s: %v", display, err)
+			bl = nil
+		}
+		l.baselineStage(display, src, d.project, bl, errs)
 		errs = slices.DeleteFunc(errs, func(e *Error) bool { return e.Severity < l.minSeverity })
-		if len(errs) == 0 {
+		visible, baselined := splitBaselined(errs)
+		if len(visible) == 0 && len(baselined) == 0 {
 			continue
 		}
 		merged := false
 		for i := range results {
 			if results[i].path == display {
-				results[i].errs = append(results[i].errs, errs...)
+				results[i].errs = append(results[i].errs, visible...)
+				results[i].baselined = append(results[i].baselined, baselined...)
 				slices.SortFunc(results[i].errs, compareErrors)
 				merged = true
 				break
 			}
 		}
 		if !merged {
-			results = append(results, fileResult{file: p, path: display, src: src, errs: errs})
+			if visible == nil {
+				visible = []*Error{}
+			}
+			results = append(results, fileResult{file: p, path: display, src: src, errs: visible, baselined: baselined})
 		}
 	}
 	return results
@@ -175,16 +228,10 @@ func init() {
 			env.Skip("the workflow does not belong to a project, so the other workflows are not known")
 			return nil
 		}
-		root := env.project.RootDir()
-		abs := env.path
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(env.cwd, abs)
-		}
-		rel, err := filepath.Rel(root, absPath(abs))
-		rel = filepath.ToSlash(rel)
-		if err != nil || !strings.HasPrefix(rel, ".github/workflows/") || strings.Contains(strings.TrimPrefix(rel, ".github/workflows/"), "/") {
+		if env.checkRel == "" {
 			return nil // not a workflow GitHub runs
 		}
+		root := env.project.RootDir()
 		return []Rule{&RuleUnreachableRequiredCheck{
 			RuleBase: RuleBase{
 				name: "unreachable-required-check",
@@ -192,7 +239,7 @@ func init() {
 			},
 			checks:    env.config.RequiredChecks,
 			workflows: env.checkWorkflows,
-			rel:       rel,
+			rel:       env.checkRel,
 			declared:  func(rc *RequiredCheck) string { return declaredAt(root, rc) },
 		}}
 	})

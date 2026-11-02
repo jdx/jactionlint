@@ -995,7 +995,8 @@ func (l *Linter) check(
 		}
 		if !isAction && project != nil && cfg != nil && len(cfg.RequiredChecks) > 0 && cfg.RuleEnabled("unreachable-required-check") {
 			env.checkWorkflows = l.checkWorkflowsOf(project)
-			l.trackRequiredChecks(cfg, project)
+			env.checkRel, _ = checkWorkflowRel(project.RootDir(), l.absFilePath(path))
+			l.trackRequiredChecks(cfg, project, env.checkRel, w)
 		}
 		rules := newBuiltinRules(env, l.log)
 		// The scripts which were counted are in the totals also when the visit fails (a command of shellcheck that

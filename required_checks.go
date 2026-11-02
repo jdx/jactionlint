@@ -92,7 +92,7 @@ func (rc *RequiredCheck) UnmarshalYAML(n *yaml.Node) error {
 			out.Events, err = strs(k, v)
 			for _, e := range out.Events {
 				if err == nil && !slices.Contains(requiredCheckEvents, e) {
-					err = fmt.Errorf("unknown event %q in \"required-checks\" at line %d, column %d. available events are %s", e, v.Line, v.Column, sortedQuotes(requiredCheckEvents))
+					err = fmt.Errorf("unknown event %q in \"required-checks\" at line %d, column %d. available events are %s", e, v.Line, v.Column, sortedQuotes(slices.Clone(requiredCheckEvents)))
 				}
 			}
 		case "branches":
@@ -147,14 +147,16 @@ func readCheckWorkflows(root string) checkWorkflows {
 	return ws
 }
 
-// with returns the workflows with the one at rel replaced by w: the file being linted, whose content may differ from
-// the disk.
-func (ws checkWorkflows) with(rel string, w *Workflow) checkWorkflows {
-	ret := make(checkWorkflows, len(ws)+1)
+// with returns the workflows with the ones in linted replaced: the files as they were linted, whose content may differ
+// from the disk.
+func (ws checkWorkflows) with(linted map[string]*Workflow) checkWorkflows {
+	ret := make(checkWorkflows, len(ws)+len(linted))
 	for k, v := range ws {
 		ret[k] = v
 	}
-	ret[rel] = w
+	for k, v := range linted {
+		ret[k] = v
+	}
 	return ret
 }
 
@@ -292,21 +294,69 @@ func templateRegexp(name string, matrix bool) *regexp.Regexp {
 	return regexp.MustCompile(b.String())
 }
 
+// jobBaseName is the name of the check of a job before a matrix or a reusable workflow expands it: its name, or its ID.
+func jobBaseName(job *Job) string {
+	if job.Name != nil {
+		return job.Name.Value
+	}
+	return job.ID.Value
+}
+
+// hasMatrix reports whether GitHub expands the job into one job per combination of a matrix.
+func hasMatrix(job *Job) bool {
+	return job.Strategy != nil && (job.Strategy.Expression != nil || job.Strategy.Matrix != nil)
+}
+
+// maySkip reports whether GitHub can skip the job: it has a condition, or it needs other jobs.
+func maySkip(job *Job) bool {
+	return (job.If != nil && !isStaticallyTrue(job.If)) || len(job.Needs) > 0
+}
+
+// isStaticallyTrue reports whether the condition is the literal true.
+func isStaticallyTrue(s *String) bool {
+	node, _, _, ok := parseWholeExpr(s)
+	return ok && evalLiteralBool(node) == condTrue
+}
+
+// bareNames returns the candidate of the name that a matrix job or a reusable workflow call reports when GitHub skips
+// it: the name before the expansion. A job that never runs reports it for sure, a job that may be skipped reports it
+// only sometimes, and a job that always runs never reports it.
+func bareNames(file string, w *Workflow, job *Job) nameCandidate {
+	cj := checkJob{file: file, w: w, job: job}
+	name := jobBaseName(job)
+	var re *regexp.Regexp
+	if ContainsExpression(name) {
+		re = templateRegexp(name, false)
+	}
+	return nameCandidate{chain: []checkJob{cj}, why: jobLabel(file, job) + " reports its unexpanded name only when GitHub skips it", match: func(s string) reach {
+		if re != nil {
+			if re.MatchString(s) {
+				return reachUnknown // what GitHub shows for the name of a skipped job is not documented
+			}
+			return reachNo
+		}
+		switch {
+		case s != name:
+			return reachNo
+		case neverRuns(w, job, map[*Job]bool{}) != nil:
+			return reachYes
+		case maySkip(job):
+			return reachUnknown
+		}
+		return reachNo
+	}}
+}
+
 // ownNames returns the candidate of the names that the job itself reports, before a reusable workflow it calls adds
 // the names of its jobs.
 func ownNames(file string, w *Workflow, job *Job) nameCandidate {
 	cj := checkJob{file: file, w: w, job: job}
-	name := job.ID.Value
-	if job.Name != nil {
-		name = job.Name.Value
-	}
+	name := jobBaseName(job)
 	var m *Matrix
-	hasMatrix := false
 	if job.Strategy != nil {
 		m = job.Strategy.Matrix
-		hasMatrix = job.Strategy.Expression != nil || m != nil
 	}
-	if !hasMatrix {
+	if !hasMatrix(job) {
 		if ContainsExpression(name) {
 			re := templateRegexp(name, false)
 			return nameCandidate{chain: []checkJob{cj}, why: jobLabel(file, job) + " has a name computed at runtime", match: func(s string) reach {
@@ -416,22 +466,30 @@ const maxReusableNesting = 10
 // jobCandidates returns the names that the job reports, following the local reusable workflow it calls.
 func jobCandidates(ws checkWorkflows, file string, w *Workflow, job *Job, depth int) []nameCandidate {
 	own := ownNames(file, w, job)
-	if job.WorkflowCall == nil || job.WorkflowCall.Uses == nil {
-		return []nameCandidate{own}
+	calls := job.WorkflowCall != nil && job.WorkflowCall.Uses != nil
+	var bare []nameCandidate
+	if hasMatrix(job) || calls {
+		bare = []nameCandidate{bareNames(file, w, job)}
+	}
+	if !calls {
+		return append([]nameCandidate{own}, bare...)
 	}
 	uses := job.WorkflowCall.Uses.Value
+	unknownCallee := func(why string) []nameCandidate {
+		return append([]nameCandidate{callNames(own, nameCandidate{why: why, match: func(string) reach { return reachUnknown }})}, bare...)
+	}
 	if depth >= maxReusableNesting || ContainsExpression(uses) {
-		return []nameCandidate{callNames(own, nameCandidate{why: jobLabel(file, job) + " calls a reusable workflow that is not known", match: func(string) reach { return reachUnknown }})}
+		return unknownCallee(jobLabel(file, job) + " calls a reusable workflow that is not known")
 	}
 	target, ok := localTarget(uses)
 	if !ok || target.kind != 'w' {
-		return []nameCandidate{callNames(own, nameCandidate{why: fmt.Sprintf("%s calls the reusable workflow %q of another repository", jobLabel(file, job), uses), match: func(string) reach { return reachUnknown }})}
+		return unknownCallee(fmt.Sprintf("%s calls the reusable workflow %q of another repository", jobLabel(file, job), uses))
 	}
 	callee, ok := ws[target.path]
 	if !ok {
-		return []nameCandidate{callNames(own, nameCandidate{why: fmt.Sprintf("%s calls %q, which is not a workflow of the repository", jobLabel(file, job), uses), match: func(string) reach { return reachUnknown }})}
+		return unknownCallee(fmt.Sprintf("%s calls %q, which is not a workflow of the repository", jobLabel(file, job), uses))
 	}
-	var ret []nameCandidate
+	ret := bare
 	for _, id := range jobIDsInOrder(callee) {
 		for _, c := range jobCandidates(ws, target.path, callee, callee.Jobs[id], depth+1) {
 			ret = append(ret, callNames(own, c))
@@ -517,6 +575,9 @@ func suggestChecks(ws checkWorkflows, name string) []string {
 			}
 			if strings.EqualFold(own, name) || strings.EqualFold(id, name) {
 				add(own)
+				if ex, ok := expandedExample(j); ok && own == name {
+					add(ex) // a matrix job reports its bare name only when it is skipped
+				}
 			}
 			if j.WorkflowCall == nil || j.WorkflowCall.Uses == nil {
 				continue
@@ -537,6 +598,33 @@ func suggestChecks(ws checkWorkflows, name string) []string {
 		}
 	}
 	return ret
+}
+
+// expandedExample returns the name of the check of the first combination of a literal matrix, with the values in the
+// order of the keys in the file.
+func expandedExample(job *Job) (string, bool) {
+	if !hasMatrix(job) || job.Strategy.Expression != nil {
+		return "", false
+	}
+	m := job.Strategy.Matrix
+	if _, ok := literalMatrix(m); !ok {
+		return "", false
+	}
+	rows := make([]*MatrixRow, 0, len(m.Rows))
+	for _, r := range m.Rows {
+		rows = append(rows, r)
+	}
+	slices.SortFunc(rows, func(a, b *MatrixRow) int {
+		if a.Name.Pos.IsBefore(b.Name.Pos) {
+			return -1
+		}
+		return 1
+	})
+	vs := make([]string, 0, len(rows))
+	for _, r := range rows {
+		vs = append(vs, r.Values[0].(*RawYAMLString).Value)
+	}
+	return jobBaseName(job) + " (" + strings.Join(vs, ", ") + ")", true
 }
 
 // --- jobs which never run ------------------------------------------------------------------
@@ -586,7 +674,7 @@ type checkScenario struct {
 	event    string
 	activity string // "opened" or "synchronize" for a pull request, else empty
 	branch   string // the base branch, empty when it is not declared
-	path     string // the only changed file
+	path     string // the only changed file, empty to leave the path filters out
 }
 
 // blame is why a workflow does not start for a scenario.
@@ -751,6 +839,9 @@ func starts(file string, w *Workflow, sc checkScenario) (reach, *blame, string) 
 	}
 	switch sc.event {
 	case "pull_request", "pull_request_target", "push":
+		if sc.path == "" {
+			break // the scenario asks about the other filters only
+		}
 		if !h.Paths.IsEmpty() {
 			switch t, _ := filterIncludes(h.Paths, sc.path, true); t {
 			case reachNo:
@@ -816,8 +907,8 @@ func witnessPath(pat string) string {
 	return p
 }
 
-// genericChangedPaths are the files a scenario may change besides the ones that the filters name.
-var genericChangedPaths = []string{"README.md", "docs/index.md", "src/main.go"}
+// genericChangedPaths are the files a scenario may change besides the ones that the filters name and the workflow files.
+var genericChangedPaths = []string{"README.md", "docs/index.md", "src/main.go", "package.json"}
 
 // scenarios returns the changes to try for the declaration: each event, activity and branch, and each changed file
 // that the path filters of the workflows that report the check make interesting.
@@ -825,6 +916,11 @@ func scenarios(rc *RequiredCheck, sources []checkSource) []checkScenario {
 	var ret []checkScenario
 	for _, ev := range rc.events() {
 		paths := slices.Clone(genericChangedPaths)
+		for _, s := range sources {
+			if !slices.Contains(paths, s.root) {
+				paths = append(paths, s.root) // a change of the workflow itself
+			}
+		}
 		for _, s := range sources {
 			if h := eventHook(s.w, ev); h != nil {
 				for _, f := range []*WebhookEventFilter{h.Paths, h.PathsIgnore} {
@@ -962,7 +1058,14 @@ func analyzeRequiredCheck(ws checkWorkflows, rc *RequiredCheck, declared string)
 		}
 		return v
 	}
+	type group struct{ event, activity, branch string }
+	var groups []group
+	decided := map[group]bool{} // a change of the group is reported, or cannot be decided
 	for _, sc := range scenarios(rc, live) {
+		g := group{sc.event, sc.activity, sc.branch}
+		if !slices.Contains(groups, g) {
+			groups = append(groups, g)
+		}
 		var blames []*blame
 		unknown := ""
 		reported := false
@@ -988,15 +1091,85 @@ func analyzeRequiredCheck(ws checkWorkflows, rc *RequiredCheck, declared string)
 		if unknown == "" && len(res.maybe) > 0 {
 			unknown = res.maybe[0]
 		}
+		decided[g] = true
 		if unknown != "" {
 			if v.unknown == "" {
 				v.unknown = unknown
 			}
 			continue
 		}
+		// When a workflow that reports the check runs on the event, its filters are the cause: adding the event to
+		// another workflow with a job of the same name is not the fix
+		subscribed := false
+		for _, s := range live {
+			subscribed = subscribed || eventHook(s.w, sc.event) != nil
+		}
 		for _, b := range blames {
+			if subscribed && b.kind == "event" {
+				continue
+			}
 			add(b, sc.describe(b.kind))
 		}
 	}
+	// The changed files tried are examples. When none of them is skipped by every workflow, the path filters may still
+	// leave a file uncovered: say so unless the filters prove that every file starts a workflow.
+	for _, g := range groups {
+		if decided[g] || v.unknown != "" {
+			continue
+		}
+		if why := pathGap(live, checkScenario{event: g.event, activity: g.activity, branch: g.branch}); why != "" {
+			v.unknown = why
+		}
+	}
 	return v
+}
+
+// matchesEveryPath reports whether an entry of `paths` matches every file.
+func matchesEveryPath(pat string) bool {
+	return pat == "**" || pat == "**/*" || pat == "**/**"
+}
+
+// pathGap tells whether the path filters of the workflows that start for the scenario (all but the path filters) may
+// leave a changed file that starts none of them, when no example change found one. It returns why it cannot tell, or
+// "" when every file starts one of them.
+func pathGap(live []checkSource, sc checkScenario) string {
+	var includes []string
+	var ignoreOnly []*WebhookEventFilter
+	started := false
+	for _, s := range live {
+		if t, _, _ := starts(s.root, s.w, sc); t != reachYes {
+			continue
+		}
+		started = true
+		h := eventHook(s.w, sc.event)
+		if sc.event == "merge_group" || h.Paths.IsEmpty() && h.PathsIgnore.IsEmpty() {
+			return "" // the workflow starts whatever the change
+		}
+		if h.Paths.IsEmpty() {
+			ignoreOnly = append(ignoreOnly, h.PathsIgnore)
+			continue
+		}
+		for _, v := range h.Paths.Values {
+			if matchesEveryPath(v.Value) {
+				return ""
+			}
+			includes = append(includes, v.Value)
+		}
+	}
+	if !started {
+		return ""
+	}
+	// A workflow with only `paths-ignore` starts for every file but the ignored ones. When each of its entries is an
+	// entry of `paths` of another workflow (GitHub's workaround of two workflows with opposite filters), the two
+	// together start for every file.
+	for _, ig := range ignoreOnly {
+		covered := true
+		for _, v := range ig.Values {
+			covered = covered && slices.Contains(includes, v.Value)
+		}
+		if covered {
+			return ""
+		}
+	}
+	return "no example change jactionlint tried is skipped by the path filters of every workflow that reports it, but they may still skip a change of another file"
 }
