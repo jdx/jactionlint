@@ -151,6 +151,11 @@ func ConfigSchema() []byte {
 			"action":  sStr("The name of the action, like actions/checkout, without @version. A sub-path is part of the name. It is case-insensitive."),
 			"version": sStr("The exact ref (tag, branch or commit SHA) which one use of the action must have. Any version is accepted when it is omitted."),
 		}, "action")),
+		"required-checks": sArray("The check names which branch protection or a ruleset requires. unreachable-required-check reports a name that no job reports, and a trigger filter that keeps GitHub from starting the job which reports it, so that the check stays pending.", sObject("A required check.", jsonObject{
+			"name":     sStr("The name of the check as GitHub shows it: the name of the job (or its ID), with the matrix values in parentheses, or \"caller / callee\" for a job of a reusable workflow. The comparison is exact."),
+			"events":   sArray("The events the check is required for. The default is [pull_request].", jsonObject{"type": "string", "enum": requiredCheckEvents}),
+			"branches": sStrings("The literal names of the base branches the requirement protects, such as main. Without them the branch filters of the workflows are not judged."),
+		}, "name")),
 		"assume-default-permissions": sEnum("What to assume for a caller workflow which declares no permissions: restricted is GitHub's restricted default token, permissive is write on every scope except id-token. Unset assumes nothing.", AssumeDefaultPermissionsRestricted, AssumeDefaultPermissionsPermissive),
 		"platform":                   sEnum("The system which runs the workflows: github (the default), or forgejo or gitea, which also accept `uses: https://host/owner/repo@ref` for an action. That form stays an error on github.", PlatformGitHub, PlatformForgejo, PlatformGitea),
 		"generated-files": jsonObject{

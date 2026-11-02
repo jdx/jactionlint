@@ -256,9 +256,11 @@ type Linter struct {
 	selected       sync.Map // *Config -> *Config: the configs with --select applied
 	selectIDs      map[string]bool
 	noIgnores      bool
-	warned         sync.Map    // *Config -> struct{}: configs whose deprecations were already reported
-	graphs         sync.Map    // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
-	locks          sync.Map    // root directory -> *sync.Once-guarded *actionsLock, see actionsLockOf
+	warned         sync.Map // *Config -> struct{}: configs whose deprecations were already reported
+	graphs         sync.Map // root directory -> *sync.Once-guarded *callGraph, see callGraphOf
+	locks          sync.Map // root directory -> *sync.Once-guarded *actionsLock, see actionsLockOf
+	checkWorkflows sync.Map // root directory -> *lazyCheckWorkflows, see checkWorkflowsOf
+	requiredChecks requiredChecksRun
 	runHints       bool        // LinterOptions.RunHints
 	hintBaseline   atomic.Bool // a baseline was applied to a file
 	// hintBeyondCorrectness is true when a file was linted with a profile above correctness
@@ -685,7 +687,7 @@ func (l *Linter) LintFiles(filepaths []string, project *Project) ([]*Error, erro
 // finishRun adds the results which belong to the run and not to a file: the problems of the ignores of
 // the config files (expired and unused entries) and the unused entries of the baseline files.
 func (l *Linter) finishRun(results []fileResult) []fileResult {
-	return l.filterChanged(l.withBaselineResults(l.finishIgnoreRun(results)))
+	return l.filterChanged(l.withBaselineResults(l.finishRequiredChecksRun(l.finishIgnoreRun(results))))
 }
 
 // lintFilesQuietly lints the files in parallel and returns the results without printing them. The
@@ -990,6 +992,10 @@ func (l *Linter) check(
 			cwd:                    l.cwd,
 			proc:                   proc,
 			now:                    l.now,
+		}
+		if !isAction && project != nil && cfg != nil && len(cfg.RequiredChecks) > 0 && cfg.RuleEnabled("unreachable-required-check") {
+			env.checkWorkflows = l.checkWorkflowsOf(project)
+			l.trackRequiredChecks(cfg, project)
 		}
 		rules := newBuiltinRules(env, l.log)
 		// The scripts which were counted are in the totals also when the visit fails (a command of shellcheck that

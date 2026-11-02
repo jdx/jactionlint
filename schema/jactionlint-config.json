@@ -242,6 +242,7 @@
               "unpinned-images",
               "unpinned-tools",
               "unpinned-uses",
+              "unreachable-required-check",
               "unredacted-secrets",
               "unsound-contains",
               "unsound-prefix-match",
@@ -482,6 +483,7 @@
                   "unpinned-images",
                   "unpinned-tools",
                   "unpinned-uses",
+                  "unreachable-required-check",
                   "unredacted-secrets",
                   "unsound-contains",
                   "unsound-prefix-match",
@@ -649,6 +651,7 @@
                     "unpinned-images",
                     "unpinned-tools",
                     "unpinned-uses",
+                    "unreachable-required-check",
                     "unredacted-secrets",
                     "unsound-contains",
                     "unsound-prefix-match",
@@ -901,6 +904,47 @@
         },
         "required": [
           "action"
+        ],
+        "type": "object"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "required-checks": {
+      "description": "The check names which branch protection or a ruleset requires. unreachable-required-check reports a name that no job reports, and a trigger filter that keeps GitHub from starting the job which reports it, so that the check stays pending.",
+      "items": {
+        "additionalProperties": false,
+        "description": "A required check.",
+        "properties": {
+          "branches": {
+            "description": "The literal names of the base branches the requirement protects, such as main. Without them the branch filters of the workflows are not judged.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "events": {
+            "description": "The events the check is required for. The default is [pull_request].",
+            "items": {
+              "enum": [
+                "pull_request",
+                "pull_request_target",
+                "merge_group",
+                "push"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "The name of the check as GitHub shows it: the name of the job (or its ID), with the matrix values in parentheses, or \"caller / callee\" for a job of a reusable workflow. The comparison is exact.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -4219,6 +4263,28 @@
                   "default": false,
                   "description": "Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).",
                   "type": "boolean"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "unreachable-required-check": {
+          "description": "A check listed in required-checks is reported by no job, or a trigger filter keeps its workflow from starting, so the check stays pending. Group: correctness. Runs only when configured. Default level: error. https://jactionlint.jdx.dev/rules#unreachable-required-check",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/level"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "level": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/severity"
+                    }
+                  ],
+                  "description": "The level of the rule: error, warn, info or off."
                 }
               },
               "type": "object"

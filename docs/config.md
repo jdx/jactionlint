@@ -100,7 +100,7 @@ The profile of each rule is in the Profile column of [the rules page](./rules.md
 
 These cases sit outside the plain rule sets of the profiles:
 
-- The opt-in rules belong to no profile and run only when the config file turns them on. They report nothing until you give them their setting: `forbidden-uses` needs `allow`, `deny`, `images-allow` or `images-deny`, `required-actions` needs the `required-actions` list, and `timeout-too-long` needs its option `max`. Writing the setting turns the rule on at its default level: the option in the `rules` entry of the rule, or, for `required-actions`, the top-level list.
+- The opt-in rules belong to no profile and run only when the config file turns them on. They report nothing until you give them their setting: `forbidden-uses` needs `allow`, `deny`, `images-allow` or `images-deny`, `required-actions` needs the `required-actions` list, `unreachable-required-check` needs the `required-checks` list, and `timeout-too-long` needs its option `max`. Writing the setting turns the rule on at its default level, in every profile: the option in the `rules` entry of the rule, or, for `required-actions` and `unreachable-required-check`, the top-level list.
 - The online rules do not follow a profile either. They run at their own level when the [online checks](./online.md#online-checks) are on.
 - The option `pedantic` turns the noisier findings of a rule on or off. Unset, it is true under the `pedantic` profile and false otherwise, so `rules: {template-injection: {pedantic: true}}` reports the noisier findings of that rule under the `default` profile, and `pedantic: false` turns them off under the `pedantic` profile. [The rules page](./rules.md#rules) shows the option in the rules that have it.
 
@@ -235,6 +235,7 @@ Every top-level key of the config file is in this table with its type, its defau
 | `config-variables` | list of strings, or `null` | `null` (no check) | none | The names that the `vars` context may use. See [Variables and secrets](#variables-and-secrets). |
 | `config-secrets` | list of strings, or `null` | `null` (no check) | none | The names that the `secrets` context may use. See [Variables and secrets](#variables-and-secrets). |
 | `required-actions` | list of mappings | empty (no check) | none | Actions that every workflow must use. See [Required actions](#required-actions). |
+| `required-checks` | list of mappings | empty (no check) | none | The checks that branch protection or a ruleset requires. See [Required checks](#required-checks). |
 | `assume-default-permissions` | `restricted` or `permissive` | unset | none | The token permissions to assume for a caller that sets none. See [Permissions](#permissions). |
 | `platform` | `github`, `forgejo` or `gitea` | `github` | none | The system that runs the workflows. See [Platform](#platform). |
 | `generated-files` | `report`, `skip-policy` or `skip` | `skip-policy` | none | What to do with files that a tool wrote. See [Generated files](#generated-files). |
@@ -299,6 +300,26 @@ required-actions:
 | `required-actions[].version` | string | any version | The ref (tag, branch or commit SHA), compared exactly. The requirement is satisfied when at least one use of the action has this ref. |
 
 Local actions and Docker images never match. Only workflow files are checked. The steps of composite action files (`action.yml`) are not ([composite actions](./checks.md#check-composite-actions)).
+
+### Required checks
+
+`required-checks` lists the checks that branch protection or a ruleset of the repository requires, and the changes they are required for. GitHub waits forever for a required check that no job reports, for example when a `paths` filter keeps the workflow from starting. The rule [`unreachable-required-check`](./checks.md#check-unreachable-required-check) reports such a check. It runs, in every profile, when the list is not empty. The list is local: jactionlint does not read the settings of the repository from GitHub, so keep it in step with them.
+
+```yaml
+required-checks:
+  - name: CI gate
+    events: [pull_request, merge_group]
+    branches: [main]
+  - name: test (ubuntu-24.04, 22)
+```
+
+| Key | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `required-checks[].name` | string | required | The name of the check as GitHub shows it in the settings: the `name:` of the job or its ID, with the values of a matrix job in parentheses, or `caller / callee` for a job of a reusable workflow. The comparison is exact. |
+| `required-checks[].events` | list of `pull_request`, `pull_request_target`, `merge_group` and `push` | `[pull_request]` | The events that must report the check. Add `merge_group` when the branch uses a merge queue. |
+| `required-checks[].branches` | list of strings | none | The literal names of the base branches that the requirement protects. With them, the `branches` and `branches-ignore` filters of the workflows are judged. Without them, a branch filter is reported as something the rule cannot decide. Patterns such as `release/*` are rejected. |
+
+A name that no job reports is reported at its line in the config file. A filter that keeps the check from reporting is reported in the workflow. When the rule cannot decide, it reports at level `info` and says why. [Required checks that never report](./checks.md#check-unreachable-required-check) has the details and the limits.
 
 ### Permissions
 
@@ -417,7 +438,7 @@ The keys merge as follows when more than one file writes them:
 
 | Key | Merge |
 | --- | --- |
-| `profile`, `online`, `baseline`, `platform`, `generated-files`, `assume-default-permissions`, `config-variables`, `config-secrets`, `required-actions` | The later value replaces the earlier one, an empty list included. |
+| `profile`, `online`, `baseline`, `platform`, `generated-files`, `assume-default-permissions`, `config-variables`, `config-secrets`, `required-actions`, `required-checks` | The later value replaces the earlier one, an empty list included. |
 | `rules` | Merged by rule ID. The entry of the later file replaces the whole entry of the earlier file, so its level and its options replace the earlier ones. |
 | `paths` | Merged by glob. The entry of the later file replaces the entry with the same glob. |
 | `self-hosted-runner`, `shellcheck`, `fix`, `online-options` | Merged by sub-key (`labels`, `strict-labels` and `providers`; `rcfile`, `args` and `enable`; `rules`; each key of `online-options`). A sub-key that a later file writes replaces the earlier value, a list included. |
@@ -515,7 +536,7 @@ The committed copy is [`schema/jactionlint-config.json`](https://github.com/jdx/
 
 ## When the config file is rejected
 
-jactionlint checks the whole config file before it lints anything. A file that cannot be read or parsed stops the run with [exit status 3](./cli.md#exit-status), and nothing is linted. Deprecation warnings do not stop the run. Parsing is strict at every level: an unknown key is rejected in the top-level mapping, in `self-hosted-runner`, `online-options`, `shellcheck`, `fix`, `paths`, `ignores`, `required-actions` and in the options of a rule. A message about the content of the file starts with `could not parse config file` and the path of the file, and ends with the cause. The causes read like these:
+jactionlint checks the whole config file before it lints anything. A file that cannot be read or parsed stops the run with [exit status 3](./cli.md#exit-status), and nothing is linted. Deprecation warnings do not stop the run. Parsing is strict at every level: an unknown key is rejected in the top-level mapping, in `self-hosted-runner`, `online-options`, `shellcheck`, `fix`, `paths`, `ignores`, `required-actions`, `required-checks` and in the options of a rule. A message about the content of the file starts with `could not parse config file` and the path of the file, and ends with the cause. The causes read like these:
 
 | Cause | The message ends with |
 | --- | --- |

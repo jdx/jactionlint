@@ -66,6 +66,7 @@ jactionlint reports every finding with the ID of the rule that found it at the e
 - [Concurrency that cancels unrelated pull requests](#check-concurrency-cancels-prs)
 - [Concurrency that cancels a release](#check-concurrency-cancels-release)
 - [Gate jobs that are skipped when a job fails](#check-gate-job-skipped-on-failure)
+- [Required checks that never report](#check-unreachable-required-check)
 - [Failures hidden by continue-on-error (pedantic)](#check-continue-on-error)
 - [Unused job outputs](#check-unused-job-output)
 - [Needs entries that do nothing (pedantic)](#check-unused-needs)
@@ -3154,6 +3155,84 @@ There is no automatic fix: whether `always()` or `!cancelled()` is right depends
 - A job that tests results only in its own job-level `if:`, to run after its needs went well (`needs.a.result == 'success' || needs.a.result == 'skipped'`, `needs.a.result != 'skipped'`, `!= 'failure'`). That is a publish, a deploy or a cleanup that is meant to be skipped on a failure, not a gate. A job-level condition is a gate only when it expects the failure itself: `== 'failure'`, `== 'cancelled'`, `!= 'success'`. A gate is a job that reports what happened to its needs, so it reads results in its steps, `env`, `with` or `outputs`.
 - Reads of `needs.<job>.outputs.*`.
 - A workflow where an expression does not parse (`expression-syntax` reports the invalid expression).
+
+<a id="check-unreachable-required-check"></a>
+## Required checks that never report
+
+The rule `unreachable-required-check` (group `correctness`, level `error`) reports a check that branch protection or a ruleset requires but that no job reports for some change it is required for. GitHub then waits for the check forever, and the pull request or the merge queue group cannot merge. A workflow can be valid and still never start for such a change, because of its events, `types`, `branches` or `paths`. The rule runs when the [configuration file](config.md#required-checks) lists the required checks under `required-checks`, in every profile. `rules: {unreachable-required-check: off}` turns it off.
+
+Example input:
+
+```yaml
+# file: .github/workflows/ci.yaml
+# select: unreachable-required-check
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: make test
+  gate:
+    name: CI gate
+    needs: [test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: test "${{ needs.test.result }}" = success
+```
+
+Example config:
+
+```yaml
+required-checks:
+  - name: CI gate
+    events: [pull_request, merge_group]
+```
+
+Output:
+
+```
+.github/workflows/ci.yaml:4:3: required check "CI gate" never reports for a merge queue group, because the workflow does not run on "merge_group", so GitHub waits for it forever and the change cannot merge. add "merge_group" to "on:", or remove it from the "events" of the declaration (declared at "required-checks") [unreachable-required-check]
+  |
+4 |   pull_request:
+  |   ^~~~~~~~~~~~~
+.github/workflows/ci.yaml:5:5: required check "CI gate" never reports for a pull request which changes only "README.md", because no entry of "paths" of "pull_request" matches "README.md", so GitHub waits for it forever and the change cannot merge. remove the "paths" filter and skip the work inside the job instead (a skipped job reports success), or add a workflow with the same job name and the opposite filter (declared at "required-checks") [unreachable-required-check]
+  |
+5 |     paths:
+  |     ^~~~~~
+```
+
+<!-- Skip playground link -->
+
+**How a required check is found.** A check is named by the `name:` of its job, or by the job ID when there is no name. A matrix job adds the values of its combination in parentheses, such as `test (ubuntu-24.04, 22)`, unless its name uses the matrix context (`name: test on ${{ matrix.os }}`), and the rule computes those names for a matrix of literal values. GitHub does not document the order of the values, so the rule compares them as a set. A job of a local reusable workflow is named `caller / callee` after the job that calls it. The name of the workflow is not part of the check name. The rule reads every workflow in `.github/workflows`, not only the files you lint, because GitHub takes the check from whichever workflow reports it.
+
+**What is reported.** Each finding is a proven way for the check to stay pending, located where the fix goes, with a change that shows it:
+
+- At the declaration in the config file: no job of the repository reports the name. The message suggests a reported name that differs only in case or that a reusable workflow prefixes with its caller, such as `ci / unit` for `unit`. This finding needs the config file, so it is reported when you lint files of the repository, and not for an example that passes the configuration directly.
+- At `on:`: no workflow that reports the check runs on an event in `events`.
+- At `types`: a `pull_request` or `pull_request_target` filter without `opened` or `synchronize`. A pushed commit then gets no check.
+- At `branches` or at an entry of `branches-ignore`: the filter excludes a branch listed in `branches` of the declaration.
+- At `paths` or at an entry of `paths-ignore`: a pull request or push that changes only the example file starts no workflow that reports the check. The example is a common file such as `README.md`, or a file that an entry of the filter names.
+- A `push` with only `tags` or `tags-ignore` never runs for a pushed branch.
+- At the `if:` of a matrix job or a reusable workflow call that never runs (`if: false`, or a needed job that never runs and no status check function), because GitHub reports such a skipped job under its bare name. This uses the same analysis of conditions as [`gate-job-skipped-on-failure`](#check-gate-job-skipped-on-failure).
+
+A change is reported only when every workflow that reports the check stays silent for it. GitHub's workaround of a second workflow with the same job name and the opposite `paths` filter therefore passes.
+
+**What is not reported.** GitHub creates a check for every job of a workflow that starts. A job skipped by its `if:`, or because a job it needs failed, reports a check that counts as passing. So a condition on a job never makes a required check pending, and the rule does not report conditional jobs. A gate that is skipped when a test fails passes the requirement instead of failing it: [`gate-job-skipped-on-failure`](#check-gate-job-skipped-on-failure) reports that. A check that reports does not prove that the tests ran: a skipped job reports success too.
+
+**Cannot determine.** When the answer depends on something the rule does not evaluate, it reports a finding at level `info` at the declaration instead of an error. It says what it could not decide:
+
+- a job name with an expression other than the matrix context, or a matrix that is not a literal list (an expression, `include` or `exclude`);
+- a reusable workflow of another repository, or one that is not in the repository;
+- an entry of a filter with `${{ }}`, an entry that starts with `!` (GitHub applies negations in order), a pattern the rule cannot translate, or a match that depends on the case of letters;
+- a `branches` or `branches-ignore` filter when the declaration has no `branches`, and a branch filter of `push`, which matches the pushed branch.
+
+**Path filters of actions.** Only the trigger filters of `on:` are evaluated, here and in [`unmatched-paths-filter`](#check-unmatched-paths-filter). The YAML that a step passes to an action input, such as the `filters` input of a paths-filter action, is a value of that action. It is not a GitHub trigger filter, and its globs follow the rules of that action. Neither rule reads or validates it. A job that such a step skips still reports its check.
+
+**Fix.** Add the event, activity or branch to the trigger, or remove the filter and skip the work inside the job: a skipped job reports success. Or correct the name or the scope in `required-checks`.
 
 <a id="check-continue-on-error"></a>
 ## Failures hidden by continue-on-error (pedantic)
@@ -10271,7 +10350,7 @@ When no local workflow calls the action (it is published for other repositories,
 
 - **Applies** to the steps (and the metadata) of an action: `action-release-cooldown`, `action-syntax`, `actions-lock`, `actions-lock-drift`, `adhoc-packages`, `archived-uses`, `argument-injection`, `artipacked`, `background-step-not-waited`, `checkout-static-credentials`, `command-injection`, `conflicting-action-inputs`, `constant-condition`, `context-availability`, `continue-on-error`, `deprecated-action-input`, `deprecated-commands`, `deprecated-node-runtime`, `duplicate-key`, `duplicate-step-id`, `environment-file-redirect`, `expired-ignore`, `expression-syntax`, `expression-type`, `fail-fast-action-inputs`, `forbidden-uses`, `github-app`, `github-script-syntax`, `if-always-true`, `impostor-commit`, `insecure-commands`, `insecure-ssh-keyscan`, `insecure-url-scheme`, `invalid-env-var-name`, `invalid-function-call`, `invalid-id`, `invalid-ignore-comment`, `invalid-local-action`, `invalid-parallel-step`, `invalid-shell-name`, `invalid-uses`, `invisible-characters`, `known-vulnerable-actions`, `malformed-expression-delimiters`, `max-run-lines`, `merge-key`, `misfeature`, `missing-action-input`, `missing-version-comment`, `multiline-plain-run`, `obfuscation`, `outdated-action-runner`, `output-clobbering`, `pipeline-without-pipefail`, `pyflakes`, `recursive-alias`, `ref-confusion`, `ref-version-mismatch`, `repojacking`, `require-expression-wrapping`, `self-repository`, `shell-syntax`, `shellcheck`, `stale-action-refs`, `superfluous-actions`, `template-injection`, `typosquat-uses`, `undefined-function`, `undefined-property`, `unknown-action-input`, `unlocked-install`, `unpinnable-action`, `unpinned-images`, `unpinned-tools`, `unpinned-uses`, `unsound-contains`, `unsound-prefix-match`, `unsound-ternary`, `unused-anchor`, `unused-ignore`, `unverified-download`, `use-trusted-publishing`, `yaml-syntax`.
 - **Caller-dependent**: `agentic-actions`, `bot-conditions`, `cache-poisoning`, `github-env` (its findings about untrusted input do not depend on the caller), `untrusted-artifact` and `untrusted-checkout`.
-- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `hardcoded-registry-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
+- **Not applicable** because an action does not have what the rule checks, or because only the calling job can decide (`unused-baseline-entry` is about the baseline file, not about a workflow or an action): `anonymous-definition`, `comment-trigger-authorization`, `concurrency-cancels-prs`, `concurrency-cancels-release`, `concurrency-deadlock`, `concurrency-limits`, `conflicting-runner-labels`, `cron-too-frequent`, `cyclic-job-needs`, `dangerous-triggers`, `dependabot-cooldown`, `dependabot-execution`, `dependabot-missing-actions-update`, `dependabot-syntax`, `deprecated-runner-label`, `duplicate-job-id`, `duplicate-job-needs`, `duplicate-triggers`, `event-name-never-received`, `excessive-permissions`, `gate-job-skipped-on-failure`, `gh-without-token`, `hardcoded-container-credentials`, `hardcoded-registry-credentials`, `insufficient-permissions`, `invalid-activity-type`, `invalid-cron`, `invalid-event-config`, `invalid-event-filter`, `invalid-glob`, `invalid-label-pattern`, `invalid-local-workflow`, `invalid-permissions`, `invalid-timezone`, `invalid-workflow-call`, `invalid-workflow-call-input`, `invalid-workflow-dispatch-input`, `local-action-checkout`, `macos-gnu-flags`, `matrix-duplicate-value`, `matrix-invalid-exclude`, `missing-permissions`, `missing-timeout`, `missing-workflow-input`, `missing-workflow-secret`, `mutable-runner-label`, `overprovisioned-secrets`, `require-shell`, `required-actions`, `secrets-inherit`, `secrets-outside-env`, `self-hosted-runner`, `timeout-too-long`, `ubuntu-slim-limits`, `undefined-job-needs`, `undocumented-permissions`, `unknown-event`, `unknown-runner-label`, `unknown-workflow-input`, `unknown-workflow-secret`, `unmatched-paths-filter`, `unreachable-required-check`, `unredacted-secrets`, `unused-baseline-entry`, `unused-job-output`, `unused-needs`, `unused-workflow-input`, `unused-workflow-secret`, `workflow-call-permissions`, `workflow-input-type`, `workflow-run-names`, `workflow-secret-scope`, `workflow-syntax`.
 
 Example input:
 

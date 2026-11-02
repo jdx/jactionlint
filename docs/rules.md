@@ -166,6 +166,7 @@ rules:
 | [unpinned-images](#unpinned-images) | A container or service image is not pinned by a digest. | security | error | default | yes |
 | [unpinned-tools](#unpinned-tools) | An action installs the newest version of its tool because no version is set or it is latest. | security | error | default | no |
 | [unpinned-uses](#unpinned-uses) | An action, reusable workflow or Docker image is not pinned to a commit SHA or digest. | policy | error | default | yes |
+| [unreachable-required-check](#unreachable-required-check) | A check listed in required-checks is reported by no job, or a trigger filter keeps its workflow from starting, so the check stays pending. | correctness | error | only when configured | no |
 | [unredacted-secrets](#unredacted-secrets) | A secret is parsed with fromJSON(), so the fields of it are not redacted in logs. With the option pedantic, also a value that a script cuts from a secret and prints without masking it. | security | error | default | no |
 | [unsound-contains](#unsound-contains) | A condition uses contains() on a string literal, which also matches substrings. | security | error | default | no |
 | [unsound-prefix-match](#unsound-prefix-match) | An account, an owner or a repository is identified by a prefix, a suffix or a part of its name. | security | error | default | no |
@@ -1526,6 +1527,15 @@ An action, reusable workflow or Docker image is not pinned to a commit SHA or di
 - Option `actions-lock` (bool, default true): Accept an action which is not pinned to a commit in a workflow when the Actions lock file of the repository (.github/workflows/actions.lock) pins it to a full commit for that workflow. The lock file is a technical preview of GitHub whose format may change. Set it to false to ignore the lock file.
 - Option `short-pin-comment` (bool, default false): Make `--online --fix` name the tag as written in the comment of a pin (`# v4`), not the most specific version tag of the commit (`# v4.2.4`).
 - [Details and examples](./checks.md#check-action-format)
+
+## unreachable-required-check
+
+A check listed in required-checks is reported by no job, or a trigger filter keeps its workflow from starting, so the check stays pending.
+
+- Group: correctness
+- Default level: error
+- Profile: only when configured
+- [Details and examples](./checks.md#check-unreachable-required-check)
 
 ## unredacted-secrets
 
