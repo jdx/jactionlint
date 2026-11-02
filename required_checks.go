@@ -1196,6 +1196,7 @@ func pathGap(live []checkSource, sc checkScenario) string {
 	var includes []string
 	var ignoreOnly []*WebhookEventFilter
 	started := false
+	undecided := "" // why a workflow's filters cannot be evaluated; it matters only if no workflow covers every file
 	for _, s := range live {
 		if t, _, _ := starts(s.root, s.w, sc); t != reachYes {
 			continue
@@ -1205,16 +1206,22 @@ func pathGap(live []checkSource, sc checkScenario) string {
 		if sc.event == "merge_group" || h.Paths.IsEmpty() && h.PathsIgnore.IsEmpty() {
 			return "" // the workflow starts whatever the change
 		}
+		evaluable := true
 		for _, f := range []*WebhookEventFilter{h.Paths, h.PathsIgnore} {
 			if f == nil {
 				continue
 			}
 			for _, v := range f.Values {
 				if strings.HasPrefix(v.Value, "!") || ContainsExpression(v.Value) {
-					// a negation is applied in order, and an expression is not known: nothing is proven
-					return fmt.Sprintf("jactionlint cannot evaluate the path filters of %q in %s", sc.event, s.root)
+					evaluable = false // a negation is applied in order, and an expression is not known
 				}
 			}
+		}
+		if !evaluable {
+			if undecided == "" {
+				undecided = fmt.Sprintf("jactionlint cannot evaluate the path filters of %q in %s", sc.event, s.root)
+			}
+			continue
 		}
 		if h.Paths.IsEmpty() {
 			ignoreOnly = append(ignoreOnly, h.PathsIgnore)
@@ -1241,6 +1248,9 @@ func pathGap(live []checkSource, sc checkScenario) string {
 		if covered {
 			return ""
 		}
+	}
+	if undecided != "" {
+		return undecided
 	}
 	return "no example change jactionlint tried is skipped by the path filters of every workflow that reports it, but they may still skip a change of another file"
 }

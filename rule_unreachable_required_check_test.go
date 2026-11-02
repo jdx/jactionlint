@@ -587,3 +587,47 @@ func TestRequiredCheckPathGapWithANegation(t *testing.T) {
 	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"wide.yaml": wide, "named.yaml": named}),
 		[]string{".github/jactionlint.yaml:2: info: ", `cannot evaluate the path filters of "pull_request" in .github/workflows/wide.yaml`})
 }
+
+func TestRequiredCheckWorkflowWithoutPathFiltersCoversTheOthers(t *testing.T) {
+	// a.yaml cannot be evaluated, but b.yaml starts for every change: there is nothing to report
+	a := "on:\n  pull_request:\n    paths: ['**', '!private/**']\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	b := "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: make test\n"
+	expectFindings(t, lintRequiredChecks(t, "required-checks:\n  - name: test\n", map[string]string{"a.yaml": a, "b.yaml": b}))
+}
+
+func TestRequiredCheckPartialBaselineWriteRefreshesTheConfig(t *testing.T) {
+	root := ignoreProject(t, "baseline: auto\nrequired-checks:\n  - name: missing\n", map[string]string{"ci.yaml": gateWorkflow})
+	l, _ := newIgnoreLinter(t, root, time.Now())
+	if _, err := l.WriteBaseline(nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	// The declaration is fixed, then the baseline is written for one workflow: the entry of the config is gone
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("baseline: auto\nrequired-checks:\n  - name: CI gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l, _ = newIgnoreLinter(t, root, time.Now())
+	res, err := l.WriteBaseline([]string{filepath.Join(root, ".github", "workflows", "ci.yaml")}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Entries != 0 {
+		t.Fatalf("the baseline keeps %d entries of the fixed declaration", res.Entries)
+	}
+}
+
+func TestRequiredCheckPathIgnoreFromAnotherWorkingDirectory(t *testing.T) {
+	// The key of "paths" is relative to the repository, also when the linter runs in its parent directory
+	root := ignoreProject(t, "paths:\n  .github/jactionlint.yaml:\n    ignore: [unreachable-required-check]\nrequired-checks:\n  - name: missing\n", map[string]string{"ci.yaml": gateWorkflow})
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{WorkingDir: filepath.Dir(root), ConfigFile: filepath.Join(root, ".github", "jactionlint.yaml")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs, err := l.LintRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ofRule(errs, "unreachable-required-check"); len(got) != 0 {
+		t.Fatalf("the paths ignore does not apply: %s", got[0].Message)
+	}
+}

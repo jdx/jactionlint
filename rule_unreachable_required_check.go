@@ -205,7 +205,10 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 		if !l.noIgnores {
 			l.trackIgnoreConfig(d.cfg, d.project, p, nil)
 			errs = dropIgnored(errs, l.matchConfigIgnores(errs, d.cfg, d.project, display, nil))
-			pathConfigs = d.cfg.PathConfigs(display)
+			// The keys of "paths" are relative to the root of the repository, not to the working directory
+			if rel, err := filepath.Rel(d.project.RootDir(), l.absFilePath(p)); err == nil {
+				pathConfigs = d.cfg.PathConfigs(filepath.ToSlash(rel))
+			}
 		}
 		errs = l.filterErrors(errs, pathConfigs)
 		slices.SortFunc(errs, compareErrors)
@@ -218,7 +221,9 @@ func (l *Linter) finishRequiredChecksRun(results []fileResult) []fileResult {
 		l.baselineStage(display, src, d.project, bl, errs)
 		errs = slices.DeleteFunc(errs, func(e *Error) bool { return e.Severity < l.minSeverity })
 		visible, baselined := splitBaselined(errs)
-		if len(visible) == 0 && len(baselined) == 0 {
+		// A config file without findings is still a result while the baseline is written: a partial write replaces
+		// the entries of the files that it judged, and keeps the others
+		if len(visible) == 0 && len(baselined) == 0 && !l.baseline.writing {
 			continue
 		}
 		if visible == nil {
