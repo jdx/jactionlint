@@ -163,6 +163,6 @@ jobs:
           echo GNU
           grep -P x file.txt
   labels-of-github:
-    runs-on: [macos-14, ARM64]
+    runs-on: [macos-15, ARM64]
     steps:
       - run: date -d yesterday

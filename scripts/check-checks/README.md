@@ -212,7 +212,7 @@ Every other rule of the default and `correctness` profiles is on. An example for
 
 A link is `https://jactionlint.jdx.dev/#` followed by the example input compressed with zlib and encoded in base64. The tool removes every line whose first non-blank character is `#` before it compresses: comments such as `# ERROR: ...` and the `# requires --online` marker. The playground therefore reports other line numbers than the `Output:` block when the example has comments.
 
-The link goes to the site root on purpose. A script of the home page moves a hash that looks like a permalink to [the playground](https://jactionlint.jdx.dev/playground), and `docs/tests/wasm.test.ts` decodes every link of the page, lints it with the real wasm build and compares the messages with the `Output:` block above it. Run that test with `mise run docs:test`. The playground cannot enable a rule that the example configuration turns off, so a section that shows such a rule skips the link.
+The link goes to the site root on purpose. A script of the home page moves a hash that looks like a permalink to [the playground](https://jactionlint.jdx.dev/playground), and `docs/tests/wasm.test.ts` decodes every link of the page, lints it with the real wasm build as of `exampleDay` and compares the messages with the `Output:` block above it. Run that test with `mise run docs:test`. The playground cannot enable a rule that the example configuration turns off, so a section that shows such a rule skips the link.
 
 ## Pitfalls
 

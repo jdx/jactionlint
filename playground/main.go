@@ -5,6 +5,7 @@ package main
 import (
 	"io"
 	"syscall/js"
+	"time"
 
 	"github.com/jdx/jactionlint/v2"
 	"github.com/jdx/jactionlint/v2/internal/exampleconfig"
@@ -28,7 +29,10 @@ func encodeErrorAsMap(err *jactionlint.Error) map[string]interface{} {
 	return obj
 }
 
-func lint(source string) interface{} {
+// lint lints the source as of the day ("2006-01-02"), or as of now when day is empty. The tests of the permalinks of
+// docs/checks.md pass the day the examples were linted on, so that a date-dependent check (the retirement of a runner
+// label) gives the documented output.
+func lint(source, day string) interface{} {
 	// The same configuration as the one the examples of docs/checks.md are linted with
 	cfg, err := jactionlint.ParseConfig([]byte(exampleconfig.YAML))
 	if err != nil {
@@ -36,6 +40,14 @@ func lint(source string) interface{} {
 		return nil
 	}
 	opts := jactionlint.LinterOptions{Config: cfg}
+	if day != "" {
+		t, err := time.Parse(time.DateOnly, day)
+		if err != nil {
+			fail(err, "reading the day")
+			return nil
+		}
+		opts.Now = func() time.Time { return t }
+	}
 	linter, err := jactionlint.NewLinter(io.Discard, &opts)
 	if err != nil {
 		fail(err, "creating linter instance")
@@ -60,12 +72,16 @@ func lint(source string) interface{} {
 
 func runActionlint(_this js.Value, args []js.Value) interface{} {
 	source := args[0].String()
-	return lint(source)
+	day := ""
+	if len(args) > 1 && args[1].Type() == js.TypeString {
+		day = args[1].String()
+	}
+	return lint(source, day)
 }
 
 func main() {
 	window.Set("runActionlint", js.FuncOf(runActionlint))
 	window.Call("dismissLoading")
-	lint(window.Call("getYamlSource").String()) // Show the first result
+	lint(window.Call("getYamlSource").String(), "") // Show the first result
 	select {}
 }
