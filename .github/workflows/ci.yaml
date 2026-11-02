@@ -21,10 +21,14 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    # `jouet cost push` writes refs/notes/jouet-cost on pushes to main.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          persist-credentials: false
+          # Only the Ubuntu job on main keeps the token, for `jouet cost push` below.
+          persist-credentials: ${{ matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: Restore Go modules
         id: go-mod-cache
@@ -51,8 +55,12 @@ jobs:
             go-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'mise.toml') }}-
       - parallel:
           - name: Test Go packages with race detector
-            if: matrix.os == 'ubuntu-latest'
+            if: matrix.os == 'ubuntu-latest' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
             run: go test -race ./...
+          # On main the same run goes through jouet so its timing is recorded.
+          - name: Test Go packages with race detector and jouet
+            if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+            run: jouet test --cmd -- go test -race ./...
           - name: Test Go packages
             if: matrix.os == 'macos-latest'
             run: go test ./...
@@ -71,6 +79,9 @@ jobs:
               CGO_ENABLED: 0
           - name: Build with race instrumentation
             run: go build -race -o jactionlint-race ./cmd/jactionlint
+      - name: Share test timings with jouet
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: jouet cost push
       - name: Save Go build and test cache
         if: always() && steps.go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
