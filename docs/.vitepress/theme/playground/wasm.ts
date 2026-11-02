@@ -2,7 +2,7 @@
 //
 // main.go talks to its host only through functions on `window`:
 //   window.getYamlSource() / onCheckCompleted(errors) / showError(msg) / dismissLoading()  (host -> called by wasm)
-//   window.runActionlint(source)                                                          (wasm -> called by host)
+//   window.runActionlint(source, day?)                                                    (wasm -> called by host)
 // This module installs the host functions and forwards them to a swappable `hooks` object, so
 // the wasm module is instantiated once even if the component is remounted. It is shared with the
 // node tests, which load the same wasm.
@@ -77,9 +77,10 @@ export function loadLinter(
   return loading;
 }
 
-export function runLint(source: string, win: Win = globalThis as Win): void {
+// runLint lints the source as of the day (YYYY-MM-DD), or as of now without one.
+export function runLint(source: string, win: Win = globalThis as Win, day?: string): void {
   if (typeof win.runActionlint !== "function") {
     throw new Error("jactionlint wasm is not loaded yet");
   }
-  win.runActionlint(source);
+  win.runActionlint(source, day ?? "");
 }

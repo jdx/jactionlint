@@ -138,6 +138,7 @@ unpinnable-action online security warn
 unpinned-images default security error
 unpinned-tools default security error
 unpinned-uses default policy error
+unreachable-required-check configured correctness error
 unredacted-secrets default security error
 unsound-contains default security error
 unsound-prefix-match default security error

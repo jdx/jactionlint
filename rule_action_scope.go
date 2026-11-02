@@ -112,6 +112,7 @@ var actionRuleScope = map[string]struct {
 	"ref-version-mismatch":            {scope: actionApplies},
 	"require-permissions":             {scope: actionNotApplicable},
 	"required-actions":                {scope: actionNotApplicable},
+	"unreachable-required-check":      {scope: actionNotApplicable},
 	"run-policy":                      {scope: actionApplies, except: []string{"require-shell"}},
 	"runner-label":                    {scope: actionNotApplicable},
 	"secrets-inherit":                 {scope: actionNotApplicable},

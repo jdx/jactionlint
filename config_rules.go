@@ -27,6 +27,9 @@ func (c *Config) RuleLevel(id string) Severity {
 	if c != nil && id == "required-actions" && len(c.RequiredActions) > 0 {
 		return info.DefaultLevel
 	}
+	if c != nil && id == "unreachable-required-check" && len(c.RequiredChecks) > 0 {
+		return info.DefaultLevel // declaring the checks turns the rule on in every profile
+	}
 	if info.OptIn {
 		return SeverityOff // Only an entry in "rules", which is looked at above, turns it on
 	}
@@ -356,7 +359,7 @@ func (c *Config) applyLegacy(l *legacyConfig) error {
 var (
 	configTopKeys = []string{
 		"profile", "extends", "rules", "online", "online-options", "baseline",
-		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "assume-default-permissions", "generated-files", "platform", "fix", "shellcheck",
+		"self-hosted-runner", "config-variables", "config-secrets", "paths", "ignores", "required-actions", "required-checks", "assume-default-permissions", "generated-files", "platform", "fix", "shellcheck",
 		// Deprecated keys which are translated into rules
 		"timeout-minutes", "require-commit-hash", "require-permissions", "require-checkout-before-local-action",
 		"require-expression-wrapping", "check-falsy-ternary", "check-workflow-run-names", "require-shell", "max-run-lines",
@@ -366,6 +369,7 @@ var (
 	onlineOptionsKeys      = []string{"mode", "api-url", "token-env", "token-file", "allow", "deny", "cache-ttl", "max-rate-limit-wait", "retries", "concurrency", "gh-cli", "github-com-fallback", "github-com-token-env", "github-com-token-file"}
 	pathConfigKeys         = []string{"ignore"}
 	requiredActionKeys     = []string{"action", "version"}
+	requiredCheckKeys      = []string{"name", "events", "branches"}
 	legacyTimeoutMinutesKy = []string{"required", "max"}
 )
 
@@ -463,6 +467,14 @@ func validateConfigKeys(root *yaml.Node) error {
 			if v.Kind == yaml.SequenceNode {
 				for _, item := range v.Content {
 					if err = checkKeys(item, "\"required-actions\"", requiredActionKeys); err != nil {
+						break
+					}
+				}
+			}
+		case "required-checks":
+			if v.Kind == yaml.SequenceNode {
+				for _, item := range v.Content {
+					if err = checkKeys(item, "\"required-checks\"", requiredCheckKeys); err != nil {
 						break
 					}
 				}

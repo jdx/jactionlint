@@ -116,12 +116,29 @@ func compilePathFilter(pat string) *pathFilter {
 	if pat == "" {
 		return nil
 	}
+	src, prefix, deep, ok := filterGlobRegexp(pat)
+	if !ok {
+		return nil
+	}
+	re, err := regexp.Compile(src)
+	if err != nil {
+		return nil
+	}
+	return &pathFilter{re: re, prefix: prefix, deep: deep}
+}
+
+// filterGlobRegexp translates a pattern of a trigger filter (`branches`, `branches-ignore`, `paths` and `paths-ignore`) to the source
+// of a regular expression which matches a whole path or ref, following GitHub's filter pattern cheat sheet: `*` matches
+// within one directory, `**` across directories, `?` and `+` make the character in front optional or repeated, `[...]`
+// is a class and a backslash escapes. prefix is the literal text that every match starts with, and deep is whether a
+// match can be in a directory below the one of the prefix. ok is false for a form that it does not translate (a negated
+// class, a `?` or `+` with nothing to repeat). The caller has validated the pattern and handles a leading `!`.
+func filterGlobRegexp(pat string) (src, prefix string, deep, ok bool) {
 	var b strings.Builder
 	b.WriteString("^")
 	rs := []rune(pat)
 	atom := false // the last thing written can be repeated by `?` and `+`
-	prefix, inPrefix := "", true
-	deep := false
+	inPrefix := true
 	for i := 0; i < len(rs); i++ {
 		c := rs[i]
 		switch c {
@@ -147,7 +164,7 @@ func compilePathFilter(pat string) *pathFilter {
 			inPrefix = false
 		case '?', '+':
 			if !atom {
-				return nil
+				return "", "", false, false
 			}
 			b.WriteRune(c)
 			atom = false
@@ -165,11 +182,11 @@ func compilePathFilter(pat string) *pathFilter {
 				}
 			}
 			if end < 0 || end == i+1 || rs[i+1] == '!' || rs[i+1] == '^' {
-				return nil
+				return "", "", false, false
 			}
 			class := string(rs[i+1 : end])
 			if strings.ContainsAny(class, `\[`) {
-				return nil
+				return "", "", false, false
 			}
 			b.WriteString("[" + class + "]")
 			i = end
@@ -198,11 +215,7 @@ func compilePathFilter(pat string) *pathFilter {
 		}
 	}
 	b.WriteString("$")
-	re, err := regexp.Compile(b.String())
-	if err != nil {
-		return nil
-	}
-	return &pathFilter{re: re, prefix: prefix, deep: deep}
+	return b.String(), prefix, deep, true
 }
 
 // repoPaths are the files and directories of a repository, in lower case and sorted.

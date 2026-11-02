@@ -9,7 +9,19 @@ export const wasmDir = resolve(docsDir, "public/playground");
 export const checksMd = resolve(docsDir, "checks.md");
 
 /** Load the real main.wasm (built by `mise run docs:wasm`) the way the browser page does. */
-export async function loadRealLinter(): Promise<(source: string) => LintError[]> {
+// exampleDay is the day scripts/check-checks lints the examples of docs/checks.md on (exampleDay in its main.go), as
+// YYYY-MM-DD. A permalink is linted on the same day, so that a date-dependent check gives the documented output.
+export function exampleDay(): string {
+  const src = readFileSync(resolve(docsDir, "../scripts/check-checks/main.go"), "utf8");
+  const m = src.match(/var exampleDay = time\.Date\((\d{4}), time\.(\w+), (\d{1,2}),/);
+  if (!m) throw new Error("exampleDay is not found in scripts/check-checks/main.go");
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const month = months.indexOf(m[2]) + 1;
+  if (month === 0) throw new Error(`unknown month ${m[2]} in exampleDay`);
+  return `${m[1]}-${String(month).padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
+
+export async function loadRealLinter(): Promise<(source: string, day?: string) => LintError[]> {
   const wasm = resolve(wasmDir, "main.wasm");
   const wasmExec = resolve(wasmDir, "wasm_exec.js");
   if (!existsSync(wasm) || !existsSync(wasmExec)) {
@@ -34,9 +46,9 @@ export async function loadRealLinter(): Promise<(source: string) => LintError[]>
   for (let i = 0; i < 500 && current === null; i++) await new Promise((r) => setTimeout(r, 10));
   if (current === null) throw new Error("wasm did not finish starting");
 
-  return (source) => {
+  return (source, day) => {
     current = null;
-    runLint(source, win);
+    runLint(source, win, day);
     if (current === null) throw new Error("runActionlint did not report a result");
     return current;
   };

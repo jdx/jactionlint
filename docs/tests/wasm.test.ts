@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decodeSource } from "../.vitepress/theme/playground/codec";
 import type { LintError } from "../.vitepress/theme/playground/wasm";
-import { checksMd, loadRealLinter } from "./helpers";
+import { checksMd, exampleDay, loadRealLinter } from "./helpers";
 
-let lint: (source: string) => LintError[];
+let lint: (source: string, day?: string) => LintError[];
 
 beforeAll(async () => {
   lint = await loadRealLinter();
@@ -65,8 +65,11 @@ describe("permalinks in docs/checks.md", () => {
     const failures: string[] = [];
     // Positions inside messages ("previously defined at line 7, column 9") shift as well
     const norm = (s: string) => s.replace(/line[: ]\s*\d+,\s*col(?:umn)?[: ]\s*\d+/g, "line:N,col:N");
+    // The outputs were made as of this day, and the playground lints as of now: a runner label that retired since then
+    // would change the list of the labels in a message
+    const day = exampleDay();
     for (const { output, hash } of links) {
-      const errs = lint(decodeSource(hash));
+      const errs = lint(decodeSource(hash), day);
       // The CLI prints "warning: " or "info: " before the message of a finding which is not an error and the
       // rule ID in brackets. The playground runs the default profile without a configuration file, so a
       // section whose rule is not on by default has to skip its playground link (see CONTRIBUTING.md).
