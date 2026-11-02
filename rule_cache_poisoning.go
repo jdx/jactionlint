@@ -164,8 +164,13 @@ var cacheActions = []cacheAction{
 		return true, "set \"cache-disabled: true\""
 	}},
 	{"docker/build-push-action", func(a *ExecAction, u *UsesRef) (bool, string) {
+		// "no-cache: true" passes "--no-cache" to buildx, which builds every stage without looking at the
+		// cache: importing "cache-from" cannot put anything into the image then.
+		if v, ok := a.input("no-cache"); ok && isTrueLiteral(v) {
+			return false, ""
+		}
 		v, _ := a.input("cache-from")
-		return strings.Contains(v, "type=gha"), "remove the \"cache-from\" input"
+		return strings.Contains(v, "type=gha"), "remove the \"cache-from\" input or set \"no-cache: true\""
 	}},
 	{"docker/setup-buildx-action", func(a *ExecAction, u *UsesRef) (bool, string) {
 		// The buildx binary is cached in the GitHub Actions cache unless "cache-binary" is false (input of v3), but the
@@ -618,7 +623,7 @@ func eventScenarios(events []Event) []triggerScenario {
 		branchFilter := ev.Branches != nil || ev.BranchesIgnore != nil
 		tagFilter := ev.Tags != nil || ev.TagsIgnore != nil
 		if branchFilter || !tagFilter {
-			ret = append(ret, triggerScenario{"event_name": "push", refPrefixKey: "refs/heads/"})
+			ret = append(ret, triggerScenario{"event_name": "push", "ref_type": "branch", refPrefixKey: "refs/heads/"})
 		}
 		if !branchFilter && !tagFilter || tagFilter && (ev.Tags == nil || tagFilterMatches(ev.Tags)) {
 			ret = append(ret, tagPushScenarios(ev.Tags)...)
@@ -1262,8 +1267,9 @@ var cacheGateInputs = map[string][]cacheGate{
 	// "cache-disabled: true" turns off all caching of the action
 	"gradle/actions/setup-gradle": {{input: "cache-disabled", offWhenTrue: true}},
 	"gradle/gradle-build-action":  {{input: "cache-disabled", offWhenTrue: true}},
-	// "cache-from" with type=gha is what restores the cache; empty means none
-	"docker/build-push-action": {{input: "cache-from"}},
+	// "cache-from" with type=gha is what restores the cache; empty means none. "no-cache: true" makes buildx
+	// build without using the cache.
+	"docker/build-push-action": {{input: "cache-from"}, {input: "no-cache", offWhenTrue: true}},
 	// the next ones have no switch: only the "if:" of the step can gate them (actions/cache has "lookup-only",
 	// which `reads` handles as a literal)
 	"pyo3/maturin-action":                       {{input: "sccache"}},
