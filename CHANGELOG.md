@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.5.0](https://github.com/jdx/jactionlint/compare/v2.4.0...v2.5.0) (2026-11-01)
+
+
+### Features
+
+* **run:** add jactionlint run --list ([#316](https://github.com/jdx/jactionlint/issues/316)) ([f1f877e](https://github.com/jdx/jactionlint/commit/f1f877e2d2a63fba85753a85064382c0833833f4))
+* **run:** add the OS sandbox that steps run in (Landlock, seccomp, Seatbelt) ([#319](https://github.com/jdx/jactionlint/issues/319)) ([443b4c1](https://github.com/jdx/jactionlint/commit/443b4c137f61b663a028d293a54977e3634f80e0))
+* **run:** container jobs, services, Docker actions, --container, --parallel, --dry-run ([#323](https://github.com/jdx/jactionlint/issues/323)) ([27dae22](https://github.com/jdx/jactionlint/commit/27dae22bcccaccf80ec4078c608846ce45cd603f))
+* **run:** evaluate workflow expressions in jactionlint run --list ([#317](https://github.com/jdx/jactionlint/issues/317)) ([f4267f7](https://github.com/jdx/jactionlint/commit/f4267f72829334e710fba48d73818c9bb58cbd60))
+* **run:** local actions cache, --net=proxy and jactionlint cache ([#322](https://github.com/jdx/jactionlint/issues/322)) ([b51ca88](https://github.com/jdx/jactionlint/commit/b51ca88c3f2aae57c2b42a1ea2902c02de32c9d7))
+* **run:** run actions and reusable workflows ([#321](https://github.com/jdx/jactionlint/issues/321)) ([782e8f9](https://github.com/jdx/jactionlint/commit/782e8f9b9e3658670ca48fe25f0204597c1a214a))
+* **run:** run workflow steps in the sandbox ([#320](https://github.com/jdx/jactionlint/issues/320)) ([65614de](https://github.com/jdx/jactionlint/commit/65614deb41e1f6e28288d4be829ad99aaa2320a9))
+
+
+### Bug Fixes
+
+* **unpinned-images:** only count images built in the same job ([#329](https://github.com/jdx/jactionlint/issues/329)) ([a09969d](https://github.com/jdx/jactionlint/commit/a09969db8831af393192f3a1aca38c2f6abebe34))
+* **unpinned-images:** treat images of drop-in forks of docker/build-push-action as local ([#328](https://github.com/jdx/jactionlint/issues/328)) ([4d0fcf6](https://github.com/jdx/jactionlint/commit/4d0fcf6590afd2fdb71b1ee9604c242791b499fe))
+
 ## [2.4.0](https://github.com/jdx/jactionlint/compare/v2.3.0...v2.4.0) (2026-10-28)
 
 
