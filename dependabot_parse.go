@@ -19,7 +19,7 @@ const dependabotSyntaxID = "dependabot-syntax"
 // https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 var (
 	dependabotEcosystems = []string{
-		"bazel", "bun", "bundler", "cargo", "composer", "conda", "deno", "devcontainers", "docker", "docker-compose",
+		"apm", "bazel", "bun", "bundler", "cargo", "composer", "conda", "deno", "devcontainers", "docker", "docker-compose",
 		"dotnet-sdk", "elm", "github-actions", "gitsubmodule", "gomod", "gradle", "helm", "julia", "maven",
 		"mix", "nix", "npm", "nuget", "opentofu", "pip", "pre-commit", "pub", "rust-toolchain", "sbt", "swift",
 		"terraform", "uv", "vcpkg",
