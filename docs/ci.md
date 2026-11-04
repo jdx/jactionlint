@@ -148,7 +148,7 @@ jobs:
 [Docker image](./install.md#docker-image) lists the contents, the user and the tags of the image `ghcr.io/jdx/jactionlint`. Two kinds of tag exist:
 
 - `ghcr.io/jdx/jactionlint:latest`: the newest release, not the `main` branch. An option that only `main` has fails with `unknown option` in this image.
-- `ghcr.io/jdx/jactionlint:2.4.0`: a specific release. <!-- x-release-please-version -->
+- `ghcr.io/jdx/jactionlint:2.5.0`: a specific release. <!-- x-release-please-version -->
 
 ### Run the image
 

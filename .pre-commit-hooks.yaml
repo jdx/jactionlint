@@ -25,7 +25,7 @@
   language: docker_image
   types: ["yaml"]
   files: ^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)
-  entry: ghcr.io/jdx/jactionlint:2.4.0  # x-release-please-version
+  entry: ghcr.io/jdx/jactionlint:2.5.0  # x-release-please-version
 - id: jactionlint-system
   name: Lint GitHub Actions workflow files
   description: Runs system-installed jactionlint to lint GitHub Actions workflow files
