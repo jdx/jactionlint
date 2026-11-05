@@ -158,7 +158,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: jdx/jactionlint@baa8d685e2b27ff5821558c9eeabb2051c1da61b # v2.4.0
+      - uses: jdx/jactionlint@9e87e8f34edfc00b849a27807e26eff9d00b936d # v2.5.0
 ```
 
 Set `advanced-security: true` under `with:` to upload the findings to code scanning instead, which needs `security-events: write`. [Run jactionlint in CI](https://jactionlint.jdx.dev/ci) also covers mise, which verifies the download, the Docker image and problem matchers. [Git hooks and editors](https://jactionlint.jdx.dev/hooks) covers hk and pre-commit.
