@@ -525,8 +525,8 @@ func TestUpdateStopsOnAnUnusableChangedSince(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.Update([]string{path}, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }}); err == nil {
-		t.Error("an unknown revision must stop the update")
+	if _, err := l.Update([]string{path}, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }}); err == nil || !strings.Contains(err.Error(), "no-such-revision") {
+		t.Errorf("an unknown revision must stop the update and be named: %v", err)
 	}
 	if after, _ := os.ReadFile(path); string(after) != src {
 		t.Errorf("the file was written:\n%s", after)
@@ -740,5 +740,16 @@ func TestUpdateCommandRefusesWhatItCannotDo(t *testing.T) {
 		if got := cmd.Main(append([]string{"jactionlint"}, c.args...)); got != ExitStatusInvalidCommandOption || !strings.Contains(errb.String(), c.want) {
 			t.Errorf("%v: %d %q", c.args, got, errb.String())
 		}
+	}
+}
+
+func TestUpdateChecksTheNamedReleaseWhenTwoTagsShareACommit(t *testing.T) {
+	// v1.4.0 is old enough; v1.5.0 is at the same commit but inside the cooldown. The workflow names v1.4.0.
+	rels := []fixtureRel{{tag: "v1.4.0", sha: shaV140, days: 30, immutable: true}, {tag: "v1.5.0", sha: shaV140, days: 2, immutable: true}}
+	c := updateFixtureClient(t, rels, nil)
+	days := 14
+	res, _, out := runUpdate(t, c, wf("example/action@v1.4.0"), UpdateOptions{Mode: UpdateCheck, MinAge: &days}, "")
+	if res.Violations != 0 {
+		t.Fatalf("the named release was judged by another tag:\n%s", out)
 	}
 }

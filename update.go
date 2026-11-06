@@ -770,7 +770,7 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 		// Nothing newer. The reference stays unless it is to be pinned, or is in violation.
 		if cur != nil {
 			polTag := curTag
-			if best, ok := bestStableTag(idx.bySHA[curSHA], ""); ok {
+			if best, ok := bestStableTag(idx.bySHA[curSHA], ""); ok && isMovingAlias(idx, curSHA, cur) {
 				polTag = best // a moving tag (v1) has no release of its own: the policy applies to the release it points at
 			}
 			why, err := u.violations(owner, repo, polTag, curSHA, cooldown)
