@@ -244,6 +244,7 @@ Every top-level key of the config file is in this table with its type, its defau
 | `online-options` | mapping | see the table | `--online=MODE` and the `--online-*` options | Tunes the online checks. See [Online options](#online-options). |
 | `baseline` | `auto`, a boolean or a path | none | `--baseline`, `--no-baseline` | Hides the findings recorded in a baseline file. See [Baseline and fixes](#baseline-and-fixes). |
 | `fix` | mapping | none | `--fix-rules`, for `rules` | Limits the fixes. See [Baseline and fixes](#baseline-and-fixes). |
+| `update` | mapping | none | `--min-age`, `--freeze`, `--include-tag`, `--exclude-tag` | Sets the defaults of `jactionlint update`. See [Update](#update). |
 
 [Command line](./cli.md#command-line-options) describes each option. When a setting has a command-line option, the option wins over the config file.
 
@@ -416,6 +417,19 @@ online-options:
 | `baseline` | `auto`, a boolean or a path | none (no baseline) | `--baseline[=FILE]`, `--no-baseline` | Hides the findings recorded in a [baseline file](./baseline.md#baseline), so that a repository adopts the checks step by step. `auto` or `true` applies `.github/jactionlint-baseline.json` when that file exists. `false`, or no key, applies no baseline. Any other value is the path of the baseline file relative to the repository root, and the file must exist, or the run exits with status 3. `jactionlint --baseline-write` writes the file. |
 | `fix.rules` | list of rule IDs | empty (every fix) | `--fix-rules` | `--fix` and `--diff` apply only the fixes of these rules. jactionlint rejects an unknown ID. See [Fix findings automatically](./fix.md#fix-errors-automatically). |
 
+### Update
+
+The `update` mapping sets the defaults of [`jactionlint update`](./update.md). The command-line options win over it.
+
+| Key | Type | Default | Command-line equivalent | Effect |
+| --- | --- | --- | --- | --- |
+| `update.cooldown-days` | integer | `0` | `--min-age` | Use only releases at least this many days old. `0` turns the cooldown off. A negative number is an error. |
+| `update.freeze` | boolean | `false` | `--freeze` | Pin references to the commit SHA of the chosen release, with the version in a comment. |
+| `update.include-tags` | glob or list of globs | every tag | `--include-tag` | Only tags that match one of the patterns are eligible. Braces expand. |
+| `update.exclude-tags` | glob or list of globs | none | `--exclude-tag` | Tags that match are never eligible, and this wins over `include-tags`. |
+| `update.exclude-prereleases` | boolean | `false` | none | Leave out releases that GitHub marks as prereleases. |
+| `update.require-immutable-releases` | boolean | `false` | none | Accept only published, immutable releases; there is no fallback to tags. |
+
 ## Extending config files
 
 `extends` lists config files to inherit from. It makes an organization-wide configuration possible: keep a shared file in a repository or a submodule, and extend it from every project.
@@ -441,7 +455,7 @@ The keys merge as follows when more than one file writes them:
 | `profile`, `online`, `baseline`, `platform`, `generated-files`, `assume-default-permissions`, `config-variables`, `config-secrets`, `required-actions`, `required-checks` | The later value replaces the earlier one, an empty list included. |
 | `rules` | Merged by rule ID. The entry of the later file replaces the whole entry of the earlier file, so its level and its options replace the earlier ones. |
 | `paths` | Merged by glob. The entry of the later file replaces the entry with the same glob. |
-| `self-hosted-runner`, `shellcheck`, `fix`, `online-options` | Merged by sub-key (`labels`, `strict-labels` and `providers`; `rcfile`, `args` and `enable`; `rules`; each key of `online-options`). A sub-key that a later file writes replaces the earlier value, a list included. |
+| `self-hosted-runner`, `shellcheck`, `fix`, `update`, `online-options` | Merged by sub-key (`labels`, `strict-labels` and `providers`; `rcfile`, `args` and `enable`; `rules`; each key of `update`; each key of `online-options`). A sub-key that a later file writes replaces the earlier value, a list included. |
 | `ignores` | Concatenated, the extended files first. |
 | `extends` | Not inherited. |
 

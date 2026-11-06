@@ -492,6 +492,7 @@ Examples:
 Subcommands (each has its own --help):
   jactionlint run [WORKFLOW]                run the jobs of a workflow on this machine
   jactionlint cache ls|rm|prune|path        manage the cache that 'run' uses
+  jactionlint update [--check|--diff|--apply]  update the external actions to the latest eligible release
 `)
 	for _, g := range cliGroups {
 		fmt.Fprintf(out, "\n%s:\n", g)

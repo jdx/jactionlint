@@ -11,9 +11,10 @@ jactionlint [OPTIONS] [FILES...]
 jactionlint [OPTIONS] -
 jactionlint run [OPTIONS] [WORKFLOW]
 jactionlint cache ls|rm|prune|path
+jactionlint update [--check|--diff|--apply] [OPTIONS] [FILES...]
 ```
 
-`run` and `cache` are subcommands with their own options: see [Run workflows locally](./run.md). A file that is named `run` or `cache` is checked as `./run`.
+`run`, `cache` and `update` are subcommands with their own options: see [Run workflows locally](./run.md) and [Update actions](./update.md). `update` accepts the output, configuration and GitHub API options of the linter. A file that is named `run`, `cache` or `update` is checked as `./run`.
 
 - **No operand:** jactionlint checks the repository that holds the working directory: its workflow files, Dependabot configuration, composite actions and Actions lock file. See [what a run checks](./usage.md#what-a-run-checks).
 - **File operands:** jactionlint checks exactly these YAML files, wherever they are. A directory is not an operand: it exits with status 3 and the message `is a directory`.

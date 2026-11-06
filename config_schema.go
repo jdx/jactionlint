@@ -65,6 +65,11 @@ func sArray(desc string, items jsonObject) jsonObject {
 
 func sStrings(desc string) jsonObject { return sArray(desc, jsonObject{"type": "string"}) }
 
+// sGlobs is a string or a list of strings.
+func sGlobs(desc string) jsonObject {
+	return jsonObject{"description": desc, "oneOf": []jsonObject{{"type": "string"}, {"type": "array", "items": jsonObject{"type": "string"}}}}
+}
+
 // sObject is a mapping with the listed properties and no others.
 func sObject(desc string, props jsonObject, required ...string) jsonObject {
 	o := jsonObject{"type": "object", "description": desc, "properties": props, "additionalProperties": false}
@@ -178,6 +183,14 @@ func ConfigSchema() []byte {
 			"rcfile": sStr("A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository."),
 			"args":   sStrings("More arguments for shellcheck, one option per item with its value attached, such as --exclude=SC2129. The options jactionlint sets itself (--format, --color, --shell, --norc, --rcfile, --version, --wiki-link-count) and file names are errors."),
 			"enable": sStrings("Optional checks of shellcheck to turn on (--enable=NAME,...), such as avoid-nullary-conditions, or all."),
+		}),
+		"update": sObject("Configuration of `jactionlint update`, which checks the external actions and reusable workflows for newer releases and pins them. The command-line options override it.", jsonObject{
+			"cooldown-days":              sInt("Use only releases at least this many days old. 0 (the default) turns the restriction off. A reference is never moved to an older version to satisfy it."),
+			"freeze":                     sBool("Pin each reference to the full commit SHA of its release, with the version in a comment (`# v1.4.0`)."),
+			"include-tags":               sGlobs("A glob pattern or a list of them. Only releases whose tag matches one are eligible. Braces expand (`v{1,2}.*`)."),
+			"exclude-tags":               sGlobs("A glob pattern or a list of them. Releases whose tag matches one are not eligible, whatever include-tags says. Braces expand (`*-{alpha,beta,rc}*`)."),
+			"exclude-prereleases":        sBool("Leave out the releases which GitHub marks as prereleases, whatever their tag says."),
+			"require-immutable-releases": sBool("Accept only published GitHub releases marked immutable. A tag without a release, or with a mutable one, is not eligible and there is no fallback to tags."),
 		}),
 		"fix": sObject("Configuration of --fix.", jsonObject{
 			"rules": sArray("Apply only the fixes of these rules, like --fix-rules (which overrides it). All fixes are applied when the list is empty.", jsonObject{"type": "string", "enum": ids}),

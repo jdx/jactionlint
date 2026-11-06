@@ -4891,6 +4891,61 @@
         "object",
         "null"
       ]
+    },
+    "update": {
+      "additionalProperties": false,
+      "description": "Configuration of `jactionlint update`, which checks the external actions and reusable workflows for newer releases and pins them. The command-line options override it.",
+      "properties": {
+        "cooldown-days": {
+          "description": "Use only releases at least this many days old. 0 (the default) turns the restriction off. A reference is never moved to an older version to satisfy it.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exclude-prereleases": {
+          "description": "Leave out the releases which GitHub marks as prereleases, whatever their tag says.",
+          "type": "boolean"
+        },
+        "exclude-tags": {
+          "description": "A glob pattern or a list of them. Releases whose tag matches one are not eligible, whatever include-tags says. Braces expand (`*-{alpha,beta,rc}*`).",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "freeze": {
+          "description": "Pin each reference to the full commit SHA of its release, with the version in a comment (`# v1.4.0`).",
+          "type": "boolean"
+        },
+        "include-tags": {
+          "description": "A glob pattern or a list of them. Only releases whose tag matches one are eligible. Braces expand (`v{1,2}.*`).",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "require-immutable-releases": {
+          "description": "Accept only published GitHub releases marked immutable. A tag without a release, or with a mutable one, is not eligible and there is no fallback to tags.",
+          "type": "boolean"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
     }
   },
   "title": "jactionlint configuration",

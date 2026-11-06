@@ -270,6 +270,9 @@ type Config struct {
 	// Fix configures "jactionlint --fix".
 	Fix FixConfig `yaml:"fix"`
 
+	// Update configures "jactionlint update", which checks the external actions for newer releases and pins them.
+	Update UpdateConfig `yaml:"update"`
+
 	// Shellcheck tunes the shellcheck integration: a shellcheckrc, more arguments and optional checks.
 	Shellcheck ShellcheckConfig `yaml:"shellcheck"`
 
@@ -389,6 +392,9 @@ func parseConfig(b []byte) (*Config, error) {
 		}
 	}
 	c.present = presentKeys(&root)
+	if err := c.Update.validate(); err != nil {
+		return nil, err
+	}
 
 	if c.Profile != "" {
 		p, dep, err := parseConfigProfile(string(c.Profile))
@@ -601,6 +607,11 @@ func (c *Config) merge(over *Config) {
 	}
 	if over.present["fix.rules"] {
 		c.Fix.Rules = over.Fix.Rules
+	}
+	for _, k := range updateConfigKeys {
+		if over.present["update."+k] {
+			c.Update.merge(&over.Update, k)
+		}
 	}
 	if over.present["shellcheck.rcfile"] {
 		c.Shellcheck.RCFile = over.Shellcheck.RCFile
