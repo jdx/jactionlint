@@ -157,6 +157,16 @@ func newUpdatePolicy(cfg UpdateConfig, o *UpdateOptions) (*updatePolicy, error) 
 	if cfg.RequireImmutableReleases != nil {
 		p.requireImmut = *cfg.RequireImmutableReleases
 	}
+	for _, r := range o.ActionRules {
+		if _, a, ok := cutLast(r, "="); ok && strings.HasPrefix(a, "cooldown:") {
+			if n, err := strconv.Atoi(strings.TrimPrefix(a, "cooldown:")); err == nil && n > maxCooldownDays {
+				return nil, &usageError{fmt.Errorf("invalid --action-rule %q: the cooldown is at most %d days", r, maxCooldownDays)}
+			}
+		}
+	}
+	if p.cooldownDays > maxCooldownDays {
+		return nil, &usageError{fmt.Errorf("the cooldown of %d days is more than the %d days that can be compared", p.cooldownDays, maxCooldownDays)}
+	}
 	inc, exc := []string(cfg.IncludeTags), []string(cfg.ExcludeTags)
 	if o.IncludeTags != nil {
 		inc = o.IncludeTags
@@ -267,6 +277,9 @@ type updateOutcome struct {
 	edit  *updateEdit
 }
 
+// maxCooldownDays is the longest cooldown: 100 years, far below the point where a duration in nanoseconds overflows.
+const maxCooldownDays = 36500
+
 // maxUpdateCandidates bounds how many releases of one action are looked at for one reference. Each costs requests.
 const maxUpdateCandidates = 30
 
@@ -287,6 +300,7 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 		}
 	}
 
+	files = dedupeFiles(files)
 	res := &UpdateResult{}
 	var results []fileResult
 	type fileWork struct {
@@ -324,7 +338,7 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 		if sess == nil {
 			return nil, &usageError{errors.New("update reads the releases from GitHub, so the online checks must be on (do not pass --no-online)")}
 		}
-		locked := p != nil && cfg != nil && cfg.readsActionsLock() && l.lockListsWorkflow(p, file)
+		locked := p != nil && l.lockListsWorkflow(p, file)
 		u := &updater{sess: sess, pol: pol, now: now, locked: locked, debug: l.debug}
 		sites, err := findUpdateSites(src)
 		if err != nil {
@@ -402,7 +416,18 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 		}
 		out = l.logOut // stdout has the diff
 	}
-	if err := l.printer.print(out, results, l.runInfo()); err != nil {
+	// --min-severity hides findings from the output only: the edits and the counts above include them
+	shown := make([]fileResult, len(results))
+	for i, r := range results {
+		shown[i] = r
+		shown[i].errs = nil
+		for _, e := range r.errs {
+			if e.Severity >= l.minSeverity {
+				shown[i].errs = append(shown[i].errs, e)
+			}
+		}
+	}
+	if err := l.printer.print(out, shown, l.runInfo()); err != nil {
 		return nil, err
 	}
 	l.reportChangedNote()
@@ -566,10 +591,6 @@ func (u *updater) analyze(src []byte, s updateSite) *updateOutcome {
 	if anyMatch(u.pol.excludeActions, name) {
 		return nil
 	}
-	if s.unscanned {
-		return &updateOutcome{id: UpdateUnverifiedID, level: SeverityWarning,
-			msg: fmt.Sprintf("%s: the value is not a plain or quoted scalar on one line, so it was not checked: check it by hand", name)}
-	}
 	cooldown := u.pol.cooldownDays
 	subject := s.v.spec
 	if c := strings.TrimSpace(s.comment); c != "" {
@@ -584,6 +605,10 @@ func (u *updater) analyze(src []byte, s updateSite) *updateOutcome {
 		}
 		cooldown = r.days
 		break
+	}
+	if s.unscanned {
+		return &updateOutcome{id: UpdateUnverifiedID, level: SeverityWarning,
+			msg: fmt.Sprintf("%s: the value is not a plain or quoted scalar on one line, so it was not checked: check it by hand", name)}
 	}
 
 	out, err := u.plan(src, s, name, cooldown)
@@ -675,6 +700,17 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 			return nil, nil // v1.2.3-rc.1 and other tags that are not stable versions are left alone
 		}
 		if v.pre != "" {
+			if u.pol.excludePre {
+				if sha, ok := idx.byName[ref.Ref]; ok {
+					why, err := u.violations(owner, repo, ref.Ref, sha, cooldown)
+					if err != nil {
+						return nil, err
+					}
+					if why != "" {
+						return &updateOutcome{id: UpdatePolicyID, level: SeverityWarning, msg: fmt.Sprintf("%s: %s %s", name, ref.Ref, why)}, nil
+					}
+				}
+			}
 			return nil, nil
 		}
 		sha, found := idx.byName[ref.Ref]
@@ -702,7 +738,7 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 	var sel *selection
 	var held []string
 	if !u.pol.pinOnly {
-		sel, held, err = u.latestEligible(idx, owner, repo, cur, cooldown)
+		sel, held, err = u.latestEligible(idx, owner, repo, cur, isMovingAlias(idx, curSHA, cur), cooldown)
 		if err != nil {
 			return nil, err
 		}
@@ -733,7 +769,11 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 	if sel == nil {
 		// Nothing newer. The reference stays unless it is to be pinned, or is in violation.
 		if cur != nil {
-			why, err := u.violations(owner, repo, curTag, curSHA, cooldown)
+			polTag := curTag
+			if best, ok := bestStableTag(idx.bySHA[curSHA], ""); ok {
+				polTag = best // a moving tag (v1) has no release of its own: the policy applies to the release it points at
+			}
+			why, err := u.violations(owner, repo, polTag, curSHA, cooldown)
 			if err != nil {
 				return nil, err
 			}
@@ -856,7 +896,7 @@ func (u *updater) refSpelling(idx *tagIndex, t selection, gran int, wantV bool) 
 
 // latestEligible finds the highest stable release newer than cur that the policy allows. held lists why newer releases
 // were not eligible. cur is nil for a branch, then every release is newer.
-func (u *updater) latestEligible(idx *tagIndex, owner, repo string, cur *advisoryVersion, cooldown int) (*selection, []string, error) {
+func (u *updater) latestEligible(idx *tagIndex, owner, repo string, cur *advisoryVersion, curAlias bool, cooldown int) (*selection, []string, error) {
 	type cand struct {
 		tag string
 		sha string
@@ -900,7 +940,7 @@ func (u *updater) latestEligible(idx *tagIndex, owner, repo string, cur *advisor
 		if cur == nil {
 			return true
 		}
-		if len(cur.nums) < len(c.ver.nums) {
+		if curAlias && len(cur.nums) < len(c.ver.nums) {
 			// The current ref is a moving tag (v4): a release is newer when a leading number is higher
 			trunc := advisoryVersion{nums: c.ver.nums[:len(cur.nums)]}
 			return trunc.compare(*cur) > 0
@@ -915,8 +955,7 @@ func (u *updater) latestEligible(idx *tagIndex, owner, repo string, cur *advisor
 			break
 		}
 		if examined >= maxUpdateCandidates {
-			held = append(held, "stopped after "+strconv.Itoa(maxUpdateCandidates)+" releases")
-			break
+			return nil, nil, reasonf("none of the %d newest releases is eligible and the rest were not looked at, so whether an update exists is unknown", maxUpdateCandidates)
 		}
 		examined++
 		why, err := u.eligible(owner, repo, c.tag, c.sha, cooldown)
@@ -1089,4 +1128,39 @@ func commentStillTrue(comment, newVer string) bool {
 		return false
 	}
 	return len(cv.nums) <= len(nv.nums) && sameLeadingNumbers(nv, cv) && hasVPrefix(comment) == hasVPrefix(newVer)
+}
+
+// isMovingAlias reports whether the version is a less specific tag (v4) of a more specific one (v4.2.2) at the same commit, which
+// is how a moving tag looks. Fixed releases at different commits (v1.2 and v1.2.1) are not aliases.
+func isMovingAlias(idx *tagIndex, sha string, v *advisoryVersion) bool {
+	if v == nil {
+		return false
+	}
+	for _, o := range idx.bySHA[sha] {
+		ov, ok := parseAdvisoryVersion(o)
+		if ok && ov.pre == "" && len(ov.nums) > len(v.nums) && sameLeadingNumbers(ov, *v) {
+			return true
+		}
+	}
+	return false
+}
+
+// dedupeFiles drops the files that are named twice, however they are spelled, so that each is planned and written once.
+func dedupeFiles(files []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		key := f
+		if abs, err := filepath.Abs(f); err == nil {
+			key = abs
+		}
+		if real, err := filepath.EvalSymlinks(key); err == nil {
+			key = real
+		}
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, f)
+		}
+	}
+	return out
 }

@@ -41,35 +41,61 @@ func (t *tagPattern) match(name string) bool {
 	return false
 }
 
-// expandBraces expands the first group of braces and then the rest, so `v{1,2}.{0,1}` gives four patterns.
+// maxTagPatternAlternatives bounds the patterns that braces expand to, so that a hostile or careless setting cannot
+// allocate without limit.
+const maxTagPatternAlternatives = 256
+
+// expandBraces expands the first group of braces and then the rest, so `v{1,2}.{0,1}` gives four patterns. A backslash
+// makes the next character literal, braces included.
 func expandBraces(p string) ([]string, error) {
-	open := strings.IndexByte(p, '{')
-	if open < 0 {
-		if strings.ContainsRune(p, '}') {
+	open := -1
+	for i := 0; i < len(p); i++ {
+		switch p[i] {
+		case '\\':
+			i++
+		case '{':
+			open = i
+		case '}':
 			return nil, fmt.Errorf("unmatched } in the pattern")
 		}
+		if open >= 0 {
+			break
+		}
+	}
+	if open < 0 {
 		return []string{p}, nil
 	}
 	depth, last := 0, open+1
 	var parts []string
 	for i := open; i < len(p); i++ {
 		switch p[i] {
+		case '\\':
+			i++
 		case '{':
 			depth++
 		case '}':
 			depth--
 			if depth == 0 {
 				parts = append(parts, p[last:i])
-				var out []string
 				rest, err := expandBraces(p[i+1:])
 				if err != nil {
 					return nil, err
 				}
+				var subs [][]string
+				total := 0
 				for _, part := range parts {
 					sub, err := expandBraces(part)
 					if err != nil {
 						return nil, err
 					}
+					subs = append(subs, sub)
+					total += len(sub)
+				}
+				if total*len(rest) > maxTagPatternAlternatives {
+					return nil, fmt.Errorf("the braces expand to more than %d patterns", maxTagPatternAlternatives)
+				}
+				out := make([]string, 0, total*len(rest))
+				for _, sub := range subs {
 					for _, s := range sub {
 						for _, r := range rest {
 							out = append(out, p[:open]+s+r)
@@ -110,10 +136,11 @@ func globToRegexp(g string) (*regexp.Regexp, error) {
 			b.WriteString("[" + set + "]")
 			i += end + 1
 		case '\\':
-			if i+1 < len(g) {
-				i++
-				b.WriteString(regexp.QuoteMeta(string(g[i])))
+			if i+1 >= len(g) {
+				return nil, fmt.Errorf("the pattern ends with a backslash")
 			}
+			i++
+			b.WriteString(regexp.QuoteMeta(string(g[i])))
 		default:
 			b.WriteString(regexp.QuoteMeta(string(c)))
 		}

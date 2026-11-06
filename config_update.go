@@ -30,12 +30,15 @@ type TagPatterns []string
 func (p *TagPatterns) UnmarshalYAML(n *yaml.Node) error {
 	switch n.Kind {
 	case yaml.ScalarNode:
+		if !isYAMLString(n) {
+			return fmt.Errorf("yaml: the tag pattern %q at line %d, column %d is not a string: quote it", n.Value, n.Line, n.Column)
+		}
 		*p = TagPatterns{n.Value}
 		return nil
 	case yaml.SequenceNode:
 		out := make(TagPatterns, 0, len(n.Content))
 		for _, c := range n.Content {
-			if c.Kind != yaml.ScalarNode {
+			if c.Kind != yaml.ScalarNode || !isYAMLString(c) {
 				return fmt.Errorf("yaml: the tag patterns must be strings at line %d, column %d", c.Line, c.Column)
 			}
 			out = append(out, c.Value)
@@ -65,8 +68,8 @@ func (c *UpdateConfig) merge(over *UpdateConfig, key string) {
 }
 
 func (c UpdateConfig) validate() error {
-	if c.CooldownDays != nil && *c.CooldownDays < 0 {
-		return fmt.Errorf("\"update.cooldown-days\" must not be negative, got %d", *c.CooldownDays)
+	if c.CooldownDays != nil && (*c.CooldownDays < 0 || *c.CooldownDays > maxCooldownDays) {
+		return fmt.Errorf("\"update.cooldown-days\" must be between 0 and %d, got %d", maxCooldownDays, *c.CooldownDays)
 	}
 	for _, list := range []struct {
 		key string
@@ -79,4 +82,9 @@ func (c UpdateConfig) validate() error {
 		}
 	}
 	return nil
+}
+
+// isYAMLString reports whether the scalar is a string and not a boolean, number or null that YAML resolves from its spelling.
+func isYAMLString(n *yaml.Node) bool {
+	return n.Tag == "" || n.Tag == "!!str"
 }

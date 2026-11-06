@@ -92,6 +92,9 @@ func (cmd *Command) updateMain(args []string) int {
 	if f.noOnline {
 		return fail("update reads the releases from GitHub, so it cannot be combined with --no-online")
 	}
+	if f.onlineReport != "" {
+		return fail("--online-report is not supported by update")
+	}
 	if pinOnly && (fs.Changed("min-age") || len(branchToTag) > 0) {
 		return fail("--pin-only keeps the version, so --min-age and --branch-to-tag have nothing to do")
 	}
@@ -151,9 +154,12 @@ func (cmd *Command) updateMain(args []string) int {
 
 	online, onlineAllow, onlineDeny := f.online, f.onlineAllow, f.onlineDeny
 	if !online.set {
-		set, _, mode, err := parseOnlineEnv(os.Getenv(onlineEnvName))
+		set, off, mode, err := parseOnlineEnv(os.Getenv(onlineEnvName))
 		if err != nil {
 			return fail("%s", err)
+		}
+		if off {
+			return fail("update reads the releases from GitHub, so it cannot be combined with %s=0", onlineEnvName)
 		}
 		if set {
 			online = onlineFlag{set: true, mode: mode}

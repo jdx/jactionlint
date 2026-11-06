@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -386,7 +387,7 @@ func TestUpdateConfig(t *testing.T) {
 	if len(u.IncludeTags) != 1 || u.IncludeTags[0] != "v*" || len(u.ExcludeTags) != 1 {
 		t.Errorf("tags: %v %v", u.IncludeTags, u.ExcludeTags)
 	}
-	for _, bad := range []string{"update:\n  cooldown: 7\n", "update:\n  cooldown-days: -1\n", "update:\n  include-tags: \"v{1\"\n"} {
+	for _, bad := range []string{"update:\n  include-tags: true\n", "update:\n  exclude-tags: [false]\n", "update:\n  include-tags: 1.2\n", "update:\n  cooldown-days: 100000\n", "update:\n  cooldown: 7\n", "update:\n  cooldown-days: -1\n", "update:\n  include-tags: \"v{1\"\n"} {
 		if _, err := ParseConfig([]byte(bad)); err == nil {
 			t.Errorf("%q must be an error", bad)
 		}
@@ -411,6 +412,8 @@ func TestTagPatterns(t *testing.T) {
 		{"v1.[!0-4].0", "v1.5.0", true},
 		{`v1\*`, "v1*", true},
 		{"v1.0", "v1x0", false},
+		{`v\{1,2\}`, "v2", false},
+		{`v\{1,2\}`, "v{1,2}", true},
 	} {
 		p, err := compileTagPattern(c.pat)
 		if err != nil {
@@ -421,7 +424,7 @@ func TestTagPatterns(t *testing.T) {
 			t.Errorf("%q matches %q: %v, want %v", c.pat, c.tag, got, c.want)
 		}
 	}
-	for _, bad := range []string{"", "v{1,2", "v1}", "v[1"} {
+	for _, bad := range []string{"", "v{1,2", "v1}", "v[1", `v2\`, strings.Repeat("{1,2}", 20)} {
 		if _, err := compileTagPattern(bad); err == nil {
 			t.Errorf("%q must be an error", bad)
 		}
@@ -586,5 +589,156 @@ func TestUpdateNeverWritesAMovingTagThePolicyRejects(t *testing.T) {
 	_, after, _ = runUpdate(t, c, wf("example/action@v1"), UpdateOptions{Mode: UpdateApply}, "update:\n  exclude-tags: v2\n")
 	if want := wf("example/action@v2.0.0"); after != want {
 		t.Fatalf("excluded alias: got:\n%s", after)
+	}
+}
+
+func TestUpdateActionRuleIgnoresAnUneditableReference(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	src := "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - uses: >-\n          example/action@v1.3.0\n"
+	res, _, _ := runUpdate(t, c, src, UpdateOptions{Mode: UpdateCheck, ActionRules: []string{`^example/action@=ignore`}}, "")
+	if res.Violations != 0 || res.Updates != 0 {
+		t.Fatalf("an ignored reference was reported: %d %d", res.Updates, res.Violations)
+	}
+}
+
+func TestUpdateEditsEachFileOnce(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	path := filepath.Join(dir, ".github", "workflows", "ci.yaml")
+	os.WriteFile(path, []byte(wf("example/action@v1.3.0")), 0o644)
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{GitHubClient: c, Online: true, WorkingDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := l.Update([]string{path, path, filepath.Join(filepath.Dir(path), ".", "ci.yaml")}, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }})
+	if err != nil || res.Updates != 1 {
+		t.Fatalf("err = %v, updates = %v", err, res)
+	}
+}
+
+func TestUpdateFindsCompositeActions(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "ci.yaml"), []byte("on: push\njobs: {}\n"), 0o644)
+	action := "name: x\ndescription: y\nruns:\n  using: composite\n  steps:\n    - uses: example/action@v1.3.0\n      shell: bash\n"
+	os.MkdirAll(filepath.Join(dir, "tools", "x"), 0o755)
+	path := filepath.Join(dir, "tools", "x", "action.yml")
+	os.WriteFile(path, []byte(action), 0o644)
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{GitHubClient: c, Online: true, WorkingDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Update(nil, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(path)
+	if want := strings.Replace(action, "v1.3.0", "v1.5.0", 1); string(after) != want {
+		t.Fatalf("got:\n%s", after)
+	}
+}
+
+func TestUpdateFixedReleasesAreNotAliases(t *testing.T) {
+	rels := []fixtureRel{{tag: "v1.2", sha: shaV130, days: 90, immutable: true}, {tag: "v1.2.1", sha: shaV140, days: 30, immutable: true}}
+	c := updateFixtureClient(t, rels, nil)
+	_, after, _ := runUpdate(t, c, wf("example/action@v1.2"), UpdateOptions{Mode: UpdateApply}, "")
+	if want := wf("example/action@v1.2.1"); after != want {
+		t.Fatalf("got:\n%s", after)
+	}
+}
+
+func TestUpdateCurrentAliasIsCheckedAgainstItsRelease(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	src := wf("example/action@v1")
+	res, after, out := runUpdate(t, c, src, UpdateOptions{Mode: UpdateCheck}, "update:\n  require-immutable-releases: false\n  exclude-prereleases: true\n")
+	if after != src || res.Violations != 0 {
+		t.Fatalf("violations = %d\n%s", res.Violations, out)
+	}
+	rels := []fixtureRel{{tag: "v1.5.0", sha: shaV150, days: 10, immutable: true}}
+	c = updateFixtureClient(t, rels, map[string]string{"v1": shaV150})
+	res, _, out = runUpdate(t, c, src, UpdateOptions{Mode: UpdateCheck}, "update:\n  require-immutable-releases: true\n")
+	if res.Violations != 0 {
+		t.Fatalf("v1 was checked as a release of its own:\n%s", out)
+	}
+}
+
+func TestUpdateCurrentPrereleaseBreaksThePolicy(t *testing.T) {
+	rels := []fixtureRel{{tag: "v2.0.0-rc.1", sha: shaV200, days: 10, prerelease: true}}
+	c := updateFixtureClient(t, rels, nil)
+	res, _, out := runUpdate(t, c, wf("example/action@v2.0.0-rc.1"), UpdateOptions{Mode: UpdateCheck}, "update:\n  exclude-prereleases: true\n")
+	if res.Violations != 1 || !strings.Contains(out, "is a prerelease") {
+		t.Fatalf("violations = %d\n%s", res.Violations, out)
+	}
+}
+
+func TestUpdateSaysWhenTheSearchWasCutShort(t *testing.T) {
+	rels := []fixtureRel{{tag: "v1.0.0", sha: shaV130, days: 400, immutable: true}}
+	for i := 1; i <= maxUpdateCandidates+1; i++ {
+		rels = append(rels, fixtureRel{tag: "v2." + strconv.Itoa(i) + ".0", sha: strings.Repeat(strconv.Itoa(i%10), 40), days: 1, immutable: true})
+	}
+	c := updateFixtureClient(t, rels, nil)
+	days := 30
+	res, _, out := runUpdate(t, c, wf("example/action@v1.0.0"), UpdateOptions{Mode: UpdateCheck, MinAge: &days}, "")
+	if res.Violations != 1 || !strings.Contains(out, "whether an update exists is unknown") {
+		t.Fatalf("violations = %d\n%s", res.Violations, out)
+	}
+}
+
+func TestUpdateRefusesAnOverflowingCooldown(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), nil)
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".github", "workflows", "ci.yaml"), []byte(wf("example/action@v1.3.0")), 0o644)
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{GitHubClient: c, Online: true, WorkingDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	days := 106752
+	if _, err := l.Update(nil, UpdateOptions{MinAge: &days}); err == nil {
+		t.Error("a cooldown that overflows must be refused")
+	}
+}
+
+func TestUpdateMinSeverityHidesOutputOnly(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755)
+	path := filepath.Join(dir, ".github", "workflows", "ci.yaml")
+	os.WriteFile(path, []byte(wf("example/action@v1.3.0")), 0o644)
+	var out bytes.Buffer
+	l, err := NewLinter(&out, &LinterOptions{GitHubClient: c, Online: true, WorkingDir: dir, MinSeverity: SeverityError, Format: "oneline"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := l.Update(nil, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }})
+	if err != nil || res.Updates != 1 || strings.Contains(out.String(), "update-available") {
+		t.Fatalf("err = %v, updates = %d, output %q", err, res.Updates, out.String())
+	}
+	if after, _ := os.ReadFile(path); !strings.Contains(string(after), "v1.5.0") {
+		t.Errorf("the edit was lost:\n%s", after)
+	}
+}
+
+func TestUpdateCommandRefusesWhatItCannotDo(t *testing.T) {
+	t.Setenv(onlineEnvName, "0")
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"update"}, "JACTIONLINT_ONLINE=0"},
+		{[]string{"update", "--online-report=r.json"}, "--online-report"},
+	} {
+		var errb bytes.Buffer
+		cmd := Command{Stdout: &bytes.Buffer{}, Stderr: &errb}
+		if got := cmd.Main(append([]string{"jactionlint"}, c.args...)); got != ExitStatusInvalidCommandOption || !strings.Contains(errb.String(), c.want) {
+			t.Errorf("%v: %d %q", c.args, got, errb.String())
+		}
 	}
 }
