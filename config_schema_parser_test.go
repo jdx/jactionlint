@@ -57,6 +57,9 @@ func TestConfigSchemaAgreesWithTheParser(t *testing.T) {
 		"ignores:\n  - rule: "+plain+"\n    file: a.yaml\n    expires: tomorrow\n",
 		"ignores:\n  - rule: "+plain+"\n    file: a.yaml\n    when: now\n",
 		"ignores: a\n")
+	// update
+	add(true, "update:\n  cooldown-days: 7\n  freeze: true\n  include-tags: v*\n  exclude-tags: [\"*-rc*\", beta]\n  exclude-prereleases: true\n  require-immutable-releases: false\n")
+	add(false, "update:\n  include-tags: \"\"\n", "update:\n  exclude-tags: [\"\"]\n", "update:\n  cooldown-days: -1\n", "update:\n  cooldown: 7\n", "update:\n  freeze: soon\n", "update: 3\n")
 	// the other keys
 	add(true, "profile: correctness\n", "profile: default\n", "profile: pedantic\n", "profile: strict\n", "profile:\n", "online: true\n", "online:\n",
 		"baseline: auto\n", "baseline: true\n", "baseline: false\n", "baseline: some/file.json\n", "extends: [a.yaml]\n",

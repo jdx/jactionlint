@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -482,5 +483,108 @@ func TestUpdateFindingsHaveEveryOutputFormat(t *testing.T) {
 		if !strings.Contains(out.String(), "update-available") {
 			t.Errorf("%s output lacks the finding:\n%s", format, out.String())
 		}
+	}
+}
+
+func TestUpdateIgnoresUsesInsideWith(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	src := "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - uses: example/action@v1.5.0\n        with:\n          uses: example/action@v1.3.0\n          other: { uses: example/action@v1.3.0 }\n"
+	res, after, _ := runUpdate(t, c, src, UpdateOptions{Mode: UpdateApply}, "")
+	if after != src || res.Updates != 0 || res.Violations != 0 {
+		t.Fatalf("an input was treated as a reference:\n%s", after)
+	}
+}
+
+func TestUpdateReportsReferencesItCannotEdit(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	for _, uses := range []string{">-\n          example/action@v1.3.0", "|\n          example/action@v1.3.0", "\"example/action\\\n            @v1.3.0\""} {
+		src := "on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n      - uses: " + uses + "\n"
+		res, after, out := runUpdate(t, c, src, UpdateOptions{Mode: UpdateApply}, "")
+		if after != src || res.Violations != 1 || !strings.Contains(out, "not a plain or quoted scalar on one line") {
+			t.Errorf("%q: violations = %d\n%s", uses, res.Violations, out)
+		}
+	}
+}
+
+func TestUpdateStopsOnAnUnusableChangedSince(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, ".github", "workflows", "ci.yaml")
+	src := wf("example/action@v1.3.0")
+	os.WriteFile(path, []byte(src), 0o644)
+	if out, err := runGit(dir, "init", "-q"); err != nil {
+		t.Skipf("git is not usable: %v %s", err, out)
+	}
+	l, err := NewLinter(&bytes.Buffer{}, &LinterOptions{GitHubClient: c, Online: true, WorkingDir: dir, ChangedSince: "no-such-revision"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Update([]string{path}, UpdateOptions{Mode: UpdateApply, now: func() time.Time { return updateNow }}); err == nil {
+		t.Error("an unknown revision must stop the update")
+	}
+	if after, _ := os.ReadFile(path); string(after) != src {
+		t.Errorf("the file was written:\n%s", after)
+	}
+}
+
+func runGit(dir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func TestUpdateReportsLookupsThatFailForTheCurrentRelease(t *testing.T) {
+	// v1.5.0 is the latest, so no candidate is looked at; its own release must still be checked
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	delete(c.data.Repos["example/action"].ReleaseDates, "tags/v1.5.0")
+	days := 7
+	src := wf("example/action@v1.5.0")
+	res, after, out := runUpdate(t, c, src, UpdateOptions{Mode: UpdateCheck, MinAge: &days}, "")
+	if after != src || res.Violations != 1 || !strings.Contains(out, "update-unverified") {
+		t.Fatalf("violations = %d\n%s", res.Violations, out)
+	}
+}
+
+func TestUpdateWithATruncatedTagList(t *testing.T) {
+	c := updateFixtureClient(t, standardReleases(), standardAliases())
+	repo := c.data.Repos["example/action"]
+	var kept []GitHubTag
+	for _, tg := range repo.Tags.Tags {
+		if tg.Name != "v1.3.0" {
+			kept = append(kept, tg)
+		}
+	}
+	repo.Tags.Tags, repo.Tags.Truncated = kept, true
+	repo.Refs = map[string]*fixtureRef{"tags/v1.3.0": {SHA: shaV130, Found: true}}
+	repo.Branches = &GitHubBranchList{}
+	_, after, _ := runUpdate(t, c, wf("example/action@"+shaV130+" # v1.3.0"), UpdateOptions{Mode: UpdateApply}, "")
+	if want := wf("example/action@" + shaV150 + " # v1.5.0"); after != want {
+		t.Fatalf("got:\n%s", after)
+	}
+}
+
+func TestUpdateRewritesAVersionCommentThatStopsBeingTrue(t *testing.T) {
+	rels := append(standardReleases(), fixtureRel{tag: "v2.0.0", sha: shaV200, days: 40, immutable: true})
+	c := updateFixtureClient(t, rels, map[string]string{"v1": shaV150, "v2": shaV200})
+	_, after, _ := runUpdate(t, c, wf("example/action@v1 # v1.5.0"), UpdateOptions{Mode: UpdateApply}, "")
+	if want := wf("example/action@v2 # v2"); after != want {
+		t.Fatalf("got:\n%s", after)
+	}
+}
+
+func TestUpdateNeverWritesAMovingTagThePolicyRejects(t *testing.T) {
+	rels := append(standardReleases(), fixtureRel{tag: "v2.0.0", sha: shaV200, days: 40, immutable: true})
+	c := updateFixtureClient(t, rels, map[string]string{"v1": shaV150, "v2": shaV200})
+	_, after, _ := runUpdate(t, c, wf("example/action@v1"), UpdateOptions{Mode: UpdateApply}, "update:\n  require-immutable-releases: true\n")
+	if want := wf("example/action@v2.0.0"); after != want {
+		t.Fatalf("immutable only: got:\n%s", after)
+	}
+	_, after, _ = runUpdate(t, c, wf("example/action@v1"), UpdateOptions{Mode: UpdateApply}, "update:\n  exclude-tags: v2\n")
+	if want := wf("example/action@v2.0.0"); after != want {
+		t.Fatalf("excluded alias: got:\n%s", after)
 	}
 }

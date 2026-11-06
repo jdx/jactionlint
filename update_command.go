@@ -212,8 +212,8 @@ func (cmd *Command) updateMain(args []string) int {
 		}
 		return ExitStatusFailure
 	}
-	if n := l.OnlineSkipped(); n > 0 && opts.OnlineOptions.Mode.Strict() {
-		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the update is incomplete\n", n)
+	if l.OnlineFailed() {
+		fmt.Fprintf(cmd.Stderr, "online=strict: %d GitHub lookups were skipped, so the update is incomplete\n", l.OnlineSkipped())
 		return ExitStatusFailure
 	}
 	if uo.Mode == UpdateCheck && (res.Updates > 0 || res.Violations > 0) {

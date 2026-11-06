@@ -4909,10 +4909,12 @@
           "description": "A glob pattern or a list of them. Releases whose tag matches one are not eligible, whatever include-tags says. Braces expand (`*-{alpha,beta,rc}*`).",
           "oneOf": [
             {
+              "pattern": ".",
               "type": "string"
             },
             {
               "items": {
+                "pattern": ".",
                 "type": "string"
               },
               "type": "array"
@@ -4927,10 +4929,12 @@
           "description": "A glob pattern or a list of them. Only releases whose tag matches one are eligible. Braces expand (`v{1,2}.*`).",
           "oneOf": [
             {
+              "pattern": ".",
               "type": "string"
             },
             {
               "items": {
+                "pattern": ".",
                 "type": "string"
               },
               "type": "array"

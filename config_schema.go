@@ -67,7 +67,7 @@ func sStrings(desc string) jsonObject { return sArray(desc, jsonObject{"type": "
 
 // sGlobs is a string or a list of strings.
 func sGlobs(desc string) jsonObject {
-	return jsonObject{"description": desc, "oneOf": []jsonObject{{"type": "string"}, {"type": "array", "items": jsonObject{"type": "string"}}}}
+	return jsonObject{"description": desc, "oneOf": []jsonObject{{"type": "string", "pattern": "."}, {"type": "array", "items": jsonObject{"type": "string", "pattern": "."}}}}
 }
 
 // sObject is a mapping with the listed properties and no others.

@@ -251,6 +251,8 @@ type updateSite struct {
 	comment   string
 	commentAt int
 	hasHash   bool
+	// unscanned is a reference that cannot be edited in place: a block scalar, a value over several lines or with escapes.
+	unscanned bool
 }
 
 // updateEdit is the change for one site: the text that replaces the ref (and the comment).
@@ -349,6 +351,9 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 	}
 
 	results = l.filterChanged(results)
+	if err := l.changedError(); err != nil {
+		return nil, err // an unusable --changed-since must not widen what is updated
+	}
 
 	var diff strings.Builder
 	for _, fw := range work {
@@ -462,7 +467,8 @@ func applyUpdateEdits(src []byte, edits []TextEdit) ([]byte, error) {
 	return out, nil
 }
 
-// findUpdateSites returns the `uses:` values of the file whose value is a plain scalar.
+// findUpdateSites returns the `uses:` of the jobs (reusable workflows) and of the steps of jobs and composite actions. A
+// `uses` key anywhere else, such as an input in `with:`, is data and is not touched.
 func findUpdateSites(src []byte) ([]updateSite, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(src, &root); err != nil {
@@ -470,28 +476,48 @@ func findUpdateSites(src []byte) ([]updateSite, error) {
 	}
 	starts := lineStarts(src)
 	var sites []updateSite
-	var walk func(n *yaml.Node)
-	walk = func(n *yaml.Node) {
-		if n == nil {
-			return
+	value := func(n *yaml.Node, key string) *yaml.Node {
+		if n == nil || n.Kind != yaml.MappingNode {
+			return nil
 		}
-		if n.Kind == yaml.MappingNode {
-			for i := 0; i+1 < len(n.Content); i += 2 {
-				k, v := n.Content[i], n.Content[i+1]
-				if k.Value == "uses" && v.Kind == yaml.ScalarNode && v.Line >= 1 && v.Line <= len(starts) {
-					if s, ok := newUpdateSite(src, starts[v.Line-1], v.Line, v.Column); ok {
-						sites = append(sites, s)
-					}
-				}
-				walk(v)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if n.Content[i].Value == key {
+				return n.Content[i+1]
 			}
+		}
+		return nil
+	}
+	add := func(v *yaml.Node) {
+		if v == nil || v.Kind != yaml.ScalarNode || v.Line < 1 || v.Line > len(starts) {
 			return
 		}
-		for _, c := range n.Content {
-			walk(c)
+		s, ok := newUpdateSite(src, starts[v.Line-1], v.Line, v.Column)
+		if ok && s.v.spec == v.Value && v.Style&(yaml.LiteralStyle|yaml.FoldedStyle) == 0 {
+			sites = append(sites, s)
+			return
+		}
+		// Written over several lines, as a block scalar, or with an escape: the reference is real but the line cannot be edited
+		sites = append(sites, updateSite{line: v.Line, col: v.Column, unscanned: true, v: usesValueOnLine{spec: v.Value}, ref: ParseUses(strings.TrimSpace(v.Value))})
+	}
+	steps := func(seq *yaml.Node) {
+		if seq == nil || seq.Kind != yaml.SequenceNode {
+			return
+		}
+		for _, step := range seq.Content {
+			add(value(step, "uses"))
 		}
 	}
-	walk(&root)
+	n := &root
+	if n.Kind == yaml.DocumentNode && len(n.Content) > 0 {
+		n = n.Content[0]
+	}
+	if jobs := value(n, "jobs"); jobs != nil && jobs.Kind == yaml.MappingNode {
+		for i := 1; i < len(jobs.Content); i += 2 {
+			add(value(jobs.Content[i], "uses"))
+			steps(value(jobs.Content[i], "steps"))
+		}
+	}
+	steps(value(value(n, "runs"), "steps"))
 	return sites, nil
 }
 
@@ -539,6 +565,10 @@ func (u *updater) analyze(src []byte, s updateSite) *updateOutcome {
 	}
 	if anyMatch(u.pol.excludeActions, name) {
 		return nil
+	}
+	if s.unscanned {
+		return &updateOutcome{id: UpdateUnverifiedID, level: SeverityWarning,
+			msg: fmt.Sprintf("%s: the value is not a plain or quoted scalar on one line, so it was not checked: check it by hand", name)}
 	}
 	cooldown := u.pol.cooldownDays
 	subject := s.v.spec
@@ -621,6 +651,7 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 			} else if idx.truncated {
 				if sha, isTag, err := u.sess.TagCommit(owner, repo, commentVer); err == nil && isTag && strings.EqualFold(sha, curSHA) {
 					verified = true
+					names = append(slices.Clone(names), commentVer) // the list is cut short and lacks the tag that was just resolved
 				}
 			}
 			if !verified {
@@ -702,7 +733,11 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 	if sel == nil {
 		// Nothing newer. The reference stays unless it is to be pinned, or is in violation.
 		if cur != nil {
-			if why := u.violations(owner, repo, curTag, curSHA, cooldown); why != "" {
+			why, err := u.violations(owner, repo, curTag, curSHA, cooldown)
+			if err != nil {
+				return nil, err
+			}
+			if why != "" {
 				return &updateOutcome{id: UpdatePolicyID, level: SeverityWarning, msg: fmt.Sprintf("%s: %s %s", name, curTag, why)}, nil
 			}
 		}
@@ -811,7 +846,8 @@ func (u *updater) refSpelling(idx *tagIndex, t selection, gran int, wantV bool) 
 		if wantV {
 			alias = "v" + alias
 		}
-		if sha, ok := idx.byName[alias]; ok && strings.EqualFold(sha, t.sha) {
+		// A moving tag has no immutable release of its own, and it must pass the tag filters like the release does
+		if sha, ok := idx.byName[alias]; ok && strings.EqualFold(sha, t.sha) && !u.pol.requireImmut && u.pol.tagAllowed(alias) {
 			return alias
 		}
 	}
@@ -960,7 +996,7 @@ func unitCount(n int, unit string) string {
 }
 
 // violations says how the release the reference is at breaks the policy, or "". It checks only what is known from GitHub.
-func (u *updater) violations(owner, repo, tag, sha string, cooldown int) string {
+func (u *updater) violations(owner, repo, tag, sha string, cooldown int) (string, error) {
 	var why []string
 	if u.pol.excludePre || u.pol.requireImmut {
 		rel, err := u.sess.Release(owner, repo, tag)
@@ -976,19 +1012,25 @@ func (u *updater) violations(owner, repo, tag, sha string, cooldown int) string 
 			if u.pol.requireImmut {
 				why = append(why, "has no GitHub release")
 			}
+		case errors.Is(err, errNoReleaseLookup):
+			return "", reasonf("the GitHub client cannot look up releases, so %s cannot be checked against the release policy", tag)
 		default:
-			u.debug("update: the release of %s/%s@%s could not be checked: %v", owner, repo, tag, err)
+			return "", err
 		}
 	}
 	if cooldown > 0 {
-		if age, err := u.age(owner, repo, tag, sha); err == nil && age < time.Duration(cooldown)*24*time.Hour {
+		age, err := u.age(owner, repo, tag, sha)
+		if err != nil {
+			return "", err
+		}
+		if age < time.Duration(cooldown)*24*time.Hour {
 			why = append(why, fmt.Sprintf("was released %s ago (cooldown %d days)", ageWords(age), cooldown))
 		}
 	}
 	if len(why) == 0 {
-		return ""
+		return "", nil
 	}
-	return strings.Join(why, " and ") + ", and no eligible release replaces it"
+	return strings.Join(why, " and ") + ", and no eligible release replaces it", nil
 }
 
 // buildUpdateEdit builds the edit of the ref and its version comment.
@@ -1002,7 +1044,7 @@ func buildUpdateEdit(s updateSite, newRef, newVer string, pin, wasPinned, hadVer
 	if !pin {
 		// An unpinned ref: the comment is only changed when it names the old ref
 		if restTrim != "" && strings.HasPrefix(restTrim, "#") {
-			if cv, cs, ce, ok := commentVersionAt(s.comment, s.ref); ok && cv == s.ref.Ref {
+			if cv, cs, ce, ok := commentVersionAt(s.comment, s.ref); ok && !commentStillTrue(cv, newVer) {
 				return &updateEdit{edits: []TextEdit{
 					{Start: refStart, End: refEnd, NewText: text},
 					{Start: s.commentAt + cs, End: s.commentAt + ce, NewText: newVer},
