@@ -624,6 +624,8 @@ func TestInstalls(t *testing.T) {
 			p("e.io/f@master", "e.io/f", "master", KindModule, false), p("g.io/h", "g.io/h", "", KindModule, false)}},
 		{"go install tool", "go", "install", false, false, false, false, 0, []pkg{p("tool", "tool", "", KindModule, true)}},
 		{"go install std cmd all", "go", "install", false, false, false, false, 0, []pkg{p("std", "std", "", KindModule, true), p("cmd", "cmd", "", KindModule, true), p("all", "all", "", KindModule, true)}},
+		{"go get tool", "go", "get", false, false, false, false, 0, []pkg{p("tool", "tool", "", KindModule, false)}},
+		{"go get all", "go", "get", false, false, false, false, 0, []pkg{p("all", "all", "", KindModule, false)}},
 		{"go install example.com/tool", "go", "install", false, false, false, false, 0, []pkg{p("example.com/tool", "example.com/tool", "", KindModule, false)}},
 		{"go install ./cmd/x ./...", "go", "install", false, false, false, false, 0, []pkg{p("./cmd/x", "./cmd/x", "", KindPath, false), p("./...", "./...", "", KindPath, false)}},
 		{"go get -u a.io/b", "go", "get", false, false, false, false, 0, []pkg{p("a.io/b", "a.io/b", "", KindModule, false)}},

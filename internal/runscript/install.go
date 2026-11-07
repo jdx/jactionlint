@@ -614,7 +614,8 @@ var reGoExactVersion = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-
 
 // goMetaPackages are the package patterns of the go command that name no module to fetch: `tool` (Go 1.24) is the
 // tools of the tool directives of go.mod, `all` the packages of the main module and its dependencies, and `std`
-// and `cmd` the standard library and the go commands. go.mod and go.sum, or the toolchain, fix their versions.
+// and `cmd` the standard library and the go commands. go.mod and go.sum, or the toolchain, fix their versions
+// for `go install`; `go get` with them upgrades go.mod, as `go get tool` updates the tools, so it stays unpinned.
 var goMetaPackages = map[string]bool{"tool": true, "all": true, "std": true, "cmd": true}
 
 func (in *Install) golang(c *Command) bool {
@@ -633,7 +634,7 @@ func (in *Install) golang(c *Command) bool {
 		if i := strings.LastIndex(w.Value, "@"); i > 0 {
 			p.Name, p.Version = w.Value[:i], w.Value[i+1:]
 			p.Pinned = reGoExactVersion.MatchString(p.Version) || reHex.MatchString(p.Version) || versionIsDynamic(p.Version)
-		} else if goMetaPackages[w.Value] && !w.Dynamic() {
+		} else if in.Verb == "install" && goMetaPackages[w.Value] && !w.Dynamic() {
 			p.Pinned = true
 		}
 		if isLocalPath(w.Value) || w.Glob {
