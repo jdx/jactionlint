@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 25c06a5ada78),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 b8973e498305),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //
@@ -197,7 +197,7 @@ var eventPayloads = map[string]string{
 		blocking_issue_id,blocking_issue_repo:@repository2,branch,branches:[{commit:{sha,url},name,protected}],build:@build,
 		changes,check_run:@check_run,check_suite:@check_suite,client_payload,comment,commit:@commit2,commit_oid,commits:[@commits],
 		compare,completed_at,context,created,created_at,custom_pattern_name,custom_pattern_scope,definition:{allowed_values:[],
-		default_value,description,property_name,require_explicit_values,required,source_type,url,value_type,values_editable_by},
+		default_value,description,property_name,regex,require_explicit_values,required,source_type,url,value_type,values_editable_by},
 		deleted,deployment:@deployment,deployment_callback_url,deployment_status:@deployment_status,description,discussion:@discussion,
 		effective_date,enterprise,environment,event,forced,forkee:@forkee,head_commit:@commits,hook:{active,app_id,config:{content_type,
 		insecure_ssl,secret,url},created_at,deliveries_url,events:[],id,last_response:{code,message,status},name,ping_url,

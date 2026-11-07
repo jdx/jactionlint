@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.6.0](https://github.com/jdx/jactionlint/compare/v2.5.0...v2.6.0) (2026-11-07)
+
+
+### Features
+
+* **update:** add `jactionlint update` for action updates and SHA pinning ([#335](https://github.com/jdx/jactionlint/issues/335)) ([53ee6f0](https://github.com/jdx/jactionlint/commit/53ee6f02a08bc4552487d9979fc0ec3db2c04337))
+
+
+### Bug Fixes
+
+* **unpinned-tools:** do not report `go install tool` ([#338](https://github.com/jdx/jactionlint/issues/338)) ([327c574](https://github.com/jdx/jactionlint/commit/327c5746c5709eb9ba8a49d7a077b6f1628e6295))
+
 ## [2.5.0](https://github.com/jdx/jactionlint/compare/v2.4.0...v2.5.0) (2026-11-04)
 
 
