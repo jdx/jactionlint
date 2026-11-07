@@ -19,11 +19,12 @@ func (c *httpGitHubClient) Release(ctx context.Context, owner, repo, tag string)
 		return nil, err
 	}
 	var raw struct {
-		Tag       string `json:"tag_name"`
-		Immutable bool   `json:"immutable"`
+		Tag        string `json:"tag_name"`
+		Immutable  bool   `json:"immutable"`
+		Prerelease bool   `json:"prerelease"`
 	}
 	if _, err := c.getJSON(ctx, path, &raw); err != nil {
 		return nil, err
 	}
-	return &GitHubRelease{Tag: raw.Tag, Immutable: raw.Immutable}, nil
+	return &GitHubRelease{Tag: raw.Tag, Immutable: raw.Immutable, Prerelease: raw.Prerelease}, nil
 }

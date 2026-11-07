@@ -289,6 +289,7 @@ func TestConfigSchemaKnowsTheKeysOfTheParser(t *testing.T) {
 	}{
 		{"self-hosted-runner", []string{"properties", "self-hosted-runner", "properties"}, selfHostedRunnerKeys},
 		{"fix", []string{"properties", "fix", "properties"}, fixConfigKeys},
+		{"update", []string{"properties", "update", "properties"}, updateConfigKeys},
 		{"shellcheck", []string{"properties", "shellcheck", "properties"}, shellcheckConfigKeys},
 		{"online-options", []string{"properties", "online-options", "properties"}, onlineOptionsKeys},
 		{"paths", []string{"properties", "paths", "additionalProperties", "properties"}, pathConfigKeys},

@@ -18,6 +18,8 @@ type GitHubRelease struct {
 	Tag string `json:"tag"`
 	// Immutable is true when the release is immutable: its tag and its assets cannot be changed any more.
 	Immutable bool `json:"immutable"`
+	// Prerelease is true when GitHub marks the release as a prerelease, whatever the name of its tag says.
+	Prerelease bool `json:"prerelease,omitempty"`
 }
 
 // GitHubReleaseClient is an optional interface of a GitHubClient. A client which implements it can tell whether
@@ -60,8 +62,9 @@ func (s *onlineSession) Release(owner, repo, tag string) (*GitHubRelease, error)
 // fixtureRelease is the recorded answer about the release of one tag.
 type fixtureRelease struct {
 	// Found is false when GitHub answered "not found": the tag has no release.
-	Found     bool `json:"found"`
-	Immutable bool `json:"immutable,omitempty"`
+	Found      bool `json:"found"`
+	Immutable  bool `json:"immutable,omitempty"`
+	Prerelease bool `json:"prerelease,omitempty"`
 }
 
 // Release implements GitHubReleaseClient.
@@ -77,7 +80,7 @@ func (c *FixtureGitHubClient) Release(_ context.Context, owner, repo, tag string
 	if !e.Found {
 		return nil, fmt.Errorf("release of %q of %s/%s: %w", tag, owner, repo, ErrGitHubNotFound)
 	}
-	return &GitHubRelease{Tag: tag, Immutable: e.Immutable}, nil
+	return &GitHubRelease{Tag: tag, Immutable: e.Immutable, Prerelease: e.Prerelease}, nil
 }
 
 // Release implements GitHubReleaseClient when the wrapped client does.
@@ -97,7 +100,7 @@ func (c *RecordingGitHubClient) Release(ctx context.Context, owner, repo, tag st
 	}
 	switch {
 	case err == nil:
-		record(&fixtureRelease{Found: true, Immutable: rel.Immutable})
+		record(&fixtureRelease{Found: true, Immutable: rel.Immutable, Prerelease: rel.Prerelease})
 	case isNotFound(err):
 		record(&fixtureRelease{})
 	}

@@ -206,6 +206,9 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 // exit status. The args should be entire arguments including the program name, usually given via
 // os.Args.
 func (cmd *Command) Main(args []string) int {
+	if isUpdateCommand(args) {
+		return cmd.updateMain(args[2:])
+	}
 	f := newCommandFlags()
 	if err := f.parse(args[1:]); err != nil {
 		fmt.Fprintf(cmd.Stderr, "jactionlint: %s (try --help)\n", err)

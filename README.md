@@ -22,6 +22,7 @@ jactionlint is a static checker for GitHub Actions. It reads your workflows, com
 - **Fixes.** `jactionlint --fix` repairs what has a mechanical fix, and `--diff` shows the change first.
 - **Gradual adoption.** Profiles choose how much is checked, and a baseline fails the build only on new findings.
 - **Local runs.** `jactionlint run ci` runs the jobs of a workflow on your machine, every step in an OS sandbox, with a local actions cache and no container engine unless the workflow asks for one. See [Run workflows locally](https://jactionlint.jdx.dev/run).
+- **Updates.** `jactionlint update` finds the latest release of each action that your cooldown, tag and immutability policy allows, and shows, previews (`--diff`) or writes (`--apply`) the new references, pinned to a commit SHA with a version comment if you like. See [Update actions](https://jactionlint.jdx.dev/update).
 - **No network unless you ask.** The [online checks](https://jactionlint.jdx.dev/online), which ask GitHub about archived repositories, impostor commits and published advisories, run only with `--online`.
 
 Try it without installing anything in the [playground](https://jactionlint.jdx.dev/playground), which runs jactionlint in your browser.
