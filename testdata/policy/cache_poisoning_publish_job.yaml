@@ -25,3 +25,8 @@ jobs:
         with:
           push: true
           cache-from: type=gha
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          cache-from: type=gha
+          no-cache: true
