@@ -753,3 +753,26 @@ func TestUpdateChecksTheNamedReleaseWhenTwoTagsShareACommit(t *testing.T) {
 		t.Fatalf("the named release was judged by another tag:\n%s", out)
 	}
 }
+
+func TestUpdateMovesACurrentPrereleaseToTheStableRelease(t *testing.T) {
+	rels := []fixtureRel{
+		{tag: "v2.0.0-rc.1", sha: shaV200, days: 30, prerelease: true},
+		{tag: "v2.0.0", sha: shaV150, days: 20},
+	}
+	c := updateFixtureClient(t, rels, nil)
+	cfg := "update:\n  exclude-prereleases: true\n"
+	_, after, _ := runUpdate(t, c, wf("example/action@v2.0.0-rc.1"), UpdateOptions{Mode: UpdateApply}, cfg)
+	if want := wf("example/action@v2.0.0"); after != want {
+		t.Fatalf("got:\n%s", after)
+	}
+	// Without the policy a prerelease is the author's choice and stays
+	src := wf("example/action@v2.0.0-rc.1")
+	if _, after, _ = runUpdate(t, c, src, UpdateOptions{Mode: UpdateApply}, ""); after != src {
+		t.Fatalf("a prerelease was changed without the policy:\n%s", after)
+	}
+	// A prerelease that is not in the tag list cannot be verified
+	res, _, _ := runUpdate(t, c, wf("example/action@v3.0.0-rc.1"), UpdateOptions{Mode: UpdateCheck}, cfg)
+	if res.Violations != 1 {
+		t.Errorf("violations = %d", res.Violations)
+	}
+}

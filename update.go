@@ -699,19 +699,8 @@ func (u *updater) plan(src []byte, s updateSite, name string, cooldown int) (*up
 		if !ok || !semverTagRegex.MatchString(ref.Ref) {
 			return nil, nil // v1.2.3-rc.1 and other tags that are not stable versions are left alone
 		}
-		if v.pre != "" {
-			if u.pol.excludePre {
-				if sha, ok := idx.byName[ref.Ref]; ok {
-					why, err := u.violations(owner, repo, ref.Ref, sha, cooldown)
-					if err != nil {
-						return nil, err
-					}
-					if why != "" {
-						return &updateOutcome{id: UpdatePolicyID, level: SeverityWarning, msg: fmt.Sprintf("%s: %s %s", name, ref.Ref, why)}, nil
-					}
-				}
-			}
-			return nil, nil
+		if v.pre != "" && !u.pol.excludePre {
+			return nil, nil // a prerelease is left alone unless the policy excludes prereleases: then it is updated like any version
 		}
 		sha, found := idx.byName[ref.Ref]
 		if !found {
