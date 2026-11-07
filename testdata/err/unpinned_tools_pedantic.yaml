@@ -46,6 +46,8 @@ jobs:
       - run: go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
       - run: go get github.com/go-git/go-git/v5
       - run: go install ./cmd/...
+      - run: go install tool
+      - run: go tool buf --version
       - run: npm install -g typescript@5.6.2
       - run: npx tsc
       - run: npx prettier --check .
