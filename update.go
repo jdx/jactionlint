@@ -2,6 +2,7 @@ package jactionlint
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -72,6 +73,8 @@ type UpdateOptions struct {
 
 	// now is the clock, for tests.
 	now func() time.Time
+	// relock runs `gh actions-lock --relock` in a repository root, for tests. Nil runs gh.
+	relock func(ctx context.Context, dir string) error
 }
 
 // UpdateResult is what Linter.Update did.
@@ -311,6 +314,10 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 		policy *updatePolicy
 	}
 	var work []*fileWork
+	var roots []string
+	if proj != nil {
+		roots = append(roots, proj.RootDir())
+	}
 	for _, file := range files {
 		src, err := os.ReadFile(file)
 		if err != nil {
@@ -321,6 +328,9 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 			if p, err = l.projects.At(file); err != nil {
 				return nil, err
 			}
+		}
+		if p != nil {
+			roots = append(roots, p.RootDir())
 		}
 		cfg := l.configFor(p)
 		var ucfg UpdateConfig
@@ -432,6 +442,11 @@ func (l *Linter) Update(paths []string, uo UpdateOptions) (*UpdateResult, error)
 	}
 	l.reportChangedNote()
 	l.printUpdateSummary(res, uo.Mode)
+	if uo.Mode == UpdateApply {
+		if err := l.relock(roots, uo); err != nil {
+			return res, err
+		}
+	}
 	return res, nil
 }
 

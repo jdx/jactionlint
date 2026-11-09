@@ -54,13 +54,17 @@ A workflow that the [Actions lock file](./checks.md#check-actions-lock) lists is
 
 `--branch-to-tag REGEX` converts a reference whose ref is a branch matching the expression, such as `@main`, to the latest eligible release. With `--freeze` it is pinned to the commit of that release. Branch references that do not match are left alone.
 
+## The Actions lock file
+
+When `.github/workflows/actions.lock` exists, `--apply` ends by running `gh actions-lock --relock` from the repository root, so the lock file follows the workflows. It runs even when no reference changed, which refreshes mutable references. The [gh-actions-lock](https://github.com/github/gh-actions-lock) extension writes the file; `jactionlint` does not. Without `--apply` (the listing, `--check` and `--diff`) nothing runs. If `gh` or the extension is missing, or the relock fails, `update` prints the error and exits `3`; the workflow edits are already written.
+
 ## Options
 
 | Option | Config key | Effect |
 | --- | --- | --- |
 | `--check` | | Exit 1 when a reference has an update, breaks the policy or cannot be verified. |
 | `--diff` | | Print the changes as a unified diff. |
-| `--apply` | | Write the changes. |
+| `--apply` | | Write the changes. Then, when `.github/workflows/actions.lock` exists, run `gh actions-lock --relock`. |
 | `--min-age DAYS` | `update.cooldown-days` | The age a release must have. `0` turns the cooldown off. |
 | `--freeze` | `update.freeze` | Pin to the commit SHA with a version comment. |
 | `--pin-only` | | Pin the referenced release without upgrading it. |
