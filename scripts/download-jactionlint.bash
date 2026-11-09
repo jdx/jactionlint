@@ -156,10 +156,12 @@ function not_found() {
 echo "Downloading ${url} with curl"
 
 # -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
-# When JACTIONLINT_TOKEN is set, send the token. The process substitution keeps the token out of the curl command line.
+# When JACTIONLINT_TOKEN is set, send the token. curl reads the header from stdin (-H @-), which keeps the token out of
+# the curl command line. printf is a shell builtin, so the token is not on its command line either. Do not use a process
+# substitution such as -H @<(...): the native curl.exe of Git Bash on Windows cannot open the /dev/fd path it gives.
 # curl does not send the token to the host of a redirect.
 if [ -n "$token" ]; then
-    status="$(curl -fL -H @<(printf 'Authorization: Bearer %s\n' "$token") -o "$archive" -w '%{http_code}' "$url")"
+    status="$(printf 'Authorization: Bearer %s\n' "$token" | curl -fL -H @- -o "$archive" -w '%{http_code}' "$url")"
 else
     status="$(curl -fL -o "$archive" -w '%{http_code}' "$url")"
 fi || {

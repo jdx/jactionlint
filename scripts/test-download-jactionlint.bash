@@ -80,6 +80,23 @@ if [[ "$out" != '1.6.12' ]]; then
 fi
 rm -rf ./test2
 
+# Download with a token. This uses the real curl, so on Windows it checks that the native curl.exe of Git Bash can read
+# the header. CI gives GITHUB_TOKEN. The trace is off while the token is expanded, so that the log does not show it.
+set +x
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    use_own_releases
+    mkdir ./test3
+    JACTIONLINT_TOKEN="$GITHUB_TOKEN" bash "$script" latest ./test3
+    set -x
+    out="$(./test3/"${bin}" --version)"
+    if [[ "$out" != *'installed by downloading from release page'* ]]; then
+        echo "Output from ./${bin} --version is unexpected: '${out}'" >&2
+        exit 1
+    fi
+    rm -rf ./test3
+fi
+set -x
+
 # Error cases
 use_own_releases
 set +e
@@ -139,6 +156,42 @@ for pair in x86_64:amd64 amd64:amd64 i386:386 i686:386 aarch64:arm64 arm64:arm64
         ((fails++))
     fi
 done
+
+# The token goes to curl as a header on stdin, not on the command line. A mock curl records its arguments and stdin,
+# and answers 404, so the script stops before it extracts anything.
+mkdir ./mockbin
+cat > ./mockbin/curl <<'EOF'
+#!/bin/bash
+printf '%s\n' "$@" > "$MOCK_CURL_DIR/args"
+cat > "$MOCK_CURL_DIR/stdin"
+printf '404'
+exit 22
+EOF
+chmod +x ./mockbin/curl
+MOCK_CURL_DIR="$(pwd)/mockbin"
+export MOCK_CURL_DIR
+
+out="$(PATH="$MOCK_CURL_DIR:$PATH" JACTIONLINT_TOKEN='test-token' bash "$script" '9.9.9' </dev/null 2>&1)"
+if [[ "$out" != *'jactionlint v9.9.9 was not found'* ]]; then
+    echo "FAIL: Download with a mock curl did not cause the not found message: '${out}'" >&2
+    ((fails++))
+fi
+if [[ "$(cat ./mockbin/stdin)" != 'Authorization: Bearer test-token' ]]; then
+    echo "FAIL: curl did not get the token header on stdin: '$(cat ./mockbin/stdin)'" >&2
+    ((fails++))
+fi
+if ! grep -qx -- '@-' ./mockbin/args || grep -q 'test-token' ./mockbin/args; then
+    echo "FAIL: curl did not read the header from stdin, or got the token as an argument: '$(cat ./mockbin/args)'" >&2
+    ((fails++))
+fi
+
+out="$(PATH="$MOCK_CURL_DIR:$PATH" JACTIONLINT_TOKEN='' bash "$script" '9.9.9' </dev/null 2>&1)"
+if grep -qx -- '-H' ./mockbin/args || [[ -s ./mockbin/stdin ]]; then
+    echo "FAIL: curl got a header without a token: '$(cat ./mockbin/args)' '$(cat ./mockbin/stdin)'" >&2
+    ((fails++))
+fi
+rm -rf ./mockbin
+unset MOCK_CURL_DIR
 
 set -e
 if [[ "$fails" != "0" ]]; then

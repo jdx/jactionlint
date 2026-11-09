@@ -32,3 +32,6 @@ jobs:
           persist-credentials: false
       - run: ./scripts/test-download-jactionlint.bash
         shell: bash
+        env:
+          # Tests the download with a token, also with the native curl.exe on Windows
+          GITHUB_TOKEN: ${{ github.token }}
