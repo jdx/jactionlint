@@ -1,4 +1,4 @@
-| `--apply` | | Write the changes. Then, when `.github/workflows/actions.lock` exists, run `gh actions-lock --relock`. |# Update actions
+# Update actions
 
 `jactionlint update` checks the external actions and reusable workflows that your workflows and composite actions use, finds the latest release that your policy allows, and shows, previews or writes the new references. It pins them to a commit SHA with a matching version comment when you ask. It is separate from `--fix`: `--fix` repairs findings, `update` changes dependencies, so a lint run never moves a version.
 
@@ -64,7 +64,7 @@ When `.github/workflows/actions.lock` exists, `--apply` ends by running `gh acti
 | --- | --- | --- |
 | `--check` | | Exit 1 when a reference has an update, breaks the policy or cannot be verified. |
 | `--diff` | | Print the changes as a unified diff. |
-| `--apply` | | Write the changes. |
+| `--apply` | | Write the changes. Then, when `.github/workflows/actions.lock` exists, run `gh actions-lock --relock`. |
 | `--min-age DAYS` | `update.cooldown-days` | The age a release must have. `0` turns the cooldown off. |
 | `--freeze` | `update.freeze` | Pin to the commit SHA with a version comment. |
 | `--pin-only` | | Pin the referenced release without upgrading it. |

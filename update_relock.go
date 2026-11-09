@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,20 +51,35 @@ func runGHActionsLockRelock(ctx context.Context, dir string) error {
 	return nil
 }
 
-// relockRoots lists the repository roots, once each, whose Actions lock file exists.
-func relockRoots(roots []string) []string {
+// relockRoots lists the repository roots, once each, whose Actions lock file exists. Roots that are the same directory
+// through a symlink count once. A lock file that cannot be inspected (other than being absent) is an error.
+func relockRoots(roots []string) ([]string, error) {
 	var out []string
 	seen := map[string]bool{}
 	for _, r := range roots {
-		if r == "" || seen[r] {
+		if r == "" {
 			continue
 		}
-		seen[r] = true
-		if st, err := os.Stat(filepath.Join(r, filepath.FromSlash(actionsLockPath))); err == nil && st.Mode().IsRegular() {
+		key := r
+		if real, err := filepath.EvalSymlinks(r); err == nil {
+			key = real
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		st, err := os.Stat(filepath.Join(r, filepath.FromSlash(actionsLockPath)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("could not inspect %s in %s: %w", actionsLockPath, r, err)
+		}
+		if st.Mode().IsRegular() {
 			out = append(out, r)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // relock runs the relock in every root that has a lock file. It runs even when no reference changed.
@@ -76,11 +92,15 @@ func (l *Linter) relock(roots []string, uo UpdateOptions) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	locked, err := relockRoots(roots)
+	if err != nil {
+		return err
+	}
 	var errs []error
-	for _, r := range relockRoots(roots) {
+	for _, r := range locked {
 		fmt.Fprintf(l.logOut, "Running gh actions-lock --relock in %s\n", r)
 		if err := run(ctx, r); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("%s: %w", r, err))
 		}
 	}
 	return errors.Join(errs...)

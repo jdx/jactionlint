@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -107,8 +108,73 @@ func TestRelockRootsDedupes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(actionsLockPath)), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := relockRoots([]string{dir, dir, "", t.TempDir()})
+	got, err := relockRoots([]string{dir, dir, "", t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != 1 || got[0] != dir {
 		t.Fatalf("got %v", got)
+	}
+}
+
+func TestRelockRootsDedupesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(actionsLockPath)), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	got, err := relockRoots([]string{dir, link})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want one root, got %v", got)
+	}
+}
+
+func TestRelockNamesTheFailingRoot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(actionsLockPath)), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l := &Linter{logOut: &bytes.Buffer{}}
+	err := l.relock([]string{dir}, UpdateOptions{relock: func(context.Context, string) error { return errors.New("boom") }})
+	if err == nil || !strings.Contains(err.Error(), dir) || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("want the root and the cause, got %v", err)
+	}
+}
+
+// The default runner calls `gh actions-lock --relock` in the root.
+func TestRunGHActionsLockRelockArguments(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as gh")
+	}
+	bin := t.TempDir()
+	root := t.TempDir()
+	rec := filepath.Join(t.TempDir(), "args")
+	script := "#!/bin/sh\necho \"$@\" > " + rec + "\npwd >> " + rec + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := runGHActionsLockRelock(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(rec)
+	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if lines[0] != "actions-lock --relock" {
+		t.Errorf("args = %q", lines[0])
+	}
+	if real, _ := filepath.EvalSymlinks(root); len(lines) < 2 || lines[1] != real {
+		t.Errorf("dir = %v, want %s", lines, real)
 	}
 }
