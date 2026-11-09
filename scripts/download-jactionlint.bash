@@ -22,6 +22,11 @@ function usage() {
     echo '  Environment variable. Name of the executable and the prefix of the archive file' >&2
     echo '  name in the releases. The default is "jactionlint".' >&2
     echo >&2
+    echo 'JACTIONLINT_TOKEN:' >&2
+    echo '  Environment variable. Optional GitHub token. When it is set, the script sends' >&2
+    echo '  it with the download request. Then the higher rate limit for authenticated' >&2
+    echo '  requests applies.' >&2
+    echo >&2
     echo 'DIR:' >&2
     echo '  Directory to put the downloaded binary (e.g. /path/to/dir). When this value is' >&2
     echo '  omitted, the binary will be put in the current directory.' >&2
@@ -59,6 +64,7 @@ fi
 
 repo="${JACTIONLINT_REPO:-jdx/jactionlint}"
 name="${JACTIONLINT_NAME:-jactionlint}"
+token="${JACTIONLINT_TOKEN:-}"
 
 if [ -n "$1" ]; then
     if [[ "$1" != 'latest' && "$1" != 'LATEST' ]]; then
@@ -129,8 +135,6 @@ echo "Detected OS=${os} ext=${ext} arch=${arch}"
 file="${name}_${version}_${os}_${arch}.${ext}"
 url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
-echo "Downloading ${url} with curl"
-
 # Download to a file before extracting it. A version without an archive makes GitHub answer with a short "Not Found"
 # body, which tar and unzip would report as a broken archive.
 if [[ "$os" == "windows" ]]; then
@@ -142,17 +146,30 @@ fi
 trap 'rm -rf "$tempdir"' EXIT
 archive="$tempdir/${file}"
 
-# -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
-if ! status="$(curl -fL -o "$archive" -w '%{http_code}' "${url}")"; then
+function not_found() {
     echo >&2
-    if [[ "$status" == "404" ]]; then
-        echo "jactionlint v${version} was not found: there is no ${url}" >&2
-        echo "Check that the release v${version} exists and has the archive ${file} at https://github.com/${repo}/releases" >&2
-    else
-        echo "Could not download jactionlint v${version} from ${url}" >&2
-    fi
+    echo "jactionlint v${version} was not found: there is no ${url}" >&2
+    echo "Check that the release v${version} exists and has the archive ${file} at https://github.com/${repo}/releases" >&2
     exit 1
-fi
+}
+
+echo "Downloading ${url} with curl"
+
+# -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
+# When JACTIONLINT_TOKEN is set, send the token. The process substitution keeps the token out of the curl command line.
+# curl does not send the token to the host of a redirect.
+if [ -n "$token" ]; then
+    status="$(curl -fL -H @<(printf 'Authorization: Bearer %s\n' "$token") -o "$archive" -w '%{http_code}' "$url")"
+else
+    status="$(curl -fL -o "$archive" -w '%{http_code}' "$url")"
+fi || {
+    if [[ "$status" == "404" ]]; then
+        not_found
+    fi
+    echo >&2
+    echo "Could not download jactionlint v${version} from ${url} (HTTP status ${status})" >&2
+    exit 1
+}
 
 if [[ "$os" == "windows" ]]; then
     unzip "$archive" "${name}.exe" -d "$target_dir"

@@ -142,7 +142,7 @@ Run both checks before you extract the archive.
 
 The script picks the archive from `$OSTYPE` and `uname -m`. `x86_64` and `amd64` (what FreeBSD prints) select `amd64`, `aarch64` and `arm64` select `arm64`, names such as `i686` select `386`, and any other name that starts with `arm` selects `armv6`.
 
-The command line is `bash download-jactionlint.bash [[VERSION] DIR]`. The table lists the two arguments and the two environment variables that change what the script downloads:
+The command line is `bash download-jactionlint.bash [[VERSION] DIR]`. The table lists the two arguments and the environment variables of the script:
 
 | Input | Default | Meaning |
 | --- | --- | --- |
@@ -150,6 +150,7 @@ The command line is `bash download-jactionlint.bash [[VERSION] DIR]`. The table 
 | `DIR` | The current directory | The directory that receives `jactionlint` (`jactionlint.exe` on Windows). It must exist, or the script exits with an error. |
 | `JACTIONLINT_REPO` | `jdx/jactionlint` | The GitHub repository whose releases the script downloads from. |
 | `JACTIONLINT_NAME` | `jactionlint` | The name of the executable and the prefix of the archive name. |
+| `JACTIONLINT_TOKEN` | Not set | A GitHub token. When it is set, the script sends it with the download request. Then the higher rate limit for authenticated requests applies. |
 
 For a version that has no archive, the script prints a message that names the version and the URL, and exits with status 1. `bash download-jactionlint.bash --help` prints these inputs. Inside a GitHub Actions step the script also writes the path of the executable to the step output `executable`.
 
