@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,12 +25,27 @@ var nodeDist = "https://nodejs.org/dist"
 // nodeProvider finds or installs the Node.js that a JavaScript action needs.
 type nodeProvider struct {
 	mu    sync.Mutex
-	tools string // the tool cache of the run
-	found map[int]string
+	found map[nodeKey]string
 }
 
-func newNodeProvider(toolCache string) *nodeProvider {
-	return &nodeProvider{tools: toolCache, found: map[int]string{}}
+// nodeKey tells apart the binaries of one major version: each tool cache holds the builds of one platform, and a
+// binary found on the PATH of this machine is only good for jobs on this machine.
+type nodeKey struct {
+	tools string
+	major int
+	host  bool
+}
+
+// nodeTarget is where the binary has to run: the tool cache of the job and the platform of its programs, and whether
+// that is this machine.
+type nodeTarget struct {
+	tools string
+	plat  platform
+	host  bool
+}
+
+func newNodeProvider() *nodeProvider {
+	return &nodeProvider{found: map[nodeKey]string{}}
 }
 
 // majorOf maps `runs.using` to a Node.js major version: node20 is 20.
@@ -52,12 +66,13 @@ func nodeVersionOf(bin string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ensure returns the path of a node binary of the major version: the one on PATH when it matches, otherwise one
-// downloaded into the tool cache (and checked against the SHASUMS256.txt of that release).
-func (n *nodeProvider) ensure(ctx context.Context, major int, pathDirs []string, say func(string)) (string, error) {
+// ensure returns the path of a node binary of the major version for the target: the one on PATH when it matches,
+// otherwise one downloaded into the target's tool cache (and checked against the SHASUMS256.txt of that release).
+func (n *nodeProvider) ensure(ctx context.Context, t nodeTarget, major int, pathDirs []string, say func(string)) (string, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if p := n.found[major]; p != "" {
+	key := nodeKey{t.tools, major, t.host}
+	if p := n.found[key]; p != "" {
 		return p, nil
 	}
 	for _, d := range pathDirs {
@@ -66,17 +81,17 @@ func (n *nodeProvider) ensure(ctx context.Context, major int, pathDirs []string,
 			continue
 		}
 		if v, err := nodeVersionOf(bin); err == nil && strings.HasPrefix(v, "v"+strconv.Itoa(major)+".") {
-			n.found[major] = bin
+			n.found[key] = bin
 			return bin, nil
 		}
 		break // the first node on PATH is the one that a step would find
 	}
 	// the tool cache layout of setup-node: node/<version>/<arch>
-	arch := nodeArch()
-	if matches, _ := filepath.Glob(filepath.Join(n.tools, "node", strconv.Itoa(major)+".*", arch, "bin", "node")); len(matches) > 0 {
+	arch := t.plat.nodeArch()
+	if matches, _ := filepath.Glob(filepath.Join(t.tools, "node", strconv.Itoa(major)+".*", arch, "bin", "node")); len(matches) > 0 {
 		bin := matches[len(matches)-1]
 		if _, err := os.Stat(filepath.Join(filepath.Dir(filepath.Dir(bin)), ".jactionlint-complete")); err == nil {
-			n.found[major] = bin
+			n.found[key] = bin
 			return bin, nil
 		}
 	}
@@ -85,32 +100,12 @@ func (n *nodeProvider) ensure(ctx context.Context, major int, pathDirs []string,
 	if err != nil {
 		return "", err
 	}
-	bin, err := installNode(ctx, n.tools, ver, arch)
+	bin, err := installNode(ctx, t.tools, ver, t.plat.nodeOS(), arch)
 	if err != nil {
 		return "", err
 	}
-	n.found[major] = bin
+	n.found[key] = bin
 	return bin, nil
-}
-
-func nodeArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "x64"
-	case "386":
-		return "x86"
-	}
-	return runtime.GOARCH
-}
-
-func nodeOS() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "darwin"
-	case "linux":
-		return "linux"
-	}
-	return runtime.GOOS
 }
 
 // latestNode returns the newest release (such as "20.18.1") of the major version.
@@ -144,8 +139,8 @@ func latestNode(ctx context.Context, major int) (string, error) {
 
 // installNode downloads node-v<ver>-<os>-<arch>.tar.gz, verifies its SHA-256 against SHASUMS256.txt of the release, and
 // unpacks it to <tools>/node/<ver>/<arch>.
-func installNode(ctx context.Context, tools, ver, arch string) (string, error) {
-	file := fmt.Sprintf("node-v%s-%s-%s.tar.gz", ver, nodeOS(), arch)
+func installNode(ctx context.Context, tools, ver, goos, arch string) (string, error) {
+	file := fmt.Sprintf("node-v%s-%s-%s.tar.gz", ver, goos, arch)
 	sums, err := httpGet(ctx, fmt.Sprintf("%s/v%s/SHASUMS256.txt", nodeDist, ver), 1<<20)
 	if err != nil {
 		return "", fmt.Errorf("cannot read the checksums of Node.js %s: %w", ver, err)

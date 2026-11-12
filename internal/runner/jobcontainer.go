@@ -60,10 +60,57 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		if err := checkImageTrust(image, cfg.TrustImages || cfg.TrustActions); err != nil {
 			return nil, err
 		}
-		if err := eng.pull(ctx, image, cfg.Platform, say); err != nil {
+	}
+	// The container's options are read first: with --unsafe-container-options they can name a --platform. They are read
+	// again once the runner context has the container's platform, for the docker run line.
+	readOptions := func() ([]string, error) {
+		if image == "" || spec == nil || spec.Options == nil {
+			return nil, nil
+		}
+		o, err := jr.interp(jr.env, spec.Options.Value)
+		if err != nil {
+			return nil, err
+		}
+		return parseOptions(o, cfg.UnsafeContainerOptions)
+	}
+	opts, err := readOptions()
+	if err != nil {
+		return nil, err
+	}
+	// runPlatform is given to docker run after the options, so the container runs on the platform its Node.js and
+	// runner context were chosen for, even when an option's --platform was not recognized.
+	runPlatform := ""
+	if image != "" {
+		want := cfg.Platform
+		if p := optionPlatform(opts); p != "" {
+			want = p
+		}
+		if err := eng.pull(ctx, image, want, say); err != nil {
 			return nil, err
 		}
 		jc.imageEnv = eng.imageEnv(ctx, image)
+		// The steps run on the platform of the container, not of this machine: the Node.js of JavaScript actions and
+		// runner.os/runner.arch follow it.
+		var plat platform
+		// docker run takes DOCKER_DEFAULT_PLATFORM when there is no --platform; image inspect does not
+		if want == "" && eng.kind == "docker" {
+			want = os.Getenv("DOCKER_DEFAULT_PLATFORM")
+		}
+		if want != "" {
+			plat, err = parsePlatform(want)
+		} else {
+			plat, err = eng.imagePlatform(ctx, image)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot tell the platform of %s: %w", image, err)
+		}
+		if err := jr.usePlatform(plat); err != nil {
+			return nil, err
+		}
+		runPlatform = want
+		if opts, err = readOptions(); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := eng.output(ctx, "network", "create", "--label", "jactionlint=1", jc.network); err != nil {
 		return nil, err
@@ -101,9 +148,6 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		return []string{"-v", m}
 	}
 	args := []string{"run", "-d", "--init", "--name", jc.name, "--network", jc.network, "--label", "jactionlint=1"}
-	if cfg.Platform != "" {
-		args = append(args, "--platform", cfg.Platform)
-	}
 	args = append(args, hardening()...)
 	args = append(args, vol(jr.work, false)...)
 	args = append(args, vol(jr.rd.Home, false)...)
@@ -142,20 +186,13 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 			return nil, fmt.Errorf("container env values with line breaks are not supported")
 		}
 		args = append(args, ea...)
-		if spec.Options != nil {
-			o, err := jr.interp(jr.env, spec.Options.Value)
-			if err != nil {
-				return nil, err
-			}
-			opts, err := parseOptions(o, cfg.UnsafeContainerOptions)
-			if err != nil {
-				return nil, err
-			}
-			args = append(args, opts...)
-		}
+		args = append(args, opts...)
 		for _, p := range spec.Ports {
 			args = append(args, "-p", "127.0.0.1:"+p.Value)
 		}
+	}
+	if runPlatform != "" {
+		args = append(args, "--platform", runPlatform)
 	}
 	args = append(args, "-w", jr.work, "--entrypoint", "tail", image, "-f", "/dev/null")
 	if _, err := eng.output(ctx, args...); err != nil {

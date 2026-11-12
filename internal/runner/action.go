@@ -386,7 +386,7 @@ func (jr *jobRun) runNode(n label, step *jactionlint.Step, ra *resolvedAction, m
 		if err != nil {
 			return stepResult{Outcome: "failure", Note: err.Error()}, &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
 		}
-		bin, err := e.node.ensure(cx, major, jr.nodeSearchPath(pr.finalPath), say)
+		bin, err := e.node.ensure(cx, jr.nodeTarget(), major, jr.nodeSearchPath(pr.finalPath), say)
 		if err != nil {
 			em("error: " + err.Error())
 			return stepResult{Outcome: "failure", Note: err.Error()}, &effects{env: map[string]string{}, outputs: map[string]string{}, state: map[string]string{}}
@@ -517,7 +517,7 @@ func (jr *jobRun) runPosts() {
 			res = stepResult{Outcome: "failure", Note: err.Error()}
 		} else {
 			major, _ := majorOf(p.meta.Using)
-			bin, nerr := e.node.ensure(runCtx, major, jr.nodeSearchPath(pr.finalPath), func(s string) { jr.pr.Note(p.n.indent()+1, "%s", s) })
+			bin, nerr := e.node.ensure(runCtx, jr.nodeTarget(), major, jr.nodeSearchPath(pr.finalPath), func(s string) { jr.pr.Note(p.n.indent()+1, "%s", s) })
 			if nerr != nil {
 				res = stepResult{Outcome: "failure", Note: nerr.Error()}
 			} else {

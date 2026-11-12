@@ -1,6 +1,14 @@
 package runner
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,7 +27,12 @@ case "$cmd" in
   version) echo 29.0.0 ;;
   build) echo sha256:abc ;;
   image)
-    if [ "$1" = inspect ]; then echo '["PATH=/usr/local/bin:/usr/bin:/bin","LANG=C.UTF-8"]'; fi ;;
+    if [ "$1" = inspect ]; then
+      case "$*" in
+        *Architecture*) echo "$FAKE_IMAGE_PLATFORM" ;;
+        *) echo '["PATH=/usr/local/bin:/usr/bin:/bin","LANG=C.UTF-8"]' ;;
+      esac
+    fi ;;
   inspect)
     fmt=""; while [ $# -gt 0 ]; do case "$1" in --format) fmt="$2"; shift 2 ;; *) shift ;; esac; done
     case "$fmt" in
@@ -61,6 +74,8 @@ func fakeEngine(t *testing.T) (bin, log string) {
 	}
 	log = filepath.Join(dir, "log")
 	t.Setenv("FAKE_DOCKER_LOG", log)
+	// the platform of every image, unless a test says otherwise
+	t.Setenv("FAKE_IMAGE_PLATFORM", "linux/"+runtime.GOARCH)
 	return bin, log
 }
 
@@ -416,5 +431,240 @@ runs:
 	// the unpinned docker:// image is refused
 	if !strings.Contains(out, "alpine:3.20 is not pinned by digest") {
 		t.Errorf("an unpinned docker:// image was not refused\n%s", out)
+	}
+}
+
+// serveNodeBuilds serves a Node.js release with one build per os-arch. The node of a build is a script that prints
+// which build it is, so that a container job shows the build it was given even though the fake engine runs it here.
+func serveNodeBuilds(t *testing.T, ver string, builds ...string) {
+	t.Helper()
+	tarballs := map[string][]byte{}
+	var sums strings.Builder
+	for _, b := range builds {
+		file := "node-v" + ver + "-" + b + ".tar.gz"
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		tw := tar.NewWriter(gz)
+		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo v" + ver + "; else echo \"node build " + b + "\"; fi\n"
+		tw.WriteHeader(&tar.Header{Name: strings.TrimSuffix(file, ".tar.gz") + "/bin/node", Typeflag: tar.TypeReg, Mode: 0o755, Size: int64(len(script))})
+		tw.Write([]byte(script))
+		tw.Close()
+		gz.Close()
+		tarballs[file] = buf.Bytes()
+		sum := sha256.Sum256(buf.Bytes())
+		fmt.Fprintf(&sums, "%s  %s\n", hex.EncodeToString(sum[:]), file)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/index.json":
+			fmt.Fprintf(w, `[{"version":"v%s"}]`, ver)
+		case r.URL.Path == "/v"+ver+"/SHASUMS256.txt":
+			w.Write([]byte(sums.String()))
+		case tarballs[strings.TrimPrefix(r.URL.Path, "/v"+ver+"/")] != nil:
+			w.Write(tarballs[strings.TrimPrefix(r.URL.Path, "/v"+ver+"/")])
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	old := nodeDist
+	nodeDist = srv.URL
+	t.Cleanup(func() { nodeDist = old })
+}
+
+// A container job runs on the platform of its container, whatever this machine is: its JavaScript actions get the
+// Node.js build of that platform from the tool cache of that platform, and runner.os/runner.arch are the container's.
+func TestContainerJobsUseTheContainersPlatform(t *testing.T) {
+	bin, log := fakeEngine(t)
+	ver := "24.99.0"
+	serveNodeBuilds(t, ver, "linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64")
+	wf := `on: push
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: ./act
+      - if: runner.os == 'Linux'
+        run: echo "runner=${{ runner.os }}/${{ runner.arch }} env=$RUNNER_OS/$RUNNER_ARCH cache=$RUNNER_TOOL_CACHE ctx=${{ runner.tool_cache }} temp=$([ -n "$RUNNER_TEMP" ] && [ "${{ runner.temp }}" = "$RUNNER_TEMP" ] && echo true)"
+`
+	files := map[string]string{
+		"act/action.yml": "name: n\nruns:\n  using: node24\n  main: main.js\n",
+		"act/main.js":    "console.log('main')\n",
+	}
+	dir := actionRepo(t, wf, files)
+	cache := os.Getenv("JACTIONLINT_CACHE_DIR") // set by homeRepo
+	if cache == "" {
+		t.Fatal("homeRepo does not set JACTIONLINT_CACHE_DIR")
+	}
+	for _, c := range []struct {
+		name          string
+		args          []string
+		defaultPlat   string // DOCKER_DEFAULT_PLATFORM
+		image         string // the platform of the local image
+		build, runner string
+		tools         string
+	}{
+		{"--platform linux/amd64", []string{"--platform", "linux/amd64"}, "linux/arm64", "linux/arm64", "linux-x64", "Linux/X64", "container-linux-amd64"},
+		{"--platform linux/arm64", []string{"--platform", "linux/arm64/v8"}, "", "linux/amd64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"--platform linux/x86_64", []string{"--platform", "linux/x86_64"}, "", "linux/arm64", "linux-x64", "Linux/X64", "container-linux-amd64"},
+		{"DOCKER_DEFAULT_PLATFORM", nil, "linux/aarch64", "linux/amd64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"an arm64 image", nil, "", "linux/arm64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"an amd64 image", nil, "", "linux/amd64", "linux-x64", "Linux/X64", "container-linux-amd64"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("FAKE_IMAGE_PLATFORM", c.image)
+			t.Setenv("DOCKER_DEFAULT_PLATFORM", c.defaultPlat)
+			os.Remove(log)
+			out := mustRun(t, dir, 0, append([]string{"--container-engine", bin, "--container"}, c.args...)...)
+			tools := filepath.Join(cache, "toolcache", c.tools)
+			for _, want := range []string{
+				"node build " + c.build,
+				"runner=" + c.runner + " env=" + c.runner + " cache=" + tools + " ctx=" + tools + " temp=true",
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("output lacks %q\n%s", want, out)
+				}
+			}
+			if l := readLog(t, log); !strings.Contains(l, "-v "+tools+":"+tools) {
+				t.Errorf("the tool cache of %s is not mounted\n%s", c.tools, l)
+			}
+		})
+	}
+	// each platform has its own tool cache, and its build is in it
+	for tools, arch := range map[string]string{"container-linux-amd64": "x64", "container-linux-arm64": "arm64"} {
+		if _, err := os.Stat(filepath.Join(cache, "toolcache", tools, "node", ver, arch, "bin", "node")); err != nil {
+			t.Errorf("no Node.js in the tool cache %s: %v", tools, err)
+		}
+	}
+	for _, other := range []string{"container-linux-amd64/node/" + ver + "/arm64", "container-linux-arm64/node/" + ver + "/x64", hostPlatform().String() + "/node"} {
+		if _, err := os.Stat(filepath.Join(cache, "toolcache", filepath.FromSlash(other))); err == nil {
+			t.Errorf("%s exists: a container's Node.js went to the tool cache of another platform or of this machine", other)
+		}
+	}
+}
+
+// A node found on the PATH of this machine is never given to a container job, even one of this machine's platform.
+func TestNodeOnHostPathStaysOnTheHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake node is a #!/bin/sh script")
+	}
+	pathDir := t.TempDir()
+	os.WriteFile(filepath.Join(pathDir, "node"), []byte("#!/bin/sh\necho v22.1.0\n"), 0o755)
+	tools := t.TempDir()
+	host := hostPlatform()
+	cached := filepath.Join(tools, "node", "22.2.0", host.nodeArch(), "bin", "node")
+	os.MkdirAll(filepath.Dir(cached), 0o755)
+	os.WriteFile(cached, []byte("#!/bin/sh\necho v22.2.0\n"), 0o755)
+	os.WriteFile(filepath.Join(tools, "node", "22.2.0", host.nodeArch(), ".jactionlint-complete"), nil, 0o644)
+	np := newNodeProvider()
+	if got, err := np.ensure(t.Context(), nodeTarget{tools, host, true}, 22, []string{pathDir}, func(string) {}); err != nil || got != filepath.Join(pathDir, "node") {
+		t.Fatalf("host job: %q %v", got, err)
+	}
+	if got, err := np.ensure(t.Context(), nodeTarget{tools, host, false}, 22, nil, func(string) {}); err != nil || got != cached {
+		t.Fatalf("container job: got %q %v, want the tool cache's %q", got, err, cached)
+	}
+}
+
+// With --unsafe-container-options, a --platform in container.options comes last on the docker run line and so wins;
+// the Node.js build, the pull and runner.arch follow it.
+func TestContainerOptionsPlatformWins(t *testing.T) {
+	bin, log := fakeEngine(t)
+	serveNodeBuilds(t, "24.99.0", "linux-x64", "linux-arm64")
+	wf := `on: push
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    container:
+      image: ` + digestImage + `
+      options: --platform=linux/arm64 -e CACHE=${{ runner.tool_cache }}
+    steps:
+      - uses: ./act
+      - run: echo "runner=${{ runner.arch }}"
+`
+	dir := actionRepo(t, wf, map[string]string{
+		"act/action.yml": "name: n\nruns:\n  using: node24\n  main: main.js\n",
+		"act/main.js":    "console.log('main')\n",
+	})
+	t.Setenv("FAKE_IMAGE_PLATFORM", "linux/amd64")
+	out := mustRun(t, dir, 0, "--container-engine", bin, "--unsafe-container-options", "--platform", "linux/amd64")
+	if !strings.Contains(out, "node build linux-arm64") || !strings.Contains(out, "runner=ARM64") {
+		t.Errorf("the job did not follow the --platform of its options\n%s", out)
+	}
+	if l := readLog(t, log); strings.Contains(l, "pull") && !strings.Contains(l, "--platform linux/arm64") {
+		t.Errorf("the image was not pulled for linux/arm64\n%s", l)
+	}
+	l := readLog(t, log)
+	// the options see the container's tool cache, and the platform chosen is the last on the docker run line
+	if want := "-e CACHE=" + filepath.Join(os.Getenv("JACTIONLINT_CACHE_DIR"), "toolcache", "container-linux-arm64"); !strings.Contains(l, want) {
+		t.Errorf("the options were not read with the container's runner context: no %q\n%s", want, l)
+	}
+	if !strings.Contains(l, "--platform linux/arm64 -w ") {
+		t.Errorf("docker run does not end its options with the chosen platform\n%s", l)
+	}
+}
+
+func TestOptionPlatform(t *testing.T) {
+	for opts, want := range map[string]string{
+		"":                       "",
+		"--cpus 2":               "",
+		"--platform linux/arm64": "linux/arm64",
+		"--platform=linux/arm64": "linux/arm64",
+		"--platform linux/amd64 --platform=linux/arm64": "linux/arm64",
+		"--platform":                                "",
+		"--label --platform=linux/arm64":            "",
+		"-l --platform linux/arm64":                 "",
+		"--label=x --platform linux/arm64":          "linux/arm64",
+		"--init --platform linux/arm64":             "linux/arm64",
+		"-it --platform linux/arm64":                "linux/arm64",
+		"--label --platform --platform linux/arm64": "linux/arm64",
+		"--passwd --platform=linux/arm64":           "linux/arm64",
+		"--unsetenv-all --platform linux/arm64":     "linux/arm64",
+	} {
+		if got := optionPlatform(strings.Fields(opts)); got != want {
+			t.Errorf("optionPlatform(%q) = %q, want %q", opts, got, want)
+		}
+	}
+}
+
+func TestParsePlatform(t *testing.T) {
+	for in, want := range map[string]platform{
+		"linux/amd64": {"linux", "amd64"}, "linux/arm64/v8": {"linux", "arm64"}, " Linux/ARM/v7\n": {"linux", "arm"},
+		"linux/x86_64": {"linux", "amd64"}, "linux/aarch64": {"linux", "arm64"}, "linux/i386": {"linux", "386"},
+	} {
+		if got, err := parsePlatform(in); err != nil || got != want {
+			t.Errorf("parsePlatform(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "linux", "linux/", "a/b/c/d"} {
+		if _, err := parsePlatform(bad); err == nil {
+			t.Errorf("parsePlatform(%q) accepted it", bad)
+		}
+	}
+	for p, want := range map[platform][3]string{
+		{"linux", "amd64"}: {"Linux", "X64", "x64"}, {"linux", "arm64"}: {"Linux", "ARM64", "arm64"},
+		{"linux", "arm"}: {"Linux", "ARM", "armv7l"}, {"darwin", "arm64"}: {"macOS", "ARM64", "arm64"},
+		{"linux", "s390x"}: {"Linux", "S390X", "s390x"},
+	} {
+		if got := [3]string{p.runnerOS(), p.runnerArch(), p.nodeArch()}; got != want {
+			t.Errorf("%v: %v, want %v", p, got, want)
+		}
+	}
+}
+
+// A job on this machine reports this machine's runner, with the directories of the job.
+func TestRunnerContextOfAHostJob(t *testing.T) {
+	wf := `on: push
+jobs:
+  j:
+    runs-on: self-hosted
+    steps:
+      - run: echo "runner=${{ runner.os }}/${{ runner.arch }} env=$RUNNER_OS/$RUNNER_ARCH temp=$([ -n "$RUNNER_TEMP" ] && [ "${{ runner.temp }}" = "$RUNNER_TEMP" ] && echo same) tools=$([ -n "$RUNNER_TOOL_CACHE" ] && [ "${{ runner.tool_cache }}" = "$RUNNER_TOOL_CACHE" ] && echo same)"
+`
+	dir := actionRepo(t, wf, nil)
+	out := mustRun(t, dir, 0)
+	host := hostPlatform()
+	r := host.runnerOS() + "/" + host.runnerArch()
+	if want := "runner=" + r + " env=" + r + " temp=same tools=same"; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q\n%s", want, out)
 	}
 }
