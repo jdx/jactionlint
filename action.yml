@@ -51,7 +51,8 @@ inputs:
   token:
     description: |
       The GitHub API token for the online checks and to download jactionlint. The action does not give it to
-      jactionlint when online is "false".
+      jactionlint when online is "false". The download gets it only when the workflow runs on github.com, not on
+      GitHub Enterprise Server.
     required: false
     default: ${{ github.token }}
   annotations:
@@ -102,7 +103,8 @@ runs:
         bash "${GITHUB_ACTION_PATH}/scripts/download-jactionlint.bash" "${JACTIONLINT_VERSION}" "${dir}"
       env:
         JACTIONLINT_VERSION: ${{ inputs.version }}
-        JACTIONLINT_TOKEN: ${{ inputs.token }}
+        # Only github.com gets the token: on GitHub Enterprise Server the default token belongs to that server.
+        JACTIONLINT_TOKEN: ${{ github.server_url == 'https://github.com' && inputs.token || '' }}
 
     - name: Run jactionlint
       id: run
