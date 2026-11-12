@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 25c06a5ada78),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 2a93393cfccb),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //
@@ -197,7 +197,7 @@ var eventPayloads = map[string]string{
 		blocking_issue_id,blocking_issue_repo:@repository2,branch,branches:[{commit:{sha,url},name,protected}],build:@build,
 		changes,check_run:@check_run,check_suite:@check_suite,client_payload,comment,commit:@commit2,commit_oid,commits:[@commits],
 		compare,completed_at,context,created,created_at,custom_pattern_name,custom_pattern_scope,definition:{allowed_values:[],
-		default_value,description,property_name,require_explicit_values,required,source_type,url,value_type,values_editable_by},
+		default_value,description,property_name,regex,require_explicit_values,required,source_type,url,value_type,values_editable_by},
 		deleted,deployment:@deployment,deployment_callback_url,deployment_status:@deployment_status,description,discussion:@discussion,
 		effective_date,enterprise,environment,event,forced,forkee:@forkee,head_commit:@commits,hook:{active,app_id,config:{content_type,
 		insecure_ssl,secret,url},created_at,deliveries_url,events:[],id,last_response:{code,message,status},name,ping_url,
@@ -207,11 +207,11 @@ var eventPayloads = map[string]string{
 		events_url,html_url,id,issue_dependencies_summary:@issue_dependencies_summary,issue_field_values:[@issue_field_value],
 		labels:[],labels_url,locked,milestone,node_id,number,parent_issue_url,performed_via_github_app,pinned_comment:@nullable_issue_comment,
 		pull_request:{diff_url,html_url,merged_at,patch_url,url},reactions:@reactions,repository:@repository,repository_url,
-		state,state_reason,sub_issues_summary:{completed,percent_completed,total},timeline_url,title,type:@issue_type,
-		updated_at,url,user},issue_field:{field_type,id,name},issue_field_value:@issue_field_value2,issue_id,key:{added_by,
-		created_at,enabled,id,key,last_used,read_only,title,url,verified},label:@label,location,marketplace_purchase:@marketplace_purchase,
-		master_branch,member,membership:{direct_membership,enterprise_teams_providing_indirect_membership:[],organization_url,
-		role,state,url,user},merge_group:@merge_group,milestone:@nullable_milestone,name,new_property_values:[{property_name,
+		state,state_reason,status:{category,id,name},sub_issues_summary:{completed,percent_completed,total},timeline_url,
+		title,type:@issue_type,updated_at,url,user},issue_field:{field_type,id,name},issue_field_value:@issue_field_value2,
+		issue_id,key:{added_by,created_at,enabled,id,key,last_used,read_only,title,url,verified},label:@label,location,
+		marketplace_purchase:@marketplace_purchase,master_branch,member,membership:{direct_membership,enterprise_teams_providing_indirect_membership:[],
+		organization_url,role,state,url,user},merge_group:@merge_group,milestone:@nullable_milestone,name,new_property_values:[{property_name,
 		value}],number,old_answer:@answer,old_property_values:[{property_name,value}],organization,package:{created_at,
 		description,ecosystem,html_url,id,name,namespace,owner,package_type,package_version:@package_version,registry:{about_url,
 		name,type,url,vendor},updated_at},pages:[{action,html_url,page_name,sha,summary,title}],parent_issue:@issue,parent_issue_id,
@@ -317,9 +317,10 @@ var eventPayloads = map[string]string{
 		body,closed_at,closed_by,comments,comments_url,created_at,draft,events_url,html_url,id,issue_dependencies_summary:@issue_dependencies_summary,
 		issue_field_values:[@issue_field_value],labels:[],labels_url,locked,milestone,node_id,number,parent_issue_url,
 		performed_via_github_app,pinned_comment:@nullable_issue_comment,pull_request:{diff_url,html_url,merged_at,patch_url,
-		url},reactions:@reactions,repository_url,state,state_reason,sub_issues_summary:{completed,percent_completed,total},
-		timeline_url,title,type:@issue_type,updated_at,url,user},issue_field:{field_type,id,name},issue_field_value:@issue_field_value2,
-		label:@label,milestone:@nullable_milestone,organization,repository:@repository3,sender,type:@issue_type}`,
+		url},reactions:@reactions,repository_url,state,state_reason,status:{category,id,name},sub_issues_summary:{completed,
+		percent_completed,total},timeline_url,title,type:@issue_type,updated_at,url,user},issue_field:{field_type,id,name},
+		issue_field_value:@issue_field_value2,label:@label,milestone:@nullable_milestone,organization,repository:@repository3,
+		sender,status:{category,id,name},type:@issue_type}`,
 	"label":       `{action,changes,enterprise,installation,label:@label,organization,repository:@repository3,sender}`,
 	"merge_group": `{action,installation,merge_group:@merge_group,organization,reason,repository:@repository3,sender}`,
 	"milestone":   `{action,changes,enterprise,installation,milestone:@nullable_milestone,organization,repository:@repository3,sender}`,
