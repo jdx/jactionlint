@@ -22,6 +22,11 @@ function usage() {
     echo '  Environment variable. Name of the executable and the prefix of the archive file' >&2
     echo '  name in the releases. The default is "jactionlint".' >&2
     echo >&2
+    echo 'JACTIONLINT_TOKEN:' >&2
+    echo '  Environment variable. Optional GitHub token. When it is set, the script sends' >&2
+    echo '  it with the download request to github.com, but not to the host that GitHub' >&2
+    echo '  redirects to. Then the higher rate limit for authenticated requests applies.' >&2
+    echo >&2
     echo 'DIR:' >&2
     echo '  Directory to put the downloaded binary (e.g. /path/to/dir). When this value is' >&2
     echo '  omitted, the binary will be put in the current directory.' >&2
@@ -59,6 +64,7 @@ fi
 
 repo="${JACTIONLINT_REPO:-jdx/jactionlint}"
 name="${JACTIONLINT_NAME:-jactionlint}"
+token="${JACTIONLINT_TOKEN:-}"
 
 if [ -n "$1" ]; then
     if [[ "$1" != 'latest' && "$1" != 'LATEST' ]]; then
@@ -142,8 +148,29 @@ fi
 trap 'rm -rf "$tempdir"' EXIT
 archive="$tempdir/${file}"
 
-# -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
-if ! status="$(curl -fL -o "$archive" -w '%{http_code}' "${url}")"; then
+# One download path for all cases, which works with all curl versions:
+# - curl reads the token header from a config file on stdin (-K -), so the token is not on a command line. -H @- needs
+#   curl 7.55.0, and the native curl.exe of Git Bash on Windows cannot open the /dev/fd path of -K <(...).
+# - The first request does not follow redirects. Before curl 7.58.0, -L sends a custom Authorization header to the host
+#   of a redirect, so the script downloads the redirect URL itself, without the token.
+# - With a token, -q (the first option) makes curl ignore .curlrc, where a "location" line would make the first request
+#   follow the redirect with the token despite the missing -L.
+# -f makes curl fail on an HTTP error and print the error with the status. The -w output is the only output on stdout.
+config=''
+qopt=()
+if [ -n "$token" ]; then
+    qopt=(-q)
+    # The config file syntax needs a backslash before each backslash and double quote.
+    token="${token//\\/\\\\}"
+    config="header = \"Authorization: Bearer ${token//\"/\\\"}\""
+fi
+rc=0
+response="$(printf '%s\n' "$config" | curl "${qopt[@]}" -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || rc=$?
+status="${response%% *}"
+if ((rc == 0)) && [[ "$status" == 3* ]]; then
+    status="$(curl -fL -o "$archive" -w '%{http_code}' "${response#* }")" || rc=$?
+fi
+if ((rc != 0)); then
     echo >&2
     if [[ "$status" == "404" ]]; then
         echo "jactionlint v${version} was not found: there is no ${url}" >&2

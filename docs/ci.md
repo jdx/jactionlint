@@ -68,7 +68,7 @@ Every input is optional. Set them under `with:` of the `jdx/jactionlint` step.
 | `min-severity` | empty | Hide findings less severe than this level: `info`, `warn` or `error`. |
 | `strict-exit` | `false` | Fail for findings of level `warn` and `info` too, not only for level `error`. |
 | `online` | empty | `true` runs the online checks and `false` never uses the network. `cache`, `strict` and `cache,strict` are the modes of `--online`. Empty leaves it to the config file. |
-| `token` | `${{ github.token }}` | The GitHub API token of the online checks. The action does not pass it to jactionlint when `online` is `false`. |
+| `token` | `${{ github.token }}` | The GitHub API token of the online checks and of the download of jactionlint. The action does not pass it to jactionlint when `online` is `false`, and it does not send it with the download on GitHub Enterprise Server, because the token belongs to that server. |
 | `annotations` | `true` | Annotate the files with the findings (`--format github`). It has no effect when `advanced-security` is `true`. |
 | `advanced-security` | `false` | Upload the findings to code scanning as SARIF. The job needs `security-events: write`. It takes precedence over `annotations`. |
 | `color` | `true` | Colorize the text output. It applies only when `annotations` and `advanced-security` are both `false`. |
