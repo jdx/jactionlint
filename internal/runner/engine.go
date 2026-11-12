@@ -125,7 +125,7 @@ func (e *Engine) Run(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	e.rd = rd
-	e.node = newNodeProvider(rd.ToolCache)
+	e.node = newNodeProvider()
 	if svc, err := e.startCache(); err != nil {
 		e.pr.Note(0, "warning: the cache service did not start, so nothing is cached: %v", err)
 	} else if svc != nil {

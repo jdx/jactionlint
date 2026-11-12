@@ -64,6 +64,20 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 			return nil, err
 		}
 		jc.imageEnv = eng.imageEnv(ctx, image)
+		// The steps run on the platform of the container, not of this machine: the Node.js of JavaScript actions and
+		// runner.os/runner.arch follow it.
+		var plat platform
+		if cfg.Platform != "" {
+			plat, err = parsePlatform(cfg.Platform)
+		} else {
+			plat, err = eng.imagePlatform(ctx, image)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot tell the platform of %s: %w", image, err)
+		}
+		if err := jr.usePlatform(plat); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := eng.output(ctx, "network", "create", "--label", "jactionlint=1", jc.network); err != nil {
 		return nil, err

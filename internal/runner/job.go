@@ -34,8 +34,9 @@ type jobRun struct {
 	pj   *PlannedJob
 	cell *Cell
 	name string
-	rd   *RunDir // the per-job scratch area
-	work string  // GITHUB_WORKSPACE
+	rd   *RunDir  // the per-job scratch area
+	work string   // GITHUB_WORKSPACE
+	plat platform // where the steps run when they run in a container; zero on this machine
 	ctx  context.Context
 
 	env      *eval.Env
@@ -223,6 +224,7 @@ func (e *Engine) runCell(ctx context.Context, pj *PlannedJob, cell *Cell, idx, t
 	defer release()
 	jr.rd = rd
 	jr.work = rd.Work
+	jr.setRunnerContext()
 	if e.cfg.InPlace {
 		jr.work = e.cfg.Root
 	} else if err := CopyWorkspace(e.cfg.Root, rd.Work); err != nil {
@@ -688,6 +690,45 @@ func containerWhat(image string, j *jactionlint.Job) string {
 
 // parentEnv is the environment a step inherits from: the caller's, or the image's inside a container.
 func (jr *jobRun) inCtr() bool { return jr.ctr != nil && jr.ctr.inContainer }
+
+// platform is the platform the steps of the job run on: this machine's, or that of the job container.
+func (jr *jobRun) platform() platform {
+	if jr.plat.os == "" {
+		return hostPlatform()
+	}
+	return jr.plat
+}
+
+func (jr *jobRun) nodeTarget() nodeTarget {
+	return nodeTarget{tools: jr.rd.ToolCache, plat: jr.platform()}
+}
+
+// usePlatform makes the job a job of the platform of its container: the tool cache of that platform (so that the
+// container gets binaries it can run, and the host's cache gets none of them), and runner.os, runner.arch and
+// runner.tool_cache of that platform, as on GitHub, where a container job reports the runner it is on.
+func (jr *jobRun) usePlatform(p platform) error {
+	tc := filepath.Join(filepath.Dir(jr.rd.ToolCache), p.String())
+	if err := os.MkdirAll(tc, 0o755); err != nil {
+		return err
+	}
+	jr.plat = p
+	jr.rd.ToolCache = tc
+	jr.setRunnerContext()
+	return nil
+}
+
+// setRunnerContext fills the runner context of the job: the platform the steps run on and the directories of the job.
+func (jr *jobRun) setRunnerContext() {
+	p := jr.platform()
+	r := map[string]any{}
+	if base, ok := jr.env.Contexts["runner"].(map[string]any); ok {
+		for k, v := range base {
+			r[k] = v
+		}
+	}
+	r["os"], r["arch"], r["temp"], r["tool_cache"] = p.runnerOS(), p.runnerArch(), jr.rd.Temp, jr.rd.ToolCache
+	jr.env.Contexts["runner"] = r
+}
 
 func (jr *jobRun) parentEnv() []string {
 	if jr.inCtr() {

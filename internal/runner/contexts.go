@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/jdx/jactionlint/v2"
@@ -100,17 +99,10 @@ func apiURL(server string) string {
 }
 
 func runnerContext(in *Inputs) map[string]any {
-	os_ := map[string]string{"linux": "Linux", "darwin": "macOS", "windows": "Windows"}[runtime.GOOS]
-	if os_ == "" {
-		os_ = runtime.GOOS
-	}
-	arch := map[string]string{"amd64": "X64", "arm64": "ARM64", "386": "X86", "arm": "ARM"}[runtime.GOARCH]
-	if arch == "" {
-		arch = strings.ToUpper(runtime.GOARCH)
-	}
+	host := hostPlatform()
 	return map[string]any{
-		"os":          os_,
-		"arch":        arch,
+		"os":          host.runnerOS(),
+		"arch":        host.runnerArch(),
 		"name":        "jactionlint",
 		"environment": "self-hosted",
 		"temp":        in.Temp,

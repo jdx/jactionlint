@@ -350,7 +350,8 @@ func TestNodeInstallChecksum(t *testing.T) {
 		t.Skip("no node downloads on this OS")
 	}
 	ver := "20.99.0"
-	file := fmt.Sprintf("node-v%s-%s-%s.tar.gz", ver, nodeOS(), nodeArch())
+	host := hostPlatform()
+	file := fmt.Sprintf("node-v%s-%s-%s.tar.gz", ver, host.nodeOS(), host.nodeArch())
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -383,9 +384,9 @@ func TestNodeInstallChecksum(t *testing.T) {
 	srv := serve(good)
 	nodeDist = srv.URL
 	tools := t.TempDir()
-	np := newNodeProvider(tools)
+	np := newNodeProvider()
 	var said []string
-	bin, err := np.ensure(t.Context(), 20, nil, func(s string) { said = append(said, s) })
+	bin, err := np.ensure(t.Context(), nodeTarget{tools, host}, 20, nil, func(s string) { said = append(said, s) })
 	srv.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -397,7 +398,7 @@ func TestNodeInstallChecksum(t *testing.T) {
 		t.Errorf("no note about the download: %v", said)
 	}
 	// the second time, from the tool cache, without a server
-	bin2, err := newNodeProvider(tools).ensure(t.Context(), 20, nil, func(string) {})
+	bin2, err := newNodeProvider().ensure(t.Context(), nodeTarget{tools, host}, 20, nil, func(string) {})
 	if err != nil || bin2 != bin {
 		t.Fatalf("cached node: %v %q", err, bin2)
 	}
@@ -407,17 +408,17 @@ func TestNodeInstallChecksum(t *testing.T) {
 	defer srv.Close()
 	nodeDist = srv.URL
 	tools2 := t.TempDir()
-	_, err = newNodeProvider(tools2).ensure(t.Context(), 20, nil, func(string) {})
+	_, err = newNodeProvider().ensure(t.Context(), nodeTarget{tools2, host}, 20, nil, func(string) {})
 	if err == nil || !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("want a checksum error, got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(tools2, "node", ver, nodeArch())); err == nil {
+	if _, err := os.Stat(filepath.Join(tools2, "node", ver, host.nodeArch())); err == nil {
 		t.Errorf("a download with a wrong checksum was installed")
 	}
 	// PATH wins when its node has the right major version
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "node"), []byte("#!/bin/sh\necho v22.1.0\n"), 0o755)
-	got, err := newNodeProvider(t.TempDir()).ensure(t.Context(), 22, []string{dir}, func(string) {})
+	got, err := newNodeProvider().ensure(t.Context(), nodeTarget{t.TempDir(), host}, 22, []string{dir}, func(string) {})
 	if err != nil || got != filepath.Join(dir, "node") {
 		t.Fatalf("PATH node: %v %q", err, got)
 	}
