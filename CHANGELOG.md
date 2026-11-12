@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.6.0](https://github.com/jdx/jactionlint/compare/v2.5.0...v2.6.0) (2026-11-12)
+
+
+### Features
+
+* **download:** send JACTIONLINT_TOKEN with the release download ([#346](https://github.com/jdx/jactionlint/issues/346)) ([619a15b](https://github.com/jdx/jactionlint/commit/619a15b5a401b5532a2e604353b5c9ffefa2c1ce))
+* **update:** add `jactionlint update` for action updates and SHA pinning ([#335](https://github.com/jdx/jactionlint/issues/335)) ([53ee6f0](https://github.com/jdx/jactionlint/commit/53ee6f02a08bc4552487d9979fc0ec3db2c04337))
+* **update:** run gh actions-lock --relock after update --apply ([#341](https://github.com/jdx/jactionlint/issues/341)) ([20359a0](https://github.com/jdx/jactionlint/commit/20359a0c615a89c1353fa62199af6d96b972984b))
+
+
+### Bug Fixes
+
+* **deps:** raise Go toolchain to go1.27.4 for GO-2026-6859 ([#345](https://github.com/jdx/jactionlint/issues/345)) ([1864974](https://github.com/jdx/jactionlint/commit/1864974de25395787158bf8fdc7f527e65eb2778))
+* **run:** run container jobs on the platform of their container ([#344](https://github.com/jdx/jactionlint/issues/344)) ([3e01b7e](https://github.com/jdx/jactionlint/commit/3e01b7e5a9f6f7fbe2602a4fd04c2789aee140ef))
+* **unpinned-tools:** do not report `go install tool` ([#338](https://github.com/jdx/jactionlint/issues/338)) ([327c574](https://github.com/jdx/jactionlint/commit/327c5746c5709eb9ba8a49d7a077b6f1628e6295))
+
 ## [2.5.0](https://github.com/jdx/jactionlint/compare/v2.4.0...v2.5.0) (2026-11-04)
 
 
