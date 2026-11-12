@@ -69,17 +69,44 @@ func (p platform) nodeArch() string {
 	return p.arch
 }
 
-// optionPlatform is the value of the last --platform in container options, as docker run reads it, or "".
+// optionPlatform is the value of the last --platform in container options, as docker run reads it, or "". The value
+// of another option, such as --label --platform=x, is skipped: every docker run option takes a value except the
+// boolean ones in runBoolFlags.
 func optionPlatform(opts []string) string {
 	p := ""
-	for i, w := range opts {
+	for i := 0; i < len(opts); i++ {
+		w := opts[i]
+		if !strings.HasPrefix(w, "-") || w == "-" || w == "--" {
+			continue
+		}
 		if v, ok := strings.CutPrefix(w, "--platform="); ok {
 			p = v
-		} else if w == "--platform" && i+1 < len(opts) {
-			p = opts[i+1]
+			continue
+		}
+		if strings.Contains(w, "=") || runBoolFlags[w] {
+			continue
+		}
+		if !strings.HasPrefix(w, "--") && len(w) > 2 {
+			// short flags put together (-it) or a short flag glued to its value (-eFOO=1): no separate value follows
+			continue
+		}
+		if i+1 < len(opts) {
+			if w == "--platform" {
+				p = opts[i+1]
+			}
+			i++ // the value of this option
 		}
 	}
 	return p
+}
+
+// runBoolFlags are the options of docker run and podman run that take no value.
+var runBoolFlags = map[string]bool{
+	"--detach": true, "-d": true, "--init": true, "--interactive": true, "-i": true, "--tty": true, "-t": true,
+	"--privileged": true, "--publish-all": true, "-P": true, "--read-only": true, "--rm": true, "--sig-proxy": true,
+	"--no-healthcheck": true, "--oom-kill-disable": true, "--disable-content-trust": true, "--quiet": true, "-q": true,
+	"--help": true, "--replace": true, "--http-proxy": true, "--read-only-tmpfs": true, "--rmi": true,
+	"--env-host": true, "--no-hosts": true, "--systemd": true,
 }
 
 // imagePlatform returns the platform of a local image.

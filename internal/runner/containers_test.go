@@ -602,7 +602,13 @@ func TestOptionPlatform(t *testing.T) {
 		"--platform linux/arm64": "linux/arm64",
 		"--platform=linux/arm64": "linux/arm64",
 		"--platform linux/amd64 --platform=linux/arm64": "linux/arm64",
-		"--platform": "",
+		"--platform":                                "",
+		"--label --platform=linux/arm64":            "",
+		"-l --platform linux/arm64":                 "",
+		"--label=x --platform linux/arm64":          "linux/arm64",
+		"--init --platform linux/arm64":             "linux/arm64",
+		"-it --platform linux/arm64":                "linux/arm64",
+		"--label --platform --platform linux/arm64": "linux/arm64",
 	} {
 		if got := optionPlatform(strings.Fields(opts)); got != want {
 			t.Errorf("optionPlatform(%q) = %q, want %q", opts, got, want)
