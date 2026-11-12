@@ -545,6 +545,9 @@ jobs:
 
 // A node found on the PATH of this machine is never given to a container job, even one of this machine's platform.
 func TestNodeOnHostPathStaysOnTheHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake node is a #!/bin/sh script")
+	}
 	pathDir := t.TempDir()
 	os.WriteFile(filepath.Join(pathDir, "node"), []byte("#!/bin/sh\necho v22.1.0\n"), 0o755)
 	tools := t.TempDir()
