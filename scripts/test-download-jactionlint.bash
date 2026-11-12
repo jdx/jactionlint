@@ -157,39 +157,110 @@ for pair in x86_64:amd64 amd64:amd64 i386:386 i686:386 aarch64:arm64 arm64:arm64
     fi
 done
 
-# The token goes to curl as a header on stdin, not on the command line. A mock curl records its arguments and stdin,
-# and answers 404, so the script stops before it extracts anything.
+# Tests with a mock curl. Each call of the mock records its arguments in args.N and its stdin in stdin.N, where N counts
+# the calls. Line N of the file answers gives the exit code and the stdout of call N.
 mkdir ./mockbin
-cat > ./mockbin/curl <<'EOF'
+cat > ./mockbin/curl <<'MOCK'
 #!/bin/bash
-printf '%s\n' "$@" > "$MOCK_CURL_DIR/args"
-cat > "$MOCK_CURL_DIR/stdin"
-printf '404'
-exit 22
-EOF
+n=1
+while [[ -e "$MOCK_CURL_DIR/args.$n" ]]; do
+    n=$((n + 1))
+done
+printf '%s\n' "$@" > "$MOCK_CURL_DIR/args.$n"
+cat > "$MOCK_CURL_DIR/stdin.$n"
+read -r code answer < <(sed -n "${n}p" "$MOCK_CURL_DIR/answers")
+printf '%s' "$answer"
+exit "${code:-1}"
+MOCK
 chmod +x ./mockbin/curl
 MOCK_CURL_DIR="$(pwd)/mockbin"
 export MOCK_CURL_DIR
 
-out="$(PATH="$MOCK_CURL_DIR:$PATH" JACTIONLINT_TOKEN='test-token' bash "$script" '9.9.9' </dev/null 2>&1)"
+# Usage: run_mock TOKEN ANSWER... Runs the download script with the mock curl and puts its output in $out.
+function run_mock() {
+    local token="$1"
+    shift
+    rm -f ./mockbin/args.* ./mockbin/stdin.*
+    printf '%s\n' "$@" > ./mockbin/answers
+    out="$(PATH="$MOCK_CURL_DIR:$PATH" JACTIONLINT_TOKEN="$token" bash "$script" '9.9.9' </dev/null 2>&1)" || true
+}
+
+# Usage: expect_calls N. Fails when the mock curl did not get N calls.
+function expect_calls() {
+    local calls
+    calls="$(find ./mockbin -name 'args.*' | wc -l | tr -d ' ')"
+    if [[ "$calls" != "$1" ]]; then
+        echo "FAIL: curl got ${calls} calls, not $1: '${out}'" >&2
+        ((fails++))
+        return 1
+    fi
+}
+
+# With a token, curl reads the header from a config file on stdin (-K -), not from the command line, and does not
+# follow redirects.
+run_mock 'test-token' '22 404'
 if [[ "$out" != *'jactionlint v9.9.9 was not found'* ]]; then
-    echo "FAIL: Download with a mock curl did not cause the not found message: '${out}'" >&2
+    echo "FAIL: Download with a token and a 404 answer did not cause the not found message: '${out}'" >&2
     ((fails++))
 fi
-if [[ "$(cat ./mockbin/stdin)" != 'Authorization: Bearer test-token' ]]; then
-    echo "FAIL: curl did not get the token header on stdin: '$(cat ./mockbin/stdin)'" >&2
-    ((fails++))
+if expect_calls 1; then
+    if [[ "$(cat ./mockbin/stdin.1)" != 'header = "Authorization: Bearer test-token"' ]]; then
+        echo "FAIL: curl did not get the token header on stdin: '$(cat ./mockbin/stdin.1)'" >&2
+        ((fails++))
+    fi
+    if ! grep -qx -- '-K' ./mockbin/args.1 || grep -q 'test-token' ./mockbin/args.1 || grep -qx -- '-fL' ./mockbin/args.1; then
+        echo "FAIL: curl did not read the config from stdin, got the token as an argument, or follows redirects: '$(cat ./mockbin/args.1)'" >&2
+        ((fails++))
+    fi
 fi
-if ! grep -qx -- '@-' ./mockbin/args || grep -q 'test-token' ./mockbin/args; then
-    echo "FAIL: curl did not read the header from stdin, or got the token as an argument: '$(cat ./mockbin/args)'" >&2
+
+# The config file syntax needs a backslash before each backslash and double quote of the token.
+run_mock 'a\b"c' '22 404'
+if expect_calls 1 && [[ "$(cat ./mockbin/stdin.1)" != 'header = "Authorization: Bearer a\\b\"c"' ]]; then
+    echo "FAIL: curl did not get the escaped token on stdin: '$(cat ./mockbin/stdin.1)'" >&2
     ((fails++))
 fi
 
-out="$(PATH="$MOCK_CURL_DIR:$PATH" JACTIONLINT_TOKEN='' bash "$script" '9.9.9' </dev/null 2>&1)"
-if grep -qx -- '-H' ./mockbin/args || [[ -s ./mockbin/stdin ]]; then
-    echo "FAIL: curl got a header without a token: '$(cat ./mockbin/args)' '$(cat ./mockbin/stdin)'" >&2
+# With a token, the script follows a redirect with a second curl call, which does not get the token.
+run_mock 'test-token' '0 302 https://assets.example.com/archive' '22 404'
+if expect_calls 2; then
+    if ! grep -qx 'https://assets.example.com/archive' ./mockbin/args.2 || grep -qx -- '-K' ./mockbin/args.2 ||
+        [[ -s ./mockbin/stdin.2 ]]; then
+        echo "FAIL: curl did not download the redirect URL without the token: '$(cat ./mockbin/args.2)' '$(cat ./mockbin/stdin.2)'" >&2
+        ((fails++))
+    fi
+    if [[ "$out" != *'jactionlint v9.9.9 was not found'* ]]; then
+        echo "FAIL: A 404 answer after the redirect did not cause the not found message: '${out}'" >&2
+        ((fails++))
+    fi
+fi
+
+# Without a token, curl gets no header and follows redirects.
+run_mock '' '22 404'
+if expect_calls 1; then
+    if grep -qx -- '-K' ./mockbin/args.1 || grep -qx -- '-H' ./mockbin/args.1 || [[ -s ./mockbin/stdin.1 ]] ||
+        ! grep -qx -- '-fL' ./mockbin/args.1; then
+        echo "FAIL: curl without a token got a header or does not follow redirects: '$(cat ./mockbin/args.1)' '$(cat ./mockbin/stdin.1)'" >&2
+        ((fails++))
+    fi
+fi
+
+# When curl gets no HTTP response, it writes 000. The message must not give 000 as an HTTP status.
+for token in '' 'test-token'; do
+    run_mock "$token" '7 000'
+    if [[ "$out" != *'Could not download jactionlint v9.9.9 from '* || "$out" == *'HTTP status 000'* ]]; then
+        echo "FAIL: A download without an HTTP response (token '${token}') did not cause the correct message: '${out}'" >&2
+        ((fails++))
+    fi
+done
+
+# Other HTTP errors give the status.
+run_mock '' '22 503'
+if [[ "$out" != *'(HTTP status 503)'* ]]; then
+    echo "FAIL: A 503 answer did not cause a message with the HTTP status: '${out}'" >&2
     ((fails++))
 fi
+
 rm -rf ./mockbin
 unset MOCK_CURL_DIR
 

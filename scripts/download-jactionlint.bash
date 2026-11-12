@@ -24,8 +24,8 @@ function usage() {
     echo >&2
     echo 'JACTIONLINT_TOKEN:' >&2
     echo '  Environment variable. Optional GitHub token. When it is set, the script sends' >&2
-    echo '  it with the download request. Then the higher rate limit for authenticated' >&2
-    echo '  requests applies.' >&2
+    echo '  it with the download request to github.com, but not to the host that GitHub' >&2
+    echo '  redirects to. Then the higher rate limit for authenticated requests applies.' >&2
     echo >&2
     echo 'DIR:' >&2
     echo '  Directory to put the downloaded binary (e.g. /path/to/dir). When this value is' >&2
@@ -155,23 +155,49 @@ function not_found() {
 
 echo "Downloading ${url} with curl"
 
-# -f makes curl fail on an HTTP error and print no body. The HTTP status is the only output on stdout.
-# When JACTIONLINT_TOKEN is set, send the token. curl reads the header from stdin (-H @-), which keeps the token out of
-# the curl command line. printf is a shell builtin, so the token is not on its command line either. Do not use a process
-# substitution such as -H @<(...): the native curl.exe of Git Bash on Windows cannot open the /dev/fd path it gives.
-# curl does not send the token to the host of a redirect.
-if [ -n "$token" ]; then
-    status="$(printf 'Authorization: Bearer %s\n' "$token" | curl -fL -H @- -o "$archive" -w '%{http_code}' "$url")"
-else
-    status="$(curl -fL -o "$archive" -w '%{http_code}' "$url")"
-fi || {
+# Stop with a message for the HTTP status in $status. curl writes 000 when it gets no HTTP response, for example when
+# it cannot connect. Then curl already wrote the error, and the message does not give a status.
+function download_failed() {
     if [[ "$status" == "404" ]]; then
         not_found
     fi
     echo >&2
-    echo "Could not download jactionlint v${version} from ${url} (HTTP status ${status})" >&2
+    if [[ -z "$status" || "$status" == "000" ]]; then
+        echo "Could not download jactionlint v${version} from ${url}" >&2
+    else
+        echo "Could not download jactionlint v${version} from ${url} (HTTP status ${status})" >&2
+    fi
     exit 1
 }
+
+# -f makes curl fail on an HTTP error and print no body. The -w output is the only output on stdout.
+if [ -n "$token" ]; then
+    # When JACTIONLINT_TOKEN is set, send the token only to github.com. This works with all curl versions:
+    # - curl reads the header from a config file on stdin (-K -), which keeps the token out of the curl command line.
+    #   printf is a shell builtin, so the token is not on its command line either. Do not use -H @-, which needs curl
+    #   7.55.0. Do not use a process substitution such as -K <(...): the native curl.exe of Git Bash on Windows cannot
+    #   open the /dev/fd path it gives.
+    # - curl does not follow the redirect to the host of the release asset (no -L): before curl 7.58.0, -L sends a
+    #   custom Authorization header to the host of a redirect. The script downloads the redirect URL without the token.
+    # The config file syntax needs a backslash before each backslash and double quote in the value.
+    escaped_token="${token//\\/\\\\}"
+    escaped_token="${escaped_token//\"/\\\"}"
+    response="$(printf 'header = "Authorization: Bearer %s"\n' "$escaped_token" |
+        curl -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || {
+        status="${response%% *}"
+        download_failed
+    }
+    status="${response%% *}"
+    location="${response#* }"
+    if [[ "$status" == 3* ]]; then
+        if [[ -z "$location" ]]; then
+            download_failed
+        fi
+        status="$(curl -fL -o "$archive" -w '%{http_code}' "$location")" || download_failed
+    fi
+else
+    status="$(curl -fL -o "$archive" -w '%{http_code}' "$url")" || download_failed
+fi
 
 if [[ "$os" == "windows" ]]; then
     unzip "$archive" "${name}.exe" -d "$target_dir"
