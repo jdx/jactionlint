@@ -135,6 +135,8 @@ echo "Detected OS=${os} ext=${ext} arch=${arch}"
 file="${name}_${version}_${os}_${arch}.${ext}"
 url="https://github.com/${repo}/releases/download/v${version}/${file}"
 
+echo "Downloading ${url} with curl"
+
 # Download to a file before extracting it. A version without an archive makes GitHub answer with a short "Not Found"
 # body, which tar and unzip would report as a broken archive.
 if [[ "$os" == "windows" ]]; then
@@ -146,57 +148,33 @@ fi
 trap 'rm -rf "$tempdir"' EXIT
 archive="$tempdir/${file}"
 
-function not_found() {
-    echo >&2
-    echo "jactionlint v${version} was not found: there is no ${url}" >&2
-    echo "Check that the release v${version} exists and has the archive ${file} at https://github.com/${repo}/releases" >&2
-    exit 1
-}
-
-echo "Downloading ${url} with curl"
-
-# Stop with a message for the HTTP status in $status. curl writes 000 when it gets no HTTP response, for example when
-# it cannot connect. Then curl already wrote the error, and the message does not give a status.
-function download_failed() {
-    if [[ "$status" == "404" ]]; then
-        not_found
-    fi
-    echo >&2
-    if [[ -z "$status" || "$status" == "000" ]]; then
-        echo "Could not download jactionlint v${version} from ${url}" >&2
-    else
-        echo "Could not download jactionlint v${version} from ${url} (HTTP status ${status})" >&2
-    fi
-    exit 1
-}
-
-# -f makes curl fail on an HTTP error and print no body. The -w output is the only output on stdout.
+# One download path for all cases, which works with all curl versions:
+# - curl reads the token header from a config file on stdin (-K -), so the token is not on a command line. -H @- needs
+#   curl 7.55.0, and the native curl.exe of Git Bash on Windows cannot open the /dev/fd path of -K <(...).
+# - The first request does not follow redirects. Before curl 7.58.0, -L sends a custom Authorization header to the host
+#   of a redirect, so the script downloads the redirect URL itself, without the token.
+# -f makes curl fail on an HTTP error and print the error with the status. The -w output is the only output on stdout.
+config=''
 if [ -n "$token" ]; then
-    # When JACTIONLINT_TOKEN is set, send the token only to github.com. This works with all curl versions:
-    # - curl reads the header from a config file on stdin (-K -), which keeps the token out of the curl command line.
-    #   printf is a shell builtin, so the token is not on its command line either. Do not use -H @-, which needs curl
-    #   7.55.0. Do not use a process substitution such as -K <(...): the native curl.exe of Git Bash on Windows cannot
-    #   open the /dev/fd path it gives.
-    # - curl does not follow the redirect to the host of the release asset (no -L): before curl 7.58.0, -L sends a
-    #   custom Authorization header to the host of a redirect. The script downloads the redirect URL without the token.
-    # The config file syntax needs a backslash before each backslash and double quote in the value.
-    escaped_token="${token//\\/\\\\}"
-    escaped_token="${escaped_token//\"/\\\"}"
-    response="$(printf 'header = "Authorization: Bearer %s"\n' "$escaped_token" |
-        curl -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || {
-        status="${response%% *}"
-        download_failed
-    }
-    status="${response%% *}"
-    location="${response#* }"
-    if [[ "$status" == 3* ]]; then
-        if [[ -z "$location" ]]; then
-            download_failed
-        fi
-        status="$(curl -fL -o "$archive" -w '%{http_code}' "$location")" || download_failed
+    # The config file syntax needs a backslash before each backslash and double quote.
+    token="${token//\\/\\\\}"
+    config="header = \"Authorization: Bearer ${token//\"/\\\"}\""
+fi
+rc=0
+response="$(printf '%s\n' "$config" | curl -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || rc=$?
+status="${response%% *}"
+if ((rc == 0)) && [[ "$status" == 3* ]]; then
+    status="$(curl -fL -o "$archive" -w '%{http_code}' "${response#* }")" || rc=$?
+fi
+if ((rc != 0)); then
+    echo >&2
+    if [[ "$status" == "404" ]]; then
+        echo "jactionlint v${version} was not found: there is no ${url}" >&2
+        echo "Check that the release v${version} exists and has the archive ${file} at https://github.com/${repo}/releases" >&2
+    else
+        echo "Could not download jactionlint v${version} from ${url}" >&2
     fi
-else
-    status="$(curl -fL -o "$archive" -w '%{http_code}' "$url")" || download_failed
+    exit 1
 fi
 
 if [[ "$os" == "windows" ]]; then
