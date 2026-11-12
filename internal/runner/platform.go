@@ -106,7 +106,7 @@ var runBoolFlags = map[string]bool{
 	"--privileged": true, "--publish-all": true, "-P": true, "--read-only": true, "--rm": true, "--sig-proxy": true,
 	"--no-healthcheck": true, "--oom-kill-disable": true, "--disable-content-trust": true, "--quiet": true, "-q": true,
 	"--help": true, "--replace": true, "--http-proxy": true, "--read-only-tmpfs": true, "--rmi": true,
-	"--env-host": true, "--no-hosts": true, "--systemd": true,
+	"--env-host": true, "--no-hosts": true, "--passwd": true, "--unsetenv-all": true, "--rootfs": true, "--tls-verify": true,
 }
 
 // imagePlatform returns the platform of a local image.

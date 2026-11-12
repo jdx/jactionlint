@@ -576,7 +576,7 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: ` + digestImage + `
-      options: --platform=linux/arm64
+      options: --platform=linux/arm64 -e CACHE=${{ runner.tool_cache }}
     steps:
       - uses: ./act
       - run: echo "runner=${{ runner.arch }}"
@@ -592,6 +592,14 @@ jobs:
 	}
 	if l := readLog(t, log); strings.Contains(l, "pull") && !strings.Contains(l, "--platform linux/arm64") {
 		t.Errorf("the image was not pulled for linux/arm64\n%s", l)
+	}
+	l := readLog(t, log)
+	// the options see the container's tool cache, and the platform chosen is the last on the docker run line
+	if want := "-e CACHE=" + filepath.Join(os.Getenv("JACTIONLINT_CACHE_DIR"), "toolcache", "container-linux-arm64"); !strings.Contains(l, want) {
+		t.Errorf("the options were not read with the container's runner context: no %q\n%s", want, l)
+	}
+	if !strings.Contains(l, "--platform linux/arm64 -w ") {
+		t.Errorf("docker run does not end its options with the chosen platform\n%s", l)
 	}
 }
 
@@ -609,6 +617,8 @@ func TestOptionPlatform(t *testing.T) {
 		"--init --platform linux/arm64":             "linux/arm64",
 		"-it --platform linux/arm64":                "linux/arm64",
 		"--label --platform --platform linux/arm64": "linux/arm64",
+		"--passwd --platform=linux/arm64":           "linux/arm64",
+		"--unsetenv-all --platform linux/arm64":     "linux/arm64",
 	} {
 		if got := optionPlatform(strings.Fields(opts)); got != want {
 			t.Errorf("optionPlatform(%q) = %q, want %q", opts, got, want)

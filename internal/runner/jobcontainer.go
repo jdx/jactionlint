@@ -61,18 +61,25 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 			return nil, err
 		}
 	}
-	// The container's options are read first: with --unsafe-container-options they can name a --platform, which comes
-	// after jactionlint's own on the docker run line and so wins.
-	var opts []string
-	if image != "" && spec != nil && spec.Options != nil {
+	// The container's options are read first: with --unsafe-container-options they can name a --platform. They are read
+	// again once the runner context has the container's platform, for the docker run line.
+	readOptions := func() ([]string, error) {
+		if image == "" || spec == nil || spec.Options == nil {
+			return nil, nil
+		}
 		o, err := jr.interp(jr.env, spec.Options.Value)
 		if err != nil {
 			return nil, err
 		}
-		if opts, err = parseOptions(o, cfg.UnsafeContainerOptions); err != nil {
-			return nil, err
-		}
+		return parseOptions(o, cfg.UnsafeContainerOptions)
 	}
+	opts, err := readOptions()
+	if err != nil {
+		return nil, err
+	}
+	// runPlatform is given to docker run after the options, so the container runs on the platform its Node.js and
+	// runner context were chosen for, even when an option's --platform was not recognized.
+	runPlatform := ""
 	if image != "" {
 		want := cfg.Platform
 		if p := optionPlatform(opts); p != "" {
@@ -98,6 +105,10 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 			return nil, fmt.Errorf("cannot tell the platform of %s: %w", image, err)
 		}
 		if err := jr.usePlatform(plat); err != nil {
+			return nil, err
+		}
+		runPlatform = want
+		if opts, err = readOptions(); err != nil {
 			return nil, err
 		}
 	}
@@ -137,9 +148,6 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		return []string{"-v", m}
 	}
 	args := []string{"run", "-d", "--init", "--name", jc.name, "--network", jc.network, "--label", "jactionlint=1"}
-	if cfg.Platform != "" {
-		args = append(args, "--platform", cfg.Platform)
-	}
 	args = append(args, hardening()...)
 	args = append(args, vol(jr.work, false)...)
 	args = append(args, vol(jr.rd.Home, false)...)
@@ -182,6 +190,9 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		for _, p := range spec.Ports {
 			args = append(args, "-p", "127.0.0.1:"+p.Value)
 		}
+	}
+	if runPlatform != "" {
+		args = append(args, "--platform", runPlatform)
 	}
 	args = append(args, "-w", jr.work, "--entrypoint", "tail", image, "-f", "/dev/null")
 	if _, err := eng.output(ctx, args...); err != nil {
