@@ -565,6 +565,51 @@ func TestNodeOnHostPathStaysOnTheHost(t *testing.T) {
 	}
 }
 
+// With --unsafe-container-options, a --platform in container.options comes last on the docker run line and so wins;
+// the Node.js build, the pull and runner.arch follow it.
+func TestContainerOptionsPlatformWins(t *testing.T) {
+	bin, log := fakeEngine(t)
+	serveNodeBuilds(t, "24.99.0", "linux-x64", "linux-arm64")
+	wf := `on: push
+jobs:
+  j:
+    runs-on: ubuntu-24.04
+    container:
+      image: ` + digestImage + `
+      options: --platform=linux/arm64
+    steps:
+      - uses: ./act
+      - run: echo "runner=${{ runner.arch }}"
+`
+	dir := actionRepo(t, wf, map[string]string{
+		"act/action.yml": "name: n\nruns:\n  using: node24\n  main: main.js\n",
+		"act/main.js":    "console.log('main')\n",
+	})
+	t.Setenv("FAKE_IMAGE_PLATFORM", "linux/amd64")
+	out := mustRun(t, dir, 0, "--container-engine", bin, "--unsafe-container-options", "--platform", "linux/amd64")
+	if !strings.Contains(out, "node build linux-arm64") || !strings.Contains(out, "runner=ARM64") {
+		t.Errorf("the job did not follow the --platform of its options\n%s", out)
+	}
+	if l := readLog(t, log); strings.Contains(l, "pull") && !strings.Contains(l, "--platform linux/arm64") {
+		t.Errorf("the image was not pulled for linux/arm64\n%s", l)
+	}
+}
+
+func TestOptionPlatform(t *testing.T) {
+	for opts, want := range map[string]string{
+		"":                       "",
+		"--cpus 2":               "",
+		"--platform linux/arm64": "linux/arm64",
+		"--platform=linux/arm64": "linux/arm64",
+		"--platform linux/amd64 --platform=linux/arm64": "linux/arm64",
+		"--platform": "",
+	} {
+		if got := optionPlatform(strings.Fields(opts)); got != want {
+			t.Errorf("optionPlatform(%q) = %q, want %q", opts, got, want)
+		}
+	}
+}
+
 func TestParsePlatform(t *testing.T) {
 	for in, want := range map[string]platform{
 		"linux/amd64": {"linux", "amd64"}, "linux/arm64/v8": {"linux", "arm64"}, " Linux/ARM/v7\n": {"linux", "arm"},

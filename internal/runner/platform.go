@@ -69,6 +69,19 @@ func (p platform) nodeArch() string {
 	return p.arch
 }
 
+// optionPlatform is the value of the last --platform in container options, as docker run reads it, or "".
+func optionPlatform(opts []string) string {
+	p := ""
+	for i, w := range opts {
+		if v, ok := strings.CutPrefix(w, "--platform="); ok {
+			p = v
+		} else if w == "--platform" && i+1 < len(opts) {
+			p = opts[i+1]
+		}
+	}
+	return p
+}
+
 // imagePlatform returns the platform of a local image.
 func (c *ctrEngine) imagePlatform(ctx context.Context, image string) (platform, error) {
 	out, err := c.output(ctx, "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}", image)

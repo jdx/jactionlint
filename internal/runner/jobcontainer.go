@@ -60,7 +60,25 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		if err := checkImageTrust(image, cfg.TrustImages || cfg.TrustActions); err != nil {
 			return nil, err
 		}
-		if err := eng.pull(ctx, image, cfg.Platform, say); err != nil {
+	}
+	// The container's options are read first: with --unsafe-container-options they can name a --platform, which comes
+	// after jactionlint's own on the docker run line and so wins.
+	var opts []string
+	if image != "" && spec != nil && spec.Options != nil {
+		o, err := jr.interp(jr.env, spec.Options.Value)
+		if err != nil {
+			return nil, err
+		}
+		if opts, err = parseOptions(o, cfg.UnsafeContainerOptions); err != nil {
+			return nil, err
+		}
+	}
+	if image != "" {
+		want := cfg.Platform
+		if p := optionPlatform(opts); p != "" {
+			want = p
+		}
+		if err := eng.pull(ctx, image, want, say); err != nil {
 			return nil, err
 		}
 		jc.imageEnv = eng.imageEnv(ctx, image)
@@ -68,7 +86,6 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		// runner.os/runner.arch follow it.
 		var plat platform
 		// docker run takes DOCKER_DEFAULT_PLATFORM when there is no --platform; image inspect does not
-		want := cfg.Platform
 		if want == "" && eng.kind == "docker" {
 			want = os.Getenv("DOCKER_DEFAULT_PLATFORM")
 		}
@@ -161,17 +178,7 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 			return nil, fmt.Errorf("container env values with line breaks are not supported")
 		}
 		args = append(args, ea...)
-		if spec.Options != nil {
-			o, err := jr.interp(jr.env, spec.Options.Value)
-			if err != nil {
-				return nil, err
-			}
-			opts, err := parseOptions(o, cfg.UnsafeContainerOptions)
-			if err != nil {
-				return nil, err
-			}
-			args = append(args, opts...)
-		}
+		args = append(args, opts...)
 		for _, p := range spec.Ports {
 			args = append(args, "-p", "127.0.0.1:"+p.Value)
 		}
