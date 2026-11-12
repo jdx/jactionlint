@@ -216,6 +216,10 @@ if expect_calls 1; then
         echo "FAIL: curl did not get the token header on stdin: '$(< "$mock_dir/stdin.1")'" >&2
         ((fails++))
     fi
+    if [[ "$(head -n 1 "$mock_dir/args.1")" != '-q' ]]; then
+        echo "FAIL: curl did not get -q as the first argument: '$(< "$mock_dir/args.1")'" >&2
+        ((fails++))
+    fi
     if ! has_arg 1 '-K' || has_arg 1 '-fL' || grep -q 'test-token' "$mock_dir/args.1"; then
         echo "FAIL: curl did not read the config from stdin, follows redirects, or got the token as an argument: '$(< "$mock_dir/args.1")'" >&2
         ((fails++))

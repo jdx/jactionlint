@@ -153,15 +153,19 @@ archive="$tempdir/${file}"
 #   curl 7.55.0, and the native curl.exe of Git Bash on Windows cannot open the /dev/fd path of -K <(...).
 # - The first request does not follow redirects. Before curl 7.58.0, -L sends a custom Authorization header to the host
 #   of a redirect, so the script downloads the redirect URL itself, without the token.
+# - With a token, -q (the first option) makes curl ignore .curlrc, where a "location" line would make the first request
+#   follow the redirect with the token despite the missing -L.
 # -f makes curl fail on an HTTP error and print the error with the status. The -w output is the only output on stdout.
 config=''
+qopt=()
 if [ -n "$token" ]; then
+    qopt=(-q)
     # The config file syntax needs a backslash before each backslash and double quote.
     token="${token//\\/\\\\}"
     config="header = \"Authorization: Bearer ${token//\"/\\\"}\""
 fi
 rc=0
-response="$(printf '%s\n' "$config" | curl -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || rc=$?
+response="$(printf '%s\n' "$config" | curl "${qopt[@]}" -f -K - -o "$archive" -w '%{http_code} %{redirect_url}' "$url")" || rc=$?
 status="${response%% *}"
 if ((rc == 0)) && [[ "$status" == 3* ]]; then
     status="$(curl -fL -o "$archive" -w '%{http_code}' "${response#* }")" || rc=$?
