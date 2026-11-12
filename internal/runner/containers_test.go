@@ -499,17 +499,21 @@ jobs:
 	for _, c := range []struct {
 		name          string
 		args          []string
+		defaultPlat   string // DOCKER_DEFAULT_PLATFORM
 		image         string // the platform of the local image
 		build, runner string
 		tools         string
 	}{
-		{"--platform linux/amd64", []string{"--platform", "linux/amd64"}, "linux/arm64", "linux-x64", "Linux/X64", "linux-amd64"},
-		{"--platform linux/arm64", []string{"--platform", "linux/arm64/v8"}, "linux/amd64", "linux-arm64", "Linux/ARM64", "linux-arm64"},
-		{"an arm64 image", nil, "linux/arm64", "linux-arm64", "Linux/ARM64", "linux-arm64"},
-		{"an amd64 image", nil, "linux/amd64", "linux-x64", "Linux/X64", "linux-amd64"},
+		{"--platform linux/amd64", []string{"--platform", "linux/amd64"}, "linux/arm64", "linux/arm64", "linux-x64", "Linux/X64", "container-linux-amd64"},
+		{"--platform linux/arm64", []string{"--platform", "linux/arm64/v8"}, "", "linux/amd64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"--platform linux/x86_64", []string{"--platform", "linux/x86_64"}, "", "linux/arm64", "linux-x64", "Linux/X64", "container-linux-amd64"},
+		{"DOCKER_DEFAULT_PLATFORM", nil, "linux/aarch64", "linux/amd64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"an arm64 image", nil, "", "linux/arm64", "linux-arm64", "Linux/ARM64", "container-linux-arm64"},
+		{"an amd64 image", nil, "", "linux/amd64", "linux-x64", "Linux/X64", "container-linux-amd64"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("FAKE_IMAGE_PLATFORM", c.image)
+			t.Setenv("DOCKER_DEFAULT_PLATFORM", c.defaultPlat)
 			os.Remove(log)
 			out := mustRun(t, dir, 0, append([]string{"--container-engine", bin, "--container"}, c.args...)...)
 			tools := filepath.Join(cache, "toolcache", c.tools)
@@ -527,21 +531,41 @@ jobs:
 		})
 	}
 	// each platform has its own tool cache, and its build is in it
-	for tools, arch := range map[string]string{"linux-amd64": "x64", "linux-arm64": "arm64"} {
+	for tools, arch := range map[string]string{"container-linux-amd64": "x64", "container-linux-arm64": "arm64"} {
 		if _, err := os.Stat(filepath.Join(cache, "toolcache", tools, "node", ver, arch, "bin", "node")); err != nil {
 			t.Errorf("no Node.js in the tool cache %s: %v", tools, err)
 		}
 	}
-	for _, other := range []string{"linux-amd64/node/" + ver + "/arm64", "linux-arm64/node/" + ver + "/x64"} {
+	for _, other := range []string{"container-linux-amd64/node/" + ver + "/arm64", "container-linux-arm64/node/" + ver + "/x64", hostPlatform().String() + "/node"} {
 		if _, err := os.Stat(filepath.Join(cache, "toolcache", filepath.FromSlash(other))); err == nil {
-			t.Errorf("the build %s is in the tool cache of another platform", other)
+			t.Errorf("%s exists: a container's Node.js went to the tool cache of another platform or of this machine", other)
 		}
+	}
+}
+
+// A node found on the PATH of this machine is never given to a container job, even one of this machine's platform.
+func TestNodeOnHostPathStaysOnTheHost(t *testing.T) {
+	pathDir := t.TempDir()
+	os.WriteFile(filepath.Join(pathDir, "node"), []byte("#!/bin/sh\necho v22.1.0\n"), 0o755)
+	tools := t.TempDir()
+	host := hostPlatform()
+	cached := filepath.Join(tools, "node", "22.2.0", host.nodeArch(), "bin", "node")
+	os.MkdirAll(filepath.Dir(cached), 0o755)
+	os.WriteFile(cached, []byte("#!/bin/sh\necho v22.2.0\n"), 0o755)
+	os.WriteFile(filepath.Join(tools, "node", "22.2.0", host.nodeArch(), ".jactionlint-complete"), nil, 0o644)
+	np := newNodeProvider()
+	if got, err := np.ensure(t.Context(), nodeTarget{tools, host, true}, 22, []string{pathDir}, func(string) {}); err != nil || got != filepath.Join(pathDir, "node") {
+		t.Fatalf("host job: %q %v", got, err)
+	}
+	if got, err := np.ensure(t.Context(), nodeTarget{tools, host, false}, 22, nil, func(string) {}); err != nil || got != cached {
+		t.Fatalf("container job: got %q %v, want the tool cache's %q", got, err, cached)
 	}
 }
 
 func TestParsePlatform(t *testing.T) {
 	for in, want := range map[string]platform{
 		"linux/amd64": {"linux", "amd64"}, "linux/arm64/v8": {"linux", "arm64"}, " Linux/ARM/v7\n": {"linux", "arm"},
+		"linux/x86_64": {"linux", "amd64"}, "linux/aarch64": {"linux", "arm64"}, "linux/i386": {"linux", "386"},
 	} {
 		if got, err := parsePlatform(in); err != nil || got != want {
 			t.Errorf("parsePlatform(%q) = %v, %v; want %v", in, got, err, want)

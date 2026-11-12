@@ -67,8 +67,13 @@ func (jr *jobRun) startContainer(ctx context.Context, image string, spec *jactio
 		// The steps run on the platform of the container, not of this machine: the Node.js of JavaScript actions and
 		// runner.os/runner.arch follow it.
 		var plat platform
-		if cfg.Platform != "" {
-			plat, err = parsePlatform(cfg.Platform)
+		// docker run takes DOCKER_DEFAULT_PLATFORM when there is no --platform; image inspect does not
+		want := cfg.Platform
+		if want == "" && eng.kind == "docker" {
+			want = os.Getenv("DOCKER_DEFAULT_PLATFORM")
+		}
+		if want != "" {
+			plat, err = parsePlatform(want)
 		} else {
 			plat, err = eng.imagePlatform(ctx, image)
 		}

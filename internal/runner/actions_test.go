@@ -386,7 +386,7 @@ func TestNodeInstallChecksum(t *testing.T) {
 	tools := t.TempDir()
 	np := newNodeProvider()
 	var said []string
-	bin, err := np.ensure(t.Context(), nodeTarget{tools, host}, 20, nil, func(s string) { said = append(said, s) })
+	bin, err := np.ensure(t.Context(), nodeTarget{tools, host, true}, 20, nil, func(s string) { said = append(said, s) })
 	srv.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -398,7 +398,7 @@ func TestNodeInstallChecksum(t *testing.T) {
 		t.Errorf("no note about the download: %v", said)
 	}
 	// the second time, from the tool cache, without a server
-	bin2, err := newNodeProvider().ensure(t.Context(), nodeTarget{tools, host}, 20, nil, func(string) {})
+	bin2, err := newNodeProvider().ensure(t.Context(), nodeTarget{tools, host, true}, 20, nil, func(string) {})
 	if err != nil || bin2 != bin {
 		t.Fatalf("cached node: %v %q", err, bin2)
 	}
@@ -408,7 +408,7 @@ func TestNodeInstallChecksum(t *testing.T) {
 	defer srv.Close()
 	nodeDist = srv.URL
 	tools2 := t.TempDir()
-	_, err = newNodeProvider().ensure(t.Context(), nodeTarget{tools2, host}, 20, nil, func(string) {})
+	_, err = newNodeProvider().ensure(t.Context(), nodeTarget{tools2, host, true}, 20, nil, func(string) {})
 	if err == nil || !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("want a checksum error, got %v", err)
 	}
@@ -418,7 +418,7 @@ func TestNodeInstallChecksum(t *testing.T) {
 	// PATH wins when its node has the right major version
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "node"), []byte("#!/bin/sh\necho v22.1.0\n"), 0o755)
-	got, err := newNodeProvider().ensure(t.Context(), nodeTarget{t.TempDir(), host}, 22, []string{dir}, func(string) {})
+	got, err := newNodeProvider().ensure(t.Context(), nodeTarget{t.TempDir(), host, true}, 22, []string{dir}, func(string) {})
 	if err != nil || got != filepath.Join(dir, "node") {
 		t.Fatalf("PATH node: %v %q", err, got)
 	}

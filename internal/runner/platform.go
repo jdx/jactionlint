@@ -15,14 +15,24 @@ type platform struct {
 
 func hostPlatform() platform { return platform{runtime.GOOS, runtime.GOARCH} }
 
-// parsePlatform reads os/arch[/variant] (linux/amd64, linux/arm64/v8, linux/arm/v7). The variant is dropped: Node.js
-// and the runner context only tell architectures apart.
+// parsePlatform reads os/arch[/variant] (linux/amd64, linux/arm64/v8, linux/arm/v7), with the architecture aliases
+// that docker accepts (x86_64, aarch64). The variant is dropped: Node.js and the runner context only tell
+// architectures apart.
 func parsePlatform(s string) (platform, error) {
 	parts := strings.Split(strings.ToLower(strings.TrimSpace(s)), "/")
 	if len(parts) < 2 || len(parts) > 3 || parts[0] == "" || parts[1] == "" {
 		return platform{}, fmt.Errorf("the platform %q is not os/arch[/variant], such as linux/amd64", s)
 	}
-	return platform{parts[0], parts[1]}, nil
+	arch := parts[1]
+	if a, ok := archAliases[arch]; ok {
+		arch = a
+	}
+	return platform{parts[0], arch}, nil
+}
+
+// archAliases are the other names of architectures that docker normalizes (containerd's platforms package).
+var archAliases = map[string]string{
+	"x86_64": "amd64", "x86-64": "amd64", "aarch64": "arm64", "armhf": "arm", "armel": "arm", "i386": "386",
 }
 
 // String is the name of the platform's tool cache, as the host's is named: linux-amd64.

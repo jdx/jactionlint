@@ -28,17 +28,20 @@ type nodeProvider struct {
 	found map[nodeKey]string
 }
 
-// nodeKey tells apart the binaries of one major version: each tool cache holds the builds of one platform, and the
-// host's and a container's are different directories.
+// nodeKey tells apart the binaries of one major version: each tool cache holds the builds of one platform, and a
+// binary found on the PATH of this machine is only good for jobs on this machine.
 type nodeKey struct {
 	tools string
 	major int
+	host  bool
 }
 
-// nodeTarget is where the binary has to run: the tool cache of the job and the platform of its programs.
+// nodeTarget is where the binary has to run: the tool cache of the job and the platform of its programs, and whether
+// that is this machine.
 type nodeTarget struct {
 	tools string
 	plat  platform
+	host  bool
 }
 
 func newNodeProvider() *nodeProvider {
@@ -68,7 +71,7 @@ func nodeVersionOf(bin string) (string, error) {
 func (n *nodeProvider) ensure(ctx context.Context, t nodeTarget, major int, pathDirs []string, say func(string)) (string, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	key := nodeKey{t.tools, major}
+	key := nodeKey{t.tools, major, t.host}
 	if p := n.found[key]; p != "" {
 		return p, nil
 	}

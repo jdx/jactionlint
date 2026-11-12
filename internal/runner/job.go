@@ -700,14 +700,15 @@ func (jr *jobRun) platform() platform {
 }
 
 func (jr *jobRun) nodeTarget() nodeTarget {
-	return nodeTarget{tools: jr.rd.ToolCache, plat: jr.platform()}
+	return nodeTarget{tools: jr.rd.ToolCache, plat: jr.platform(), host: !jr.inCtr()}
 }
 
-// usePlatform makes the job a job of the platform of its container: the tool cache of that platform (so that the
-// container gets binaries it can run, and the host's cache gets none of them), and runner.os, runner.arch and
-// runner.tool_cache of that platform, as on GitHub, where a container job reports the runner it is on.
+// usePlatform makes the job a job of the platform of its container: the containers' tool cache of that platform (so
+// that the container gets binaries it can run, and this machine's cache gets none of them, even when the platform is
+// this machine's), and runner.os, runner.arch and runner.tool_cache of that platform, as on GitHub, where a container
+// job reports the runner it is on.
 func (jr *jobRun) usePlatform(p platform) error {
-	tc := filepath.Join(filepath.Dir(jr.rd.ToolCache), p.String())
+	tc := filepath.Join(filepath.Dir(jr.rd.ToolCache), "container-"+p.String())
 	if err := os.MkdirAll(tc, 0o755); err != nil {
 		return err
 	}
