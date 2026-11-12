@@ -23,6 +23,8 @@ To change something, start with [Set up](#set-up) and [Find the command for your
 
 Open an [issue](https://github.com/jdx/jactionlint/issues/new) for a bug, a false positive or an idea for a check. Search the existing issues first, closed ones included.
 
+Bug reports, in Issues or Discussions, are only for problems you ran into while using jactionlint. Say what you were trying to do, what you ran, the relevant workflow and config, and what happened. Reports found by reading the source or by having an agent search the code will be closed.
+
 A report that can be acted on holds:
 
 - the smallest workflow file (or `dependabot.yml` or `action.yml`) that shows the problem, pasted as text
