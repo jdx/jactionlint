@@ -80,6 +80,23 @@ if [[ "$out" != '1.6.12' ]]; then
 fi
 rm -rf ./test2
 
+# Download with a token. This uses the real curl, so on Windows it checks that the native curl.exe of Git Bash can read
+# the header. CI gives GITHUB_TOKEN. The trace is off while the token is expanded, so that the log does not show it.
+set +x
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    use_own_releases
+    mkdir ./test3
+    JACTIONLINT_TOKEN="$GITHUB_TOKEN" bash "$script" latest ./test3
+    set -x
+    out="$(./test3/"${bin}" --version)"
+    if [[ "$out" != *'installed by downloading from release page'* ]]; then
+        echo "Output from ./${bin} --version is unexpected: '${out}'" >&2
+        exit 1
+    fi
+    rm -rf ./test3
+fi
+set -x
+
 # Error cases
 use_own_releases
 set +e
@@ -139,6 +156,108 @@ for pair in x86_64:amd64 amd64:amd64 i386:386 i686:386 aarch64:arm64 arm64:arm64
         ((fails++))
     fi
 done
+
+# Tests with a mock curl, an exported function like the mock uname above. Call N of the mock writes its arguments to
+# args.N and its stdin to stdin.N. Line N of the file answers gives the exit code and the stdout of call N.
+mock_dir="$(pwd)/mock"
+mkdir "$mock_dir"
+export mock_dir
+# shellcheck disable=SC2329 # called by the script that runs below, through the exported function
+curl() {
+    local n=1 i code answer
+    while [[ -e "$mock_dir/args.$n" ]]; do
+        n=$((n + 1))
+    done
+    printf '%s\n' "$@" > "$mock_dir/args.$n"
+    cat > "$mock_dir/stdin.$n"
+    {
+        for ((i = 1; i < n; i++)); do
+            read -r _
+        done
+        read -r code answer
+    } < "$mock_dir/answers"
+    printf '%s' "$answer"
+    return "${code:-1}"
+}
+export -f curl
+
+# Usage: run_mock TOKEN ANSWER... Runs the download script with the mock curl and puts its output in $out.
+function run_mock() {
+    local token="$1"
+    shift
+    rm -f "$mock_dir"/args.* "$mock_dir"/stdin.*
+    printf '%s\n' "$@" > "$mock_dir/answers"
+    out="$(JACTIONLINT_TOKEN="$token" bash "$script" '9.9.9' </dev/null 2>&1)" || true
+}
+
+# Usage: expect_calls N. Fails when the mock curl did not get exactly N calls.
+function expect_calls() {
+    if [[ ! -e "$mock_dir/args.$1" || -e "$mock_dir/args.$(($1 + 1))" ]]; then
+        echo "FAIL: curl did not get $1 calls: '${out}'" >&2
+        ((fails++))
+        return 1
+    fi
+}
+
+# Usage: has_arg N ARG. Succeeds when call N of the mock curl got the argument ARG.
+function has_arg() {
+    grep -qx -- "$2" "$mock_dir/args.$1"
+}
+
+# curl reads the token header from a config file on stdin (-K -), not from the command line. The first request does
+# not follow redirects.
+run_mock 'test-token' '22 404'
+if [[ "$out" != *'jactionlint v9.9.9 was not found'* ]]; then
+    echo "FAIL: Download with a token and a 404 answer did not cause the not found message: '${out}'" >&2
+    ((fails++))
+fi
+if expect_calls 1; then
+    if [[ "$(< "$mock_dir/stdin.1")" != 'header = "Authorization: Bearer test-token"' ]]; then
+        echo "FAIL: curl did not get the token header on stdin: '$(< "$mock_dir/stdin.1")'" >&2
+        ((fails++))
+    fi
+    if ! has_arg 1 '-K' || has_arg 1 '-fL' || grep -q 'test-token' "$mock_dir/args.1"; then
+        echo "FAIL: curl did not read the config from stdin, follows redirects, or got the token as an argument: '$(< "$mock_dir/args.1")'" >&2
+        ((fails++))
+    fi
+fi
+
+# The config file syntax needs a backslash before each backslash and double quote of the token.
+run_mock 'a\b"c' '22 404'
+if expect_calls 1 && [[ "$(< "$mock_dir/stdin.1")" != 'header = "Authorization: Bearer a\\b\"c"' ]]; then
+    echo "FAIL: curl did not get the escaped token on stdin: '$(< "$mock_dir/stdin.1")'" >&2
+    ((fails++))
+fi
+
+# Without a token, the config on stdin is empty.
+run_mock '' '22 404'
+if expect_calls 1 && [[ -n "$(< "$mock_dir/stdin.1")" ]]; then
+    echo "FAIL: curl without a token got a config: '$(< "$mock_dir/stdin.1")'" >&2
+    ((fails++))
+fi
+
+# The script follows a redirect with a second curl call, which does not get the token.
+run_mock 'test-token' '0 302 https://assets.example.com/archive' '22 404'
+if expect_calls 2; then
+    if ! has_arg 2 'https://assets.example.com/archive' || has_arg 2 '-K' || [[ -s "$mock_dir/stdin.2" ]]; then
+        echo "FAIL: curl did not download the redirect URL without the token: '$(< "$mock_dir/args.2")' '$(< "$mock_dir/stdin.2")'" >&2
+        ((fails++))
+    fi
+    if [[ "$out" != *'jactionlint v9.9.9 was not found'* ]]; then
+        echo "FAIL: A 404 answer after the redirect did not cause the not found message: '${out}'" >&2
+        ((fails++))
+    fi
+fi
+
+# Other errors cause a general message.
+run_mock '' '7 000'
+if [[ "$out" != *'Could not download jactionlint v9.9.9 from '* ]]; then
+    echo "FAIL: A download without an HTTP response did not cause the general message: '${out}'" >&2
+    ((fails++))
+fi
+
+unset -f curl
+rm -rf "$mock_dir"
 
 set -e
 if [[ "$fails" != "0" ]]; then
