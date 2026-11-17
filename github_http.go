@@ -789,7 +789,7 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 			e := &cacheEntry{URL: u, ETag: res.header.Get("ETag"), Fetched: c.now(), Status: st, Link: res.header.Get("Link"), Body: res.body}
 			c.cache.put(key, e)
 			return answerFromEntry(e), nil
-		case st == http.StatusNotFound || st == http.StatusGone || st == http.StatusUnavailableForLegalReasons || st == http.StatusUnprocessableEntity:
+		case isNotFoundStatus(st):
 			// Remember that it does not exist for the TTL so that the same lookup is not repeated
 			c.cache.put(key, &cacheEntry{URL: u, Fetched: c.now(), Status: st})
 			return &httpAnswer{status: st}, nil
@@ -803,9 +803,11 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 			if li.kind == limitNone {
 				// A token which may not read this repository (a fine-grained token or an app token
 				// scoped to other repositories) is refused even for public data: ask without it
-				// once. The token is kept for the other requests.
+				// once. The token is kept for the other requests. A definitive "not found" of the anonymous
+				// request is an answer as well (the file or the branch does not exist), so it is not reported as the
+				// 403 of the token. Any other failure keeps the first answer.
 				if st == http.StatusForbidden && token != "" && !retryAnon {
-					if ans, err := c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true, true); err == nil && ans.status == http.StatusOK {
+					if ans, err := c.do(ctx, u, "", nil, cacheKey(c.scope(""), u), true, true); err == nil && (ans.status == http.StatusOK || isNotFoundStatus(ans.status)) {
 						return ans, nil
 					}
 				}
@@ -849,6 +851,11 @@ func (c *httpGitHubClient) do(ctx context.Context, u, token string, entry *cache
 		}
 		return nil, c.statusError(res)
 	}
+}
+
+// isNotFoundStatus reports whether a status says the thing asked for does not exist (for this requester).
+func isNotFoundStatus(st int) bool {
+	return st == http.StatusNotFound || st == http.StatusGone || st == http.StatusUnavailableForLegalReasons || st == http.StatusUnprocessableEntity
 }
 
 // statusError describes a failed answer. What the API said is redacted and cut short.
