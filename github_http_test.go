@@ -263,6 +263,37 @@ func TestHTTPClientSecondaryRateLimitAndOtherForbidden(t *testing.T) {
 	}
 }
 
+// A token that an IP allowlist refuses (a 403 that is no rate limit) is retried without the token. A
+// "not found" of that anonymous request is a real answer: the branch does not exist. Any other anonymous
+// failure keeps the 403.
+func TestHTTPClientForbiddenTokenAnonymousNotFound(t *testing.T) {
+	f := newFakeGitHub(t)
+	deny := func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"IP allow list enabled"}`)
+	}
+	f.handle("/repos/o/r/git/ref/heads/v1", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			deny(w)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"message":"Not Found"}`)
+	})
+	f.handle("/repos/o/r/git/ref/heads/v2", func(w http.ResponseWriter, r *http.Request) {
+		deny(w)
+	})
+	c := f.client(httpGitHubOptions{Token: "t"})
+	if _, ok, err := c.ResolveRef(context.Background(), "o", "r", "heads", "v1"); err != nil || ok {
+		t.Errorf("an anonymous 404 should be a missing branch but got ok=%v, err=%v", ok, err)
+	}
+	_, _, err := c.ResolveRef(context.Background(), "o", "r", "heads", "v2")
+	var se *GitHubStatusError
+	if !errors.As(err, &se) || se.Status != 403 {
+		t.Errorf("an anonymous 403 should keep the first 403 but got %v", err)
+	}
+}
+
 func TestHTTPClientRejectedTokenFallsBackOnce(t *testing.T) {
 	f := newFakeGitHub(t)
 	f.handle("/repos/o/r", func(w http.ResponseWriter, r *http.Request) {
