@@ -67,6 +67,13 @@ inputs:
       It takes precedence over annotations.
     required: false
     default: "false"
+  fail-on-findings:
+    description: |
+      Whether the job fails when jactionlint reports findings and advanced-security is true. The default "false" leaves
+      the findings to code scanning, like CodeQL does, and the job still fails when jactionlint itself fails (exit
+      status 2 or 3). It has no effect when advanced-security is false.
+    required: false
+    default: "false"
   color:
     description: Whether to colorize the output of the text format.
     required: false
@@ -135,7 +142,7 @@ runs:
         category: jactionlint
 
     - name: Fail on findings
-      if: ${{ !cancelled() && inputs.advanced-security == 'true' && steps.run.outputs.exit-code != '' && steps.run.outputs.exit-code != '0' }}
+      if: ${{ !cancelled() && inputs.advanced-security == 'true' && steps.run.outputs.exit-code != '' && steps.run.outputs.exit-code != '0' && (inputs.fail-on-findings == 'true' || steps.run.outputs.exit-code != '1') }}
       shell: bash
       run: |
         echo "::error title=jactionlint::jactionlint exited with status ${EXIT_CODE}"
