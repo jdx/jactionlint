@@ -544,7 +544,7 @@ func (c *httpGitHubClient) afterTokenRequest(ctx context.Context, u, token, key 
 		switch {
 		case c.currentToken() != token:
 			denied = self // the token was rejected (401) and dropped: what it vouched for is not vouched for any more
-		case ans.status == http.StatusNotFound || ans.status == http.StatusForbidden || ans.status == http.StatusUnauthorized:
+		case isNotFoundStatus(ans.status) || ans.status == http.StatusForbidden || ans.status == http.StatusUnauthorized:
 			denied = self
 		case ans.status == http.StatusOK:
 			c.shareIfPublic(ctx, u, key, owner, repo, self)
