@@ -71,6 +71,7 @@ Every input is optional. Set them under `with:` of the `jdx/jactionlint` step.
 | `token` | `${{ github.token }}` | The GitHub API token of the online checks and of the download of jactionlint. The action does not pass it to jactionlint when `online` is `false`, and it does not send it with the download on GitHub Enterprise Server, because the token belongs to that server. |
 | `annotations` | `true` | Annotate the files with the findings (`--format github`). It has no effect when `advanced-security` is `true`. |
 | `advanced-security` | `false` | Upload the findings to code scanning as SARIF. The job needs `security-events: write`. It takes precedence over `annotations`. |
+| `fail-on-findings` | `false` | Fail the job when jactionlint reports findings and `advanced-security` is `true`. By default the findings only reach code scanning. A failure of jactionlint itself (status 2 or 3) still fails the job. |
 | `color` | `true` | Colorize the text output. It applies only when `annotations` and `advanced-security` are both `false`. |
 | `args` | empty | Further options, for example `--ignore=unpinned-images`. The action splits the value at white space and does not remove quotes, so a value cannot contain a space and quotes stay literal. |
 | `working-directory` | `.` | The directory to run jactionlint in. `files` and `config-file` are relative to it. |
@@ -277,12 +278,12 @@ Set `advanced-security: true` and give the job `security-events: write`. The act
           advanced-security: true
 ```
 
-The upload happens even when jactionlint reports findings, and the job fails after it. The exit status of jactionlint decides what the action does:
+The upload happens even when jactionlint reports findings. Like CodeQL, the job passes for them, because code scanning reports them. Set `fail-on-findings: true` to fail the job after the upload as well. A failure of jactionlint itself fails the job either way. The exit status of jactionlint decides what the action does:
 
 | jactionlint exits with | Upload | `sarif-file` | Job |
 | --- | --- | --- | --- |
 | 0 | The log, which has no finding that fails the run | The path of the log | Passes |
-| 1 | The log, which has findings that fail the run | The path of the log | Fails after the upload |
+| 1 | The log, which has findings that fail the run | The path of the log | Passes, or fails after the upload with `fail-on-findings: true` |
 | 2 or 3 | None, the action removes the file | Empty | Fails with that status |
 
 ### Upload to code scanning without the action
