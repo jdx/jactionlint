@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.1](https://github.com/jdx/jactionlint/compare/v2.6.0...v2.6.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **action:** don't fail the job for findings with advanced-security ([#354](https://github.com/jdx/jactionlint/issues/354)) ([66fc847](https://github.com/jdx/jactionlint/commit/66fc8479e3aaf3af5a15876740ad9fed371b889d))
+* **online:** accept an anonymous not-found after a forbidden token ([#351](https://github.com/jdx/jactionlint/issues/351)) ([cf965f8](https://github.com/jdx/jactionlint/commit/cf965f8c92292982804aaaa3295c6579a17630b7))
+
 ## [2.6.0](https://github.com/jdx/jactionlint/compare/v2.5.0...v2.6.0) (2026-11-12)
 
 
