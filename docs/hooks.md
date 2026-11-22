@@ -126,7 +126,29 @@ The `pre-commit` and `fix` hooks still run `linters` only. hk runs the batches i
 
 ## pre-commit
 
-[pre-commit](https://pre-commit.com) manages Git hooks for many languages. jactionlint provides hooks in its repository, so you add the repository and the hook to `.pre-commit-config.yaml`:
+The [pre-commit](https://pre-commit.com) hooks published by the jactionlint repository are deprecated. All four hook IDs below still work; this does not deprecate jactionlint itself or require you to stop using pre-commit. Existing configs pinned to an older tag or commit keep using the hooks at that revision.
+
+For new setups, use the [hk integration](#hk), or keep pre-commit and replace the jactionlint repository entry in your `.pre-commit-config.yaml` with a [repository-local hook](https://pre-commit.com/#repository-local-hooks):
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: jactionlint
+        name: Lint GitHub Actions files
+        entry: jactionlint
+        language: unsupported
+        types: [yaml]
+        files: '^(\.github/workflows/|\.github/dependabot\.ya?ml$|(.*/)?action\.ya?ml$)'
+```
+
+Install and pin a jactionlint release separately, for example with [mise](./install.md#mise), and ensure it is on `PATH` when Git runs the hook. Keep any existing `args` you use. The local hook does not install a binary, run Docker, or bundle shellcheck; install the [companion tools](./install.md#companion-programs) you need. Use `language: unsupported` with pre-commit 4.4 and later, or `language: system` with older versions. Run `pre-commit run jactionlint --all-files` to check the replacement.
+
+If you switch to hk instead, remove just the jactionlint entry from your pre-commit config if you still use other pre-commit hooks. Only run `pre-commit uninstall` if you are retiring pre-commit entirely in that clone. [Configure hk](#hk) to run jactionlint in its place.
+
+### Existing published hooks
+
+To recognize a config that uses a published hook, look for the jactionlint repository URL:
 
 ```yaml
 repos:
@@ -136,7 +158,7 @@ repos:
       - id: jactionlint
 ```
 
-Run `pre-commit install` once in each clone. A commit then runs the hook for the staged files that jactionlint checks, and `pre-commit run --all-files` runs it for the whole repository. Set `rev` to a release tag: pre-commit takes the hook definitions and the source that it builds from that revision. A hook or a `files` pattern that is newer than your release is not available at that tag: use `rev: main` or a commit SHA to get the hooks and patterns of this page.
+pre-commit reads the hook definition and any source it builds from the pinned `rev`. Hook IDs and file filters can vary by revision; check `.pre-commit-hooks.yaml` at that revision.
 
 ### Choose a hook
 
@@ -148,8 +170,6 @@ The repository provides these hooks. They differ in where the jactionlint execut
 | `jactionlint-shellcheck` | The same, with a shellcheck built from Go ([go-shellcheck](https://github.com/wasilibs/go-shellcheck)) installed next to it. | Nothing else. The scripts are checked without a system shellcheck, and the results match CI. |
 | `jactionlint-docker` | The [Docker image](./install.md#docker-image) of the release that `rev` names. | Docker. The image has no Node.js, so the rule `github-script-syntax` is skipped. |
 | `jactionlint-system` | The `jactionlint` on your `PATH`. | An [installation](./install.md) of jactionlint. |
-
-A revision has only the hooks that existed when it was made. When pre-commit does not find a hook, read `.pre-commit-hooks.yaml` at your `rev`, and use `rev: main` or a commit SHA for a hook that your release does not have.
 
 Without a shellcheck, the `jactionlint` hook does not check the shell scripts and prints a note, as [Companion programs](./install.md#companion-programs) describes.
 
