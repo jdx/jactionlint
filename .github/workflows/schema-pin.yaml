@@ -1,11 +1,8 @@
 name: Schema pin
 # Bumps the commit of actions/runner whose workflow schemas TestSchemaConformance compares the parser with
-# (testdata/schema/runner). When GitHub changes its syntax the test of the pull request fails with the difference,
-# which is how new syntax is noticed. See scripts/update-schema-pin.bash.
+# (testdata/schema/runner). Run this workflow on demand to open a pull request showing the
+# conformance test result against refreshed schemas. See scripts/update-schema-pin.bash.
 on:
-  schedule:
-    # Every Sunday 10:21 in JST
-    - cron: '21 1 * * 0'
   workflow_dispatch:
 
 permissions: {}

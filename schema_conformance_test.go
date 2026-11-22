@@ -16,9 +16,9 @@ import (
 // TestSchemaConformance compares the tables of the parser and of the rules with the schemas which the runner of
 // GitHub Actions reads workflows and actions with: src/Sdk/WorkflowParser/workflow-v1.0.json and
 // src/Runner.Worker/action_yaml.json of actions/runner. The schemas are vendored in testdata/schema/runner at the commit
-// in testdata/schema/runner/COMMIT, so the test runs offline. A scheduled workflow (.github/workflows/schema-pin.yml,
-// scripts/update-schema-pin.bash) bumps the pin and opens a pull request, which is how a change of GitHub's syntax is
-// noticed: the test fails with the difference until the parser follows it or the difference is explained.
+// in testdata/schema/runner/COMMIT, so the test runs offline. Refresh the pin on demand with scripts/update-schema-pin.bash
+// or dispatch .github/workflows/schema-pin.yaml to open a pull request. The test fails on a difference until the
+// parser follows it or the difference is explained.
 //
 // It compares:
 //   - the keys which each mapping accepts (what the parser lists in its "unexpected key" error, and which filters of
