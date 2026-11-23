@@ -144,7 +144,7 @@ repos:
 
 Install and pin a jactionlint release separately, for example with [mise](./install.md#mise), and ensure it is on `PATH` when Git runs the hook. Keep any existing `args` you use. The local hook does not install a binary, run Docker, or bundle shellcheck; install the [companion tools](./install.md#companion-programs) you need. Use `language: unsupported` with pre-commit 4.4 and later, or `language: system` with older versions. Run `pre-commit run jactionlint --all-files` to check the replacement.
 
-If you switch to hk instead, remove just the jactionlint entry from your pre-commit config if you still use other pre-commit hooks. Only run `pre-commit uninstall` if you are retiring pre-commit entirely in that clone. [Configure hk](#hk) to run jactionlint in its place.
+If you switch to hk instead, remove just the jactionlint entry from your pre-commit config if you still use other pre-commit hooks. Only run `pre-commit uninstall` if you are retiring pre-commit entirely in that clone. [Configure hk](#hk) to run jactionlint in its place, and add the `**/action.y*ml` entry from the [glob table](#choose-the-files) to the step so that `action.yml` and `action.yaml` files stay linted, as the published hooks did. To keep other pre-commit hooks next to hk, you need Git 2.54 or later: on older Git, `hk install` refuses to replace a pre-commit hook script that hk did not write, and `hk install --force` would disable those hooks. On older Git, use the repository-local hook above instead.
 
 ### Existing published hooks
 
