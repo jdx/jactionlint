@@ -50,7 +50,7 @@ Find the row of your change, run its commands and commit the files that they rew
 | Code that parses or scans a whole file | `mise run bench`, `go test -run TestScalingBudget .` | The benchmarks, and the test that fails when the time grows faster than the size of the file |
 | An action of `popular_actions.json` | Edit `scripts/generate-popular-actions/popular_actions.json`, then `go generate -run generate-popular-actions` | `popular_actions.go` |
 | A webhook event, a context or the shape of `github.event` | `go generate` | `all_webhooks.go`, `availability.go` and `event_payloads.go`, from the current GitHub documents |
-| GitHub changed the workflow syntax (`TestSchemaConformance` fails) | `mise run schema-pin [COMMIT]` | `testdata/schema/runner/`. The workflow `schema-pin.yaml` does it every week and opens a pull request. |
+| Check or refresh the upstream runner schemas | `mise run schema-pin [COMMIT]` followed by `go test -run TestSchemaConformance -count=1 .` | `testdata/schema/runner/`. Dispatch `schema-pin.yaml` manually if you want it to open a pull request. |
 | `man/jactionlint.1.ronn` | `mise run man` | `man/jactionlint.1`, which git ignores: see [Build the manual](../CONTRIBUTING.md#build-the-manual) |
 | The Go code of the playground | `mise run docs:wasm`, `mise run docs:test` and `mise run lint:wasm` | `docs/public/playground/main.wasm` and `wasm_exec.js`, which git ignore, the playground tests and staticcheck of `./playground` |
 | `scripts/download-jactionlint.bash` | `./scripts/test-download-jactionlint.bash` | Nothing: the test downloads real releases. The workflow `download.yaml` runs it on three operating systems. |
@@ -69,7 +69,7 @@ These files have no README of their own.
 | `go-to-wheel-go.bash` | The Go wrapper that the `wheels` job of `release.yaml` passes to [go-to-wheel](https://github.com/simonw/go-to-wheel) as `--go-binary`, to build the Python wheels for PyPI. go-to-wheel runs `go build ... .` in the module root, which is the library, so the wrapper replaces that last argument `.` of a `go build` with `./cmd/jactionlint` and passes every other call to `go` unchanged. Nothing else calls it. [Wheels and PyPI](../CONTRIBUTING.md#wheels-and-pypi) describes the jobs and how to try a wheel. |
 | `test-download-jactionlint.bash` | The test of the download script, which downloads real releases. The workflow `download.yaml` runs it. |
 | `touch.ps1` | A PowerShell version of `touch`. Nothing in the repository calls it. |
-| `update-schema-pin.bash` | Pins the workflow schemas of actions/runner that `TestSchemaConformance` compares the parser with: `mise run schema-pin [COMMIT]`. It needs `gh` and `jq`. The workflow `schema-pin.yaml` runs it every week. |
+| `update-schema-pin.bash` | Pins the workflow schemas of actions/runner that `TestSchemaConformance` compares the parser with: `mise run schema-pin [COMMIT]`. It needs `gh` and `jq`. The workflow `schema-pin.yaml` runs it only when dispatched manually. |
 | `yaml-to-playground-url.js` | Reads a workflow from stdin and prints its playground link, without the comment lines: `node ./scripts/yaml-to-playground-url.js < workflow.yaml`. |
 
 ## Next steps
