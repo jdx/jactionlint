@@ -356,3 +356,21 @@ func TestBaselineWriteRecordsTheLockFile(t *testing.T) {
 		t.Fatalf("the baseline must cover the findings of the lock file: status %d: %s", status, out.String())
 	}
 }
+
+// When a workflow which stays was not read, it may use what a deleted entry pinned: the fix deletes the entry but
+// keeps the dependencies.
+func TestActionsLockFixKeepsDependenciesOfUnreadWorkflows(t *testing.T) {
+	root := t.TempDir()
+	lock := "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/gone.yml':\n        - 'actions/cache@v4'\n    '.github/workflows/odd.yml': []\ndependencies:\n    'actions/cache@v4':\n        ref: 'v4'\n        commit: 'sha1-0c45773b623bea8c8e75f6c82b208c3cf94ea4f9'\n        owner_id: 44036562\n        repo_id: 162133364\n"
+	writeFile(t, filepath.Join(root, ".github", "workflows", "actions.lock"), lock)
+	if err := os.MkdirAll(filepath.Join(root, ".github", "workflows", "odd.yml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := fixLockRoot(t, root, fixtureConfig("actions-lock"))
+	if strings.Contains(got, "gone.yml") {
+		t.Errorf("the entry of the deleted workflow must be removed:\n%s", got)
+	}
+	if !strings.Contains(got, "    'actions/cache@v4':\n") {
+		t.Errorf("the dependency which the unread workflow may use must stay:\n%s", got)
+	}
+}

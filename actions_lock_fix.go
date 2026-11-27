@@ -252,8 +252,9 @@ type lockPlan struct {
 }
 
 // plan returns what the fix of the prunes deletes. The dependencies which keep lists stay, with all they use: their
-// findings were dropped by an ignore or the baseline.
-func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool) *lockPlan {
+// findings were dropped by an ignore or the baseline. orphans is false when what a workflow which stays uses is not
+// known: the dependencies which only the deleted entries reach then stay, since that workflow may use them.
+func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool, orphans bool) *lockPlan {
 	p := &lockPlan{workflows: map[*lockWorkflow]bool{}, pins: map[*lockWorkflow]map[int]bool{}, deps: map[string]bool{}}
 	for _, x := range ps {
 		for _, w := range x.workflows {
@@ -269,8 +270,10 @@ func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool) *lockPlan {
 			p.deps[k] = true
 		}
 	}
-	for k := range l.orphans(func(w *lockWorkflow, i int) bool { return p.workflows[w] || p.pins[w][i] }) {
-		p.deps[k] = true
+	if orphans {
+		for k := range l.orphans(func(w *lockWorkflow, i int) bool { return p.workflows[w] || p.pins[w][i] }) {
+			p.deps[k] = true
+		}
 	}
 	seen := map[string]bool{}
 	var stay func(k string)
@@ -340,7 +343,7 @@ func (l *actionsLock) size(c string) int {
 // without a value. That fix is attached to the first of its findings, and the others say so.
 //
 // dropped are the prunes whose findings an ignore or the baseline dropped: their entries stay.
-func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPrune) {
+func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPrune, orphans bool) {
 	if len(prunes) == 0 || e == nil {
 		return
 	}
@@ -350,7 +353,7 @@ func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPru
 			keepDeps[k] = true
 		}
 	}
-	plan := func(ps []*lockPrune) *lockPlan { return l.plan(ps, keepDeps) }
+	plan := func(ps []*lockPrune) *lockPlan { return l.plan(ps, keepDeps, orphans) }
 	group := make([]int, len(prunes))
 	for i := range group {
 		group[i] = i

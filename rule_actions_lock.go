@@ -152,6 +152,9 @@ type lockFileChecks struct {
 	// prunes are the findings of the entries which nothing uses. They get their fixes once the ignores and the
 	// baseline have dropped what they drop: a fix must not delete an entry whose finding was ignored.
 	prunes []*lockPrune
+	// unknownUsage is true when what a workflow which stays uses was not read: a fix then keeps the dependencies,
+	// which that workflow may use.
+	unknownUsage bool
 }
 
 // report reports a finding of the lock file which the rule does not fix: the file is written by gh actions-lock.
@@ -446,6 +449,7 @@ func (c *lockFileChecks) checkUsage() {
 	for _, w := range l.Workflows {
 		if checkLockWorkflowPath(w.Key) != "" {
 			allKnown = false
+			c.unknownUsage = true
 			continue
 		}
 		usage := c.workflowUsage(w.Key)
@@ -460,6 +464,7 @@ func (c *lockFileChecks) checkUsage() {
 		}
 		if !usage.complete {
 			allKnown = false
+			c.unknownUsage = true
 			continue
 		}
 		for i, p := range w.Pins {
@@ -621,7 +626,7 @@ func (l *Linter) checkActionsLock(file string, content []byte, project *Project,
 			dropped = append(dropped, p)
 		}
 	}
-	c.lock.attachPruneFixes(c.edit, fixed, dropped)
+	c.lock.attachPruneFixes(c.edit, fixed, dropped, !c.unknownUsage)
 	return out, nil
 }
 
