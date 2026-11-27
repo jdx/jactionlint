@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,6 +75,7 @@ func (r *RuleActionsLock) VisitStep(n *Step) error {
 			if r.pedantic(actionsLockID) && !r.unlisted[key] {
 				r.unlisted[key] = true
 				r.ReportIDf("actions-lock", e.Uses.Pos, "%s is not listed in %s, which the repository has, so it is not held to the lock file: its actions can change without notice. run `gh actions-lock` to add it", r.subject(key), actionsLockPath)
+				r.noFixLast(lockNoFixWrite)
 			}
 			continue
 		}
@@ -82,8 +84,10 @@ func (r *RuleActionsLock) VisitStep(n *Step) error {
 		case lockMissing:
 			// One finding for each workflow which runs a local action: the message names it
 			r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s. a workflow which the lock file lists must list every action it uses. run `gh actions-lock` to add it", u.Raw, actionsLockPath, r.subject(key))
+			r.noFixLast(lockNoFixWrite)
 		case lockOtherRef:
 			r.ReportIDf("actions-lock", e.Uses.Pos, "action %q is not in %s for %s, which pins %s at %s. the ref was changed after the lock file was written. run `gh actions-lock` to lock the new ref", u.Raw, actionsLockPath, r.subject(key), strings.ToLower(u.Owner+"/"+u.Repo), quotes(others))
+			r.noFixLast(lockNoFixWrite)
 		case lockListed:
 			// The comment is about the line, not about a workflow: one finding even when several workflows list the pin
 			if !commentChecked {
@@ -123,6 +127,7 @@ func (r *RuleActionsLock) checkVersionComment(e *ExecAction, u *UsesRef, dep *lo
 		return // The lock file has a branch, or the comment names the version, or its major or minor release
 	}
 	r.ReportIDf("actions-lock", e.Uses.Pos, "the version comment %q of %q names another version than the lock file, which resolved this commit from %q. update the comment, or run `gh actions-lock` if the commit changed", "# "+c.Text, u.Raw, dep.Ref)
+	r.noFixLast(&NoFix{Code: NoFixNeedsJudgment, Reason: "whether the comment or the commit is wrong is for a person to tell"})
 }
 
 // versionCovers reports whether the version of a comment names the version of the lock file or the series it belongs to:
@@ -141,9 +146,16 @@ type lockFileChecks struct {
 	project *Project
 	linter  *Linter
 	cfg     *Config
+	edit    *lockEditor
 }
 
+// report reports a finding of the lock file which the rule does not fix: the file is written by gh actions-lock.
 func (c *lockFileChecks) report(line, col int, format string, args ...any) {
+	c.reportFix(nil, lockNoFixEdit, line, col, format, args...)
+}
+
+// reportFix reports a finding of the lock file with its fix, or with why it has none.
+func (c *lockFileChecks) reportFix(fix *Fix, why *NoFix, line, col int, format string, args ...any) *Error {
 	if line <= 0 {
 		line = 1
 	}
@@ -151,6 +163,13 @@ func (c *lockFileChecks) report(line, col int, format string, args ...any) {
 		col = 1
 	}
 	c.ReportIDf("actions-lock", &Pos{Line: line, Col: col}, format, args...)
+	e := c.errs[len(c.errs)-1]
+	if fix != nil {
+		e.Fix = fix
+	} else {
+		e.NoFix = why
+	}
+	return e
 }
 
 var reLockVersion = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
@@ -400,6 +419,8 @@ func (c *lockFileChecks) actionReadsClean(g *callGraph, dir string) bool {
 // actions which a workflow does not use any more, and the dependencies which no workflow reaches.
 func (c *lockFileChecks) checkUsage() {
 	l := c.lock
+	var prunes []*lockPrune
+	defer func() { l.attachPruneFixes(c.edit, prunes) }()
 	allKnown := true
 	reached := map[string]bool{}
 	var reach func(key string)
@@ -421,7 +442,8 @@ func (c *lockFileChecks) checkUsage() {
 		}
 		usage := c.workflowUsage(w.Key)
 		if usage == nil {
-			c.report(w.Line, w.Col, "the workflow %q does not exist, so its entry is stale. run `gh actions-lock` to prune it", w.Key)
+			e := c.reportFix(nil, nil, w.Line, w.Col, "the workflow %q does not exist, so its entry is stale. run `gh actions-lock` to prune it", w.Key)
+			prunes = append(prunes, &lockPrune{err: e, desc: "Remove the entry of the workflow " + w.Key + ", which does not exist", workflows: []*lockWorkflow{w}})
 			allKnown = false // The dependencies it left are pruned with it: they are not reported one by one
 			continue
 		}
@@ -432,14 +454,15 @@ func (c *lockFileChecks) checkUsage() {
 			allKnown = false
 			continue
 		}
-		for _, p := range w.Pins {
+		for i, p := range w.Pins {
 			if usage.keys[p.Key] {
 				continue
 			}
 			if d := l.deps[p.Key]; d != nil && usage.keys[strings.ToLower(p.Owner+"/"+p.Repo)+"@"+strings.ToLower(lockCommitHex(d.Commit))] {
 				continue // The workflow was pinned by hand to the locked commit
 			}
-			c.report(p.Line, p.Col, "%q is listed for the workflow %q but the workflow does not use it. run `gh actions-lock` to prune the entry", p.Raw, w.Key)
+			e := c.reportFix(nil, nil, p.Line, p.Col, "%q is listed for the workflow %q but the workflow does not use it. run `gh actions-lock` to prune the entry", p.Raw, w.Key)
+			prunes = append(prunes, &lockPrune{err: e, desc: "Remove " + p.Raw + " from the actions of " + w.Key, pins: []lockPinOf{{w, i}}})
 		}
 	}
 	if !allKnown {
@@ -447,7 +470,8 @@ func (c *lockFileChecks) checkUsage() {
 	}
 	for _, d := range l.Dependencies {
 		if !reached[d.Pin.Key] {
-			c.report(d.Line, d.Col, "dependency %q is not used by any workflow. run `gh actions-lock` to prune it", d.Pin.Raw)
+			e := c.reportFix(nil, nil, d.Line, d.Col, "dependency %q is not used by any workflow. run `gh actions-lock` to prune it", d.Pin.Raw)
+			prunes = append(prunes, &lockPrune{err: e, desc: "Remove the dependency " + d.Pin.Raw + ", which no workflow uses", deps: []string{d.Pin.Key}})
 		}
 	}
 }
@@ -558,6 +582,7 @@ func (l *Linter) checkActionsLock(file string, content []byte, project *Project,
 		project:  project,
 		linter:   l,
 		cfg:      cfg,
+		edit:     newLockEditor(content),
 	}
 	c.SetConfig(cfg)
 	if cfg.RuleEnabled(actionsLockID) {
@@ -582,7 +607,7 @@ func init() {
 	registerRules(
 		RuleInfo{
 			ID: actionsLockID, Group: RuleGroupSecurity, Summary: "The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed.",
-			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-actions-lock",
+			DefaultLevel: SeverityError, Profile: ProfileDefault, DocsAnchor: "check-actions-lock", Fixable: true,
 			Options: []RuleOption{pedanticOption},
 		},
 		RuleInfo{
@@ -597,4 +622,42 @@ func init() {
 		}
 		return []Rule{NewRuleActionsLock(scope)}
 	})
+}
+
+// withActionsLockFiles returns the files with the Actions lock file of their repository added when one of them is a
+// workflow of a repository which has one and the lock file is not among them. A tool which passes only the files
+// that changed, such as a pre-commit hook, still gets the findings of the lock file: a workflow which was deleted or
+// which dropped an action leaves the lock file unchanged but stale. The files are returned as they are when the
+// rule actions-lock cannot report anything for them.
+func (l *Linter) withActionsLockFiles(files []string) ([]string, error) {
+	have := map[string]bool{}
+	for _, f := range files {
+		if f != l.stdin && f != "-" {
+			have[l.absFilePath(f)] = true
+		}
+	}
+	out := files
+	for _, f := range files {
+		if f == l.stdin || f == "-" {
+			continue
+		}
+		abs := l.absFilePath(f)
+		if ext := filepath.Ext(abs); (ext != ".yml" && ext != ".yaml") || l.isActionFile(abs) {
+			continue
+		}
+		p, err := l.projects.At(abs)
+		if err != nil {
+			return nil, err
+		}
+		if p == nil || !isPathInDir(p.WorkflowsDir(), abs) {
+			continue
+		}
+		for _, lock := range p.actionsLockFiles() {
+			if !have[absPath(lock)] {
+				have[absPath(lock)] = true
+				out = append(slices.Clip(out), lock)
+			}
+		}
+	}
+	return out, nil
 }

@@ -173,6 +173,13 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 		return nil, l.MigrateIgnores(args)
 	}
 
+	if len(args) > 0 && !(len(args) == 1 && args[0] == "-") {
+		// The lock file goes with the workflows of its repository, as it does when the whole repository is linted
+		if args, err = l.withActionsLockFiles(args); err != nil {
+			return nil, err
+		}
+	}
+
 	if fix.mode != 0 {
 		if len(args) == 1 && args[0] == "-" {
 			return nil, &usageError{errors.New("--fix cannot be used with stdin because the fixed file would not be saved")}

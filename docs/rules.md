@@ -28,7 +28,7 @@ rules:
 | --- | --- | --- | --- | --- | --- |
 | [action-release-cooldown](#action-release-cooldown) | An action is pinned to a version released less than the cooldown ago. | security | warn | only with `--online`, and only when `rules` has an entry for it (opt-in) | no |
 | [action-syntax](#action-syntax) | The action metadata does not follow the syntax of action.yml. | correctness | error | correctness | no |
-| [actions-lock](#actions-lock) | The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed. | security | error | default | no |
+| [actions-lock](#actions-lock) | The Actions lock file does not match the workflows: an action is missing from it, an entry is stale or malformed. | security | error | default | yes |
 | [actions-lock-drift](#actions-lock-drift) | A pin of the Actions lock file no longer matches GitHub: the repository changed owner or was replaced, a version tag moved, or the commit is not in the history of the repository. | security | error | only with `--online` | no |
 | [adhoc-packages](#adhoc-packages) | A package is installed by name with npm, yarn, pnpm, bun, aube, gem or bundle add outside of a lock file. | security | error | default | no |
 | [agentic-actions](#agentic-actions) | An AI agent action can be steered by outsiders, runs on code of a pull request, or has its safeguards turned off. | security | error | default | no |
@@ -216,6 +216,7 @@ The Actions lock file does not match the workflows: an action is missing from it
 - Group: security
 - Default level: error
 - Profile: default
+- Fixable: yes
 - Option `pedantic` (bool, no default): Also report the pedantic checks, which are noisier. Unset, they run under the pedantic profile.
 - [Details and examples](./checks.md#check-actions-lock)
 
