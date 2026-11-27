@@ -292,3 +292,67 @@ func TestActionsLockUnreadableWorkflowIsKept(t *testing.T) {
 		}
 	}
 }
+
+// An anchor which an alias outside the deleted entry refers to: deleting its line would break the file, so the
+// result is read again and the fix is not offered.
+func TestActionsLockFixKeepsAnchors(t *testing.T) {
+	root := t.TempDir()
+	lock := "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/gone.yml': &saved []\ndependencies: {}\nmetadata: *saved\n"
+	writeFile(t, filepath.Join(root, ".github", "workflows", "actions.lock"), lock)
+	errs := lintLockRepository(t, root, fixtureConfig("actions-lock"), LinterOptions{})
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Message, "does not exist") {
+			found = true
+			if e.Fix != nil || e.NoFix == nil || e.NoFix.Code != NoFixUnsupportedShape {
+				t.Errorf("the anchor must not be deleted: fix=%+v nofix=%+v", e.Fix, e.NoFix)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the gone workflow is not reported: %v", lineIDsOf(errs))
+	}
+}
+
+// A finding which an ignore comment drops keeps its entry, and the dependencies the entry uses: the fixes of the
+// others delete only their own entries.
+func TestActionsLockFixRespectsIgnores(t *testing.T) {
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS(filepath.Join("testdata", "actions_lock", "docs_example"))); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".github", "workflows", "actions.lock")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := strings.Replace(string(b), "        - 'actions/cache@v4'\n", "        - 'actions/cache@v4' # jactionlint ignore=actions-lock\n", 1)
+	writeFile(t, path, src)
+	got, _ := fixLockRoot(t, root, fixtureConfig("actions-lock"))
+	if !strings.Contains(got, "'actions/cache@v4' # jactionlint ignore=actions-lock") || !strings.Contains(got, "    'actions/cache@v4':\n") {
+		t.Errorf("the ignored pin and its dependency must stay:\n%s", got)
+	}
+	if strings.Contains(got, "checkout") {
+		t.Errorf("the pin which is not ignored and its dependency must be removed:\n%s", got)
+	}
+}
+
+// --baseline-write with only a workflow records the findings of the lock file too, which the next run lints with it.
+func TestBaselineWriteRecordsTheLockFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.CopyFS(root, os.DirFS(filepath.Join("testdata", "actions_lock", "docs_example"))); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n")
+	t.Chdir(root)
+	ci := filepath.Join(".github", "workflows", "ci.yml")
+	var out bytes.Buffer
+	cmd := Command{Stdin: os.Stdin, Stdout: &out, Stderr: &out}
+	if status := cmd.Main([]string{"jactionlint", "--select", "actions-lock", "--baseline-write=base.json", ci}); status != 0 {
+		t.Fatalf("status %d: %s", status, out.String())
+	}
+	out.Reset()
+	if status := cmd.Main([]string{"jactionlint", "--format", "gcc", "--select", "actions-lock", "--baseline=base.json", ci}); status != 0 {
+		t.Fatalf("the baseline must cover the findings of the lock file: status %d: %s", status, out.String())
+	}
+}

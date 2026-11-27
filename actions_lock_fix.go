@@ -251,7 +251,9 @@ type lockPlan struct {
 	deps      map[string]bool
 }
 
-func (l *actionsLock) plan(ps []*lockPrune) *lockPlan {
+// plan returns what the fix of the prunes deletes. The dependencies which keep lists stay, with all they use: their
+// findings were dropped by an ignore or the baseline.
+func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool) *lockPlan {
 	p := &lockPlan{workflows: map[*lockWorkflow]bool{}, pins: map[*lockWorkflow]map[int]bool{}, deps: map[string]bool{}}
 	for _, x := range ps {
 		for _, w := range x.workflows {
@@ -269,6 +271,23 @@ func (l *actionsLock) plan(ps []*lockPrune) *lockPlan {
 	}
 	for k := range l.orphans(func(w *lockWorkflow, i int) bool { return p.workflows[w] || p.pins[w][i] }) {
 		p.deps[k] = true
+	}
+	seen := map[string]bool{}
+	var stay func(k string)
+	stay = func(k string) {
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		delete(p.deps, k)
+		if d := l.deps[k]; d != nil {
+			for _, u := range d.Uses {
+				stay(u.Key)
+			}
+		}
+	}
+	for k := range keep {
+		stay(k)
 	}
 	return p
 }
@@ -319,10 +338,19 @@ func (l *actionsLock) size(c string) int {
 // deletes its entry, so that a tool which applies some of the fixes of a SARIF log gets a valid file, but the fixes
 // which together delete every entry of a collection are one: it is written empty ("[]" or "{}") rather than left
 // without a value. That fix is attached to the first of its findings, and the others say so.
-func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes []*lockPrune) {
+//
+// dropped are the prunes whose findings an ignore or the baseline dropped: their entries stay.
+func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPrune) {
 	if len(prunes) == 0 || e == nil {
 		return
 	}
+	keepDeps := map[string]bool{}
+	for _, p := range dropped {
+		for _, k := range p.deps {
+			keepDeps[k] = true
+		}
+	}
+	plan := func(ps []*lockPrune) *lockPlan { return l.plan(ps, keepDeps) }
 	group := make([]int, len(prunes))
 	for i := range group {
 		group[i] = i
@@ -345,7 +373,7 @@ func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes []*lockPrune) {
 		deleted := map[string]map[int]bool{}
 		touch := map[string][]int{}
 		for r, ps := range members() {
-			for c, lines := range l.entries(l.plan(ps)) {
+			for c, lines := range l.entries(plan(ps)) {
 				if deleted[c] == nil {
 					deleted[c] = map[int]bool{}
 				}
@@ -373,7 +401,7 @@ func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes []*lockPrune) {
 	}
 	for _, ps := range members() {
 		slices.SortFunc(ps, func(a, b *lockPrune) int { return compareErrors(a.err, b.err) })
-		fix, why := l.planFix(e, l.plan(ps))
+		fix, why := l.planFix(e, plan(ps))
 		if fix != nil {
 			fix.Description = ps[0].desc
 			if len(ps) > 1 {

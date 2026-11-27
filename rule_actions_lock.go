@@ -149,6 +149,9 @@ type lockFileChecks struct {
 	linter  *Linter
 	cfg     *Config
 	edit    *lockEditor
+	// prunes are the findings of the entries which nothing uses. They get their fixes once the ignores and the
+	// baseline have dropped what they drop: a fix must not delete an entry whose finding was ignored.
+	prunes []*lockPrune
 }
 
 // report reports a finding of the lock file which the rule does not fix: the file is written by gh actions-lock.
@@ -426,8 +429,6 @@ func (c *lockFileChecks) actionReadsClean(g *callGraph, dir string) bool {
 // actions which a workflow does not use any more, and the dependencies which no workflow reaches.
 func (c *lockFileChecks) checkUsage() {
 	l := c.lock
-	var prunes []*lockPrune
-	defer func() { l.attachPruneFixes(c.edit, prunes) }()
 	allKnown := true
 	reached := map[string]bool{}
 	var reach func(key string)
@@ -450,7 +451,7 @@ func (c *lockFileChecks) checkUsage() {
 		usage := c.workflowUsage(w.Key)
 		if usage == nil {
 			e := c.reportFix(nil, nil, w.Line, w.Col, "the workflow %q does not exist, so its entry is stale. run `gh actions-lock` to prune it", w.Key)
-			prunes = append(prunes, &lockPrune{err: e, desc: "Remove the entry of the workflow " + w.Key + ", which does not exist", workflows: []*lockWorkflow{w}})
+			c.prunes = append(c.prunes, &lockPrune{err: e, desc: "Remove the entry of the workflow " + w.Key + ", which does not exist", workflows: []*lockWorkflow{w}})
 			allKnown = false // The dependencies it left are pruned with it: they are not reported one by one
 			continue
 		}
@@ -469,7 +470,7 @@ func (c *lockFileChecks) checkUsage() {
 				continue // The workflow was pinned by hand to the locked commit
 			}
 			e := c.reportFix(nil, nil, p.Line, p.Col, "%q is listed for the workflow %q but the workflow does not use it. run `gh actions-lock` to prune the entry", p.Raw, w.Key)
-			prunes = append(prunes, &lockPrune{err: e, desc: "Remove " + p.Raw + " from the actions of " + w.Key, pins: []lockPinOf{{w, i}}})
+			c.prunes = append(c.prunes, &lockPrune{err: e, desc: "Remove " + p.Raw + " from the actions of " + w.Key, pins: []lockPinOf{{w, i}}})
 		}
 	}
 	if !allKnown {
@@ -478,7 +479,7 @@ func (c *lockFileChecks) checkUsage() {
 	for _, d := range l.Dependencies {
 		if !reached[d.Pin.Key] {
 			e := c.reportFix(nil, nil, d.Line, d.Col, "dependency %q is not used by any workflow. run `gh actions-lock` to prune it", d.Pin.Raw)
-			prunes = append(prunes, &lockPrune{err: e, desc: "Remove the dependency " + d.Pin.Raw + ", which no workflow uses", deps: []string{d.Pin.Key}})
+			c.prunes = append(c.prunes, &lockPrune{err: e, desc: "Remove the dependency " + d.Pin.Raw + ", which no workflow uses", deps: []string{d.Pin.Key}})
 		}
 	}
 }
@@ -607,7 +608,21 @@ func (l *Linter) checkActionsLock(file string, content []byte, project *Project,
 	if l.logLevel >= LogLevelVerbose {
 		l.log("Found", len(c.errs), "errors in", time.Since(start).Milliseconds(), "ms for", file)
 	}
-	return l.finishCheck(file, content, c.Errs(), cfg, bl, start, false, &ignoreContext{project: project}), nil
+	out := l.finishCheck(file, content, c.Errs(), cfg, bl, start, false, &ignoreContext{project: project})
+	kept := map[*Error]bool{}
+	for _, e := range out {
+		kept[e] = true
+	}
+	var fixed, dropped []*lockPrune
+	for _, p := range c.prunes {
+		if kept[p.err] {
+			fixed = append(fixed, p)
+		} else {
+			dropped = append(dropped, p)
+		}
+	}
+	c.lock.attachPruneFixes(c.edit, fixed, dropped)
+	return out, nil
 }
 
 func init() {
