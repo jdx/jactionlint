@@ -232,3 +232,63 @@ func TestCommandLintsTheLockFileOfTheGivenWorkflows(t *testing.T) {
 		t.Fatalf("the entry of two.yml must be removed and nothing else:\n%s", b)
 	}
 }
+
+// Shapes of YAML which gh actions-lock does not write but a person can: the fixes keep the file what it was without
+// the entries, or are not offered.
+func TestActionsLockFixShapes(t *testing.T) {
+	const ci = "on: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+	const checkout = "    'actions/checkout@v4':\n        ref: 'v4'\n        commit: 'sha1-11d5960a326750d5838078e36cf38b85af677262'\n        owner_id: 44036562\n        repo_id: 197814629\n"
+	const cache = "    'actions/cache@v4':\n        ref: 'v4'\n        commit: 'sha1-0057852bfaa89a56745cba8c7296529d2fc39830'\n        owner_id: 44036562\n        repo_id: 54212171\n"
+	for _, tc := range []struct {
+		name, lock, want string
+	}{
+		{
+			// The items of a list at the indentation of the key of the workflow belong to it
+			"same indent list",
+			"version: 'v0.0.3'\nworkflows:\n    '.github/workflows/gone.yml':\n    - 'actions/cache@v4'\n    '.github/workflows/ci.yml':\n    - 'actions/checkout@v4'\ndependencies:\n" + checkout + cache,
+			"version: 'v0.0.3'\nworkflows:\n    '.github/workflows/ci.yml':\n    - 'actions/checkout@v4'\ndependencies:\n" + checkout,
+		},
+		{
+			// The comments between the entries of a collection which is emptied stay, after the empty value
+			"comments of an emptied collection",
+			"version: 'v0.0.3'\nworkflows:\n    # onboarded one by one\n    '.github/workflows/gone.yml':\n        - 'actions/cache@v4'\ndependencies:\n    # resolved by gh actions-lock\n" + cache,
+			"version: 'v0.0.3'\nworkflows: {}\n    # onboarded one by one\ndependencies: {}\n    # resolved by gh actions-lock\n",
+		},
+		{
+			// The comment of the key line stays after the empty value
+			"comment of the key",
+			"version: 'v0.0.3'\nworkflows: # one by one\n    '.github/workflows/gone.yml':\n        - 'actions/cache@v4'\ndependencies:   # resolved\n" + cache,
+			"version: 'v0.0.3'\nworkflows: {} # one by one\ndependencies: {}   # resolved\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFile(t, filepath.Join(root, ".github", "workflows", "actions.lock"), tc.lock)
+			writeFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), ci)
+			got, res := fixLockRoot(t, root, fixtureConfig("actions-lock"))
+			if got != tc.want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, tc.want)
+			}
+			for _, e := range res.Errors {
+				t.Errorf("a finding remains: %s", e)
+			}
+		})
+	}
+}
+
+// A workflow which exists but cannot be read is not reported as deleted, so its entry is not removed.
+func TestActionsLockUnreadableWorkflowIsKept(t *testing.T) {
+	root := t.TempDir()
+	lock := "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/odd.yml':\n        - 'actions/checkout@v4'\ndependencies:\n    'actions/checkout@v4':\n        ref: 'v4'\n        commit: 'sha1-11d5960a326750d5838078e36cf38b85af677262'\n        owner_id: 44036562\n        repo_id: 197814629\n"
+	writeFile(t, filepath.Join(root, ".github", "workflows", "actions.lock"), lock)
+	// A directory where the workflow is: it exists, and reading it fails
+	if err := os.MkdirAll(filepath.Join(root, ".github", "workflows", "odd.yml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	errs := lintLockRepository(t, root, fixtureConfig("actions-lock"), LinterOptions{})
+	for _, e := range errs {
+		if strings.Contains(e.Message, "does not exist") || strings.Contains(e.Message, "is not used by any workflow") || e.Fix != nil {
+			t.Errorf("the entry of a workflow which was not read must stay: %s", e)
+		}
+	}
+}

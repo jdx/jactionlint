@@ -1,7 +1,9 @@
 package jactionlint
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -325,10 +327,15 @@ type lockUsage struct {
 func (c *lockFileChecks) workflowUsage(key string) *lockUsage {
 	file := filepath.Join(c.project.root, filepath.FromSlash(key))
 	src, err := os.ReadFile(file)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	u := &lockUsage{keys: map[string]bool{}, complete: true}
+	if err != nil {
+		// The workflow exists but was not read (a directory, no permission): what it uses is not known
+		u.complete = false
+		return u
+	}
 	w, errs := Parse(src)
 	if w == nil {
 		u.complete = false

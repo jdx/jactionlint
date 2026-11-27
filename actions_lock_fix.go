@@ -27,8 +27,13 @@ var (
 	lockNoFixShape = &NoFix{Code: NoFixUnsupportedShape, Reason: "the entry is not written in the block style of gh actions-lock, so the fix cannot delete it exactly: remove it by hand or run `gh actions-lock`"}
 )
 
-// reLockKeyLine is a line which has only a key of a block mapping and its colon: its value is on the lines below.
-var reLockKeyLine = regexp.MustCompile(`^[ ]*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^'"#\s][^#]*?)[ ]*:[ ]*$`)
+// reLockKeyLine is a line which has only a key of a block mapping and its colon, and maybe a comment: its value is on
+// the lines below. The first group ends at the colon, the second is the comment and the space before it.
+var reLockKeyLine = regexp.MustCompile(`^([ ]*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^'"#\s][^#]*?)[ ]*:)([ ]+#.*)?[ ]*$`)
+
+// reLockSeqItem is a line which starts an item of a block sequence. In a block mapping such a line at the
+// indentation of a key is an item of the value of the key before it, which YAML allows ("key:\n- item").
+var reLockSeqItem = regexp.MustCompile(`^-(?:[ ]|$)`)
 
 // reLockItemPrefix is the text before the value of an item of a block sequence.
 var reLockItemPrefix = regexp.MustCompile(`^[ ]*-[ ]+$`)
@@ -98,7 +103,7 @@ func (e *lockEditor) block(line, col int, item bool) (lockBlock, bool) {
 		if body == "" || body[0] == '#' {
 			continue
 		}
-		if len(t)-len(body) <= indent {
+		if d := len(t) - len(body); d < indent || d == indent && (item || !reLockSeqItem.MatchString(body)) {
 			break
 		}
 		b.last = n
@@ -143,22 +148,9 @@ func (e *lockEditor) delete(c lockCollection, starts []*yaml.Node) ([]TextEdit, 
 	if len(blocks) == 0 {
 		return nil, false
 	}
-	if len(blocks) == c.size() && c.key != nil && reLockKeyLine.MatchString(e.line(c.key.Line)) {
-		// Nothing is left: the value is written empty after the key, from its colon to the end of the last entry
-		first, last := blocks[0], blocks[0]
-		for _, b := range blocks {
-			if b.first < first.first {
-				first = b
-			}
-			if b.last > last.last {
-				last = b
-			}
-		}
-		if first.first > c.key.Line {
-			keyLine := e.line(c.key.Line)
-			start := e.lines.startOf(c.key.Line) + len(strings.TrimRight(keyLine, " "))
-			return []TextEdit{{Start: start, End: e.contentEnd(last.last), NewText: " " + c.empty}}, true
-		}
+	if len(blocks) == c.size() && c.key != nil {
+		// Nothing is left: the value is written empty after the colon of the key
+		return e.empty(c, blocks)
 	}
 	edits := make([]TextEdit, 0, len(blocks))
 	for _, b := range blocks {
@@ -438,8 +430,112 @@ func (l *actionsLock) planFix(e *lockEditor, p *lockPlan) (*Fix, *NoFix) {
 	if !add(l.depsCollection(), l.depKeyNodes(p.deps)) {
 		return nil, lockNoFixShape
 	}
-	if len(edits) == 0 {
+	if len(edits) == 0 || !l.prunedTo(applyEdits(e.src, edits), p) {
 		return nil, lockNoFixShape
 	}
 	return &Fix{Description: "Remove the entries of the lock file which nothing uses", Edits: edits}, nil
+}
+
+// empty returns the edit which deletes all the entries of the collection, its blocks, and writes the value empty
+// after the colon of its key. The comment of the key line is kept, and so are the comment lines between the entries,
+// which do not belong to one of them: they follow the key line as they were. It returns false when the key does
+// not have its own line or the entries do not follow it.
+func (e *lockEditor) empty(c lockCollection, blocks []lockBlock) ([]TextEdit, bool) {
+	keyLine := e.line(c.key.Line)
+	m := reLockKeyLine.FindStringSubmatch(keyLine)
+	if m == nil {
+		return nil, false
+	}
+	first, last := blocks[0].first, blocks[0].last
+	for _, b := range blocks {
+		first, last = min(first, b.first), max(last, b.last)
+	}
+	if first <= c.key.Line {
+		return nil, false
+	}
+	eol := "\n"
+	if strings.HasSuffix(string(e.src[e.contentEnd(c.key.Line):e.lineEnd(c.key.Line)]), "\r\n") {
+		eol = "\r\n"
+	}
+	var text strings.Builder
+	text.WriteString(" " + c.empty + strings.TrimRight(m[2], " "))
+	for n := c.key.Line + 1; n <= last; n++ {
+		inBlock := slices.ContainsFunc(blocks, func(b lockBlock) bool { return b.first <= n && n <= b.last })
+		if t := e.line(n); !inBlock && strings.HasPrefix(strings.TrimLeft(t, " "), "#") {
+			text.WriteString(eol + t)
+		}
+	}
+	start := e.lines.startOf(c.key.Line) + len(m[1])
+	return []TextEdit{{Start: start, End: e.contentEnd(last), NewText: text.String()}}, true
+}
+
+// prunedTo reports whether the source is the lock file without the entries which the plan deletes and with all the
+// others, in their order, and still a lock file which is read. It guards the fix against a shape of the file which
+// the line edits do not handle.
+func (l *actionsLock) prunedTo(src []byte, p *lockPlan) bool {
+	n := parseActionsLock(l.Path, src)
+	if !n.usable() || !lockSameKind(l.workflowsNode, n.workflowsNode) || !lockSameKind(l.depsNode, n.depsNode) {
+		return false
+	}
+	var wantWorkflows, gotWorkflows []string
+	for _, w := range l.Workflows {
+		if !p.workflows[w] {
+			wantWorkflows = append(wantWorkflows, w.Key)
+		}
+	}
+	for _, w := range n.Workflows {
+		gotWorkflows = append(gotWorkflows, w.Key)
+	}
+	if !slices.Equal(wantWorkflows, gotWorkflows) {
+		return false
+	}
+	for _, w := range l.Workflows {
+		if p.workflows[w] {
+			continue
+		}
+		var want []string
+		for i, pin := range w.Pins {
+			if !p.pins[w][i] {
+				want = append(want, pin.Raw)
+			}
+		}
+		nw := n.workflows[w.Key]
+		if nw == nil || !lockSameKind(w.value, nw.value) {
+			return false
+		}
+		got := make([]string, 0, len(nw.Pins))
+		for _, pin := range nw.Pins {
+			got = append(got, pin.Raw)
+		}
+		if !slices.Equal(want, got) {
+			return false
+		}
+	}
+	gone := map[*yaml.Node]bool{}
+	for _, k := range l.depKeyNodes(p.deps) {
+		gone[k] = true
+	}
+	var wantDeps, gotDeps []string
+	if l.depsNode != nil {
+		for i := 0; i+1 < len(l.depsNode.Content); i += 2 {
+			if k := l.depsNode.Content[i]; !gone[k] {
+				wantDeps = append(wantDeps, k.Value)
+			}
+		}
+	}
+	if n.depsNode != nil {
+		for i := 0; i+1 < len(n.depsNode.Content); i += 2 {
+			gotDeps = append(gotDeps, n.depsNode.Content[i].Value)
+		}
+	}
+	return slices.Equal(wantDeps, gotDeps)
+}
+
+// lockSameKind reports whether a collection of the lock file is of the same kind after the fix as before it: a
+// mapping or a list which lost all its entries must not be left as null.
+func lockSameKind(before, after *yaml.Node) bool {
+	if before == nil || after == nil {
+		return before == after
+	}
+	return before.Kind == after.Kind
 }
