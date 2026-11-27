@@ -1,6 +1,7 @@
 package jactionlint
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -198,5 +199,36 @@ func TestWithActionsLockFiles(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Errorf("the lock file is given already: %v", got)
+	}
+}
+
+// The case of a hook which passes only the changed files: a workflow was deleted, the lock file still lists it, and
+// only another workflow is given. The stale entry is reported, and --fix removes it from the lock file.
+func TestCommandLintsTheLockFileOfTheGivenWorkflows(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(root, ".github", "workflows", "ci.yml"), "on: push\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n")
+	lock := filepath.Join(root, ".github", "workflows", "actions.lock")
+	writeFile(t, lock, "version: 'v0.0.3'\nworkflows:\n    '.github/workflows/ci.yml':\n        - 'actions/checkout@v4'\n    '.github/workflows/two.yml':\n        - 'actions/checkout@v4'\n"+
+		"dependencies:\n    'actions/checkout@v4':\n        ref: 'v4'\n        commit: 'sha1-11d5960a326750d5838078e36cf38b85af677262'\n        owner_id: 44036562\n        repo_id: 197814629\n")
+	t.Chdir(root)
+	ci := filepath.Join(".github", "workflows", "ci.yml")
+
+	var out bytes.Buffer
+	cmd := Command{Stdin: os.Stdin, Stdout: &out, Stderr: &out}
+	if status := cmd.Main([]string{"jactionlint", "--format", "gcc", "--select", "actions-lock", ci}); status != 1 || !strings.Contains(out.String(), `two.yml" does not exist`) {
+		t.Fatalf("status %d, the stale entry must be reported: %s", status, out.String())
+	}
+
+	out.Reset()
+	if status := cmd.Main([]string{"jactionlint", "--fix", "--select", "actions-lock", ci}); status != 0 {
+		t.Fatalf("status %d after --fix: %s", status, out.String())
+	}
+	b, err := os.ReadFile(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "two.yml") || !strings.Contains(string(b), "ci.yml") {
+		t.Fatalf("the entry of two.yml must be removed and nothing else:\n%s", b)
 	}
 }
