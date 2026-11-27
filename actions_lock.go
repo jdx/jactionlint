@@ -83,6 +83,8 @@ type lockWorkflow struct {
 	Key       string // the path as written in the file, relative to the root of the repository
 	Pins      []lockPin
 	Line, Col int
+	// value is the node of the list of the pins, which a fix deletes items of.
+	value *yaml.Node
 }
 
 // lockDependency is an item of "dependencies".
@@ -132,6 +134,10 @@ type actionsLock struct {
 	workflows map[string]*lockWorkflow   // by Key
 	deps      map[string]*lockDependency // by canonical key
 	fatal     bool
+	// workflowsNode and depsNode are the mappings "workflows" and "dependencies", and workflowsKey and depsKey their
+	// keys. A fix deletes entries of them. They are nil when the file has no such key.
+	workflowsNode, depsNode *yaml.Node
+	workflowsKey, depsKey   *yaml.Node
 }
 
 // usable reports whether the lock file may be trusted to decide something about a workflow: it is
@@ -311,8 +317,10 @@ func (l *actionsLock) parse(b []byte) {
 			versionNode = v
 		case "workflows":
 			workflowsNode = v
+			l.workflowsKey, l.workflowsNode = k, v
 		case "dependencies":
 			depsNode = v
+			l.depsKey, l.depsNode = k, v
 		}
 	}
 
@@ -351,7 +359,7 @@ func (l *actionsLock) parseWorkflows(n *yaml.Node) bool {
 	}
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i], n.Content[i+1]
-		w := &lockWorkflow{Key: k.Value, Line: k.Line, Col: k.Column}
+		w := &lockWorkflow{Key: k.Value, Line: k.Line, Col: k.Column, value: v}
 		if k.Kind != yaml.ScalarNode || k.Value == "" {
 			l.problem(k, "the path of a workflow must be a non-empty string")
 			continue

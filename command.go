@@ -144,6 +144,14 @@ func (cmd *Command) runLinter(args []string, opts *LinterOptions, initConfig, mi
 		return nil, rep.WriteText(cmd.Stdout)
 	}
 
+	if len(args) > 0 && !(len(args) == 1 && args[0] == "-") && !migrateIgnores {
+		// The lock file goes with the workflows of its repository, as it does when the whole repository is linted.
+		// The baseline records its findings too, so that the next run does not report them as new.
+		if args, err = l.withActionsLockFiles(args); err != nil {
+			return nil, err
+		}
+	}
+
 	if baselineWrite.set {
 		if len(args) == 1 && args[0] == "-" {
 			return nil, &usageError{errors.New("--baseline-write cannot be used with stdin because the baseline would not know the file")}

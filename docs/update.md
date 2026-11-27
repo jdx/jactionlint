@@ -56,7 +56,7 @@ A workflow that the [Actions lock file](./checks.md#check-actions-lock) lists is
 
 ## The Actions lock file
 
-When `.github/workflows/actions.lock` exists, `--apply` ends by running `gh actions-lock --relock` from the repository root, so the lock file follows the workflows. It runs even when no reference changed, which refreshes mutable references. The [gh-actions-lock](https://github.com/github/gh-actions-lock) extension writes the file; `jactionlint` does not. Without `--apply` (the listing, `--check` and `--diff`) nothing runs. If `gh` or the extension is missing, or the relock fails, `update` prints the error and exits `3`; the workflow edits are already written.
+When `.github/workflows/actions.lock` exists, `--apply` ends by running `gh actions-lock --relock` from the repository root, so the lock file follows the workflows. It runs even when no reference changed, which refreshes mutable references. The [gh-actions-lock](https://github.com/github/gh-actions-lock) extension writes the file; `jactionlint` does not, except that `jactionlint --fix` removes the entries nothing uses (see [the rule `actions-lock`](./checks.md#check-actions-lock)). Without `--apply` (the listing, `--check` and `--diff`) nothing runs. If `gh` or the extension is missing, or the relock fails, `update` prints the error and exits `3`; the workflow edits are already written.
 
 ## Options
 

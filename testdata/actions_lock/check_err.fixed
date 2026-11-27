@@ -1,0 +1,11 @@
+version: 'v0.0.3'
+workflows:
+    '.github/workflows/ci.yml':
+        - 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020'
+        - 'not a pin'
+dependencies:
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020':
+        ref: 'v4.0.2'
+        commit: 'sha1-49933ea5288caeca8642d1e84afbd3f7d6820020'
+        owner_id: 44036562
+        repo_id: 178564337

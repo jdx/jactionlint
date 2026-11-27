@@ -1,0 +1,573 @@
+package jactionlint
+
+import (
+	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+
+	"go.yaml.in/yaml/v4"
+)
+
+// The fixes of the rule "actions-lock" delete the entries of the lock file which nothing uses: a workflow which does
+// not exist any more, a pin which a workflow does not use any more, and a dependency which no workflow reaches. A
+// fix which deletes a workflow or a pin deletes with it the dependencies which only that entry reached, as
+// `gh actions-lock` prunes them. Nothing else is written: an entry which is missing is resolved on GitHub, with the
+// actions which a composite action runs, which is what `gh actions-lock` is for.
+//
+// Every edit deletes whole lines, so the rest of the file stays byte for byte the same. A collection which loses
+// all its entries is written empty ("[]" or "{}"), as gh actions-lock writes it. An entry which is not written
+// in the block style that gh actions-lock writes (a flow mapping or list, an entry which shares its line) has no
+// fix. The fixes are only offered for a lock file whose version is known (see actionsLock.usable), as the checks
+// which report the entries are.
+
+var (
+	lockNoFixWrite = &NoFix{Code: NoFixNeedsJudgment, Reason: "an entry of the lock file is resolved on GitHub, with the actions which a composite action runs, and jactionlint does not write one: run `gh actions-lock`"}
+	lockNoFixEdit  = &NoFix{Code: NoFixNeedsJudgment, Reason: "the entry does not follow the format and which value is right is not known: correct it by hand, or write the file again with `gh actions-lock --relock`"}
+	lockNoFixShape = &NoFix{Code: NoFixUnsupportedShape, Reason: "the entry is not written in the block style of gh actions-lock, so the fix cannot delete it exactly: remove it by hand or run `gh actions-lock`"}
+)
+
+// reLockKeyLine is a line which has only a key of a block mapping and its colon, and maybe a comment: its value is on
+// the lines below. The first group ends at the colon, the second is the comment and the space before it.
+var reLockKeyLine = regexp.MustCompile(`^([ ]*(?:'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|[^'"#\s][^#]*?)[ ]*:)([ ]+#.*)?[ ]*$`)
+
+// reLockSeqItem is a line which starts an item of a block sequence. In a block mapping such a line at the
+// indentation of a key is an item of the value of the key before it, which YAML allows ("key:\n- item").
+var reLockSeqItem = regexp.MustCompile(`^-(?:[ ]|$)`)
+
+// reLockItemPrefix is the text before the value of an item of a block sequence.
+var reLockItemPrefix = regexp.MustCompile(`^[ ]*-[ ]+$`)
+
+// lockEditor builds the edits which delete entries of a lock file.
+type lockEditor struct {
+	src   []byte
+	lines *lineIndex
+}
+
+func newLockEditor(src []byte) *lockEditor {
+	return &lockEditor{src: src, lines: newLineIndex(src)}
+}
+
+// line returns the text of the 1-based line without its line break.
+func (e *lockEditor) line(n int) string {
+	s := e.lines.startOf(n)
+	if s < 0 {
+		return ""
+	}
+	t := e.src[s:]
+	if i := strings.IndexByte(string(t), '\n'); i >= 0 {
+		t = t[:i]
+	}
+	return strings.TrimSuffix(string(t), "\r")
+}
+
+// lineEnd returns the offset just after the line break of the 1-based line, or the end of the source.
+func (e *lockEditor) lineEnd(n int) int {
+	if s := e.lines.startOf(n + 1); s >= 0 {
+		return s
+	}
+	return len(e.src)
+}
+
+// contentEnd returns the offset of the line break which ends the 1-based line, or the end of the source.
+func (e *lockEditor) contentEnd(n int) int {
+	return e.lines.startOf(n) + len(e.line(n))
+}
+
+// lockBlock is the lines of an entry: [first, last].
+type lockBlock struct{ first, last int }
+
+// block returns the lines of the entry whose key (or item) starts at the 1-based line and column. The text before
+// the column must be the indentation of a block mapping, or of a block sequence and its "-" when item is true. The
+// entry goes on as long as the lines are indented deeper than it starts. Blank lines and comments at its end belong
+// to what follows.
+func (e *lockEditor) block(line, col int, item bool) (lockBlock, bool) {
+	text := e.line(line)
+	pre, ok := columnInLine(text, col)
+	if !ok {
+		return lockBlock{}, false
+	}
+	indent := pre
+	if item {
+		if !reLockItemPrefix.MatchString(text[:pre]) {
+			return lockBlock{}, false
+		}
+		indent = strings.IndexByte(text, '-')
+	} else if strings.TrimLeft(text[:pre], " ") != "" {
+		return lockBlock{}, false
+	}
+	b := lockBlock{line, line}
+	for n := line + 1; e.lines.startOf(n) >= 0 && e.lines.startOf(n) < len(e.src); n++ {
+		t := e.line(n)
+		body := strings.TrimLeft(t, " ")
+		if body == "" || body[0] == '#' {
+			continue
+		}
+		if d := len(t) - len(body); d < indent || d == indent && (item || !reLockSeqItem.MatchString(body)) {
+			break
+		}
+		b.last = n
+	}
+	return b, true
+}
+
+// lockCollection is a mapping or a list of the lock file which entries are deleted from.
+type lockCollection struct {
+	key   *yaml.Node // the key whose value it is, for "[]" and "{}"
+	node  *yaml.Node
+	empty string // what an empty one is written as
+}
+
+func (c lockCollection) size() int {
+	if c.node.Kind == yaml.MappingNode {
+		return len(c.node.Content) / 2
+	}
+	return len(c.node.Content)
+}
+
+// delete returns the edits which delete the entries of the collection which start at the positions. It returns false
+// when one of them cannot be deleted exactly.
+func (e *lockEditor) delete(c lockCollection, starts []*yaml.Node) ([]TextEdit, bool) {
+	if c.node == nil || c.node.Style&yaml.FlowStyle != 0 || (c.node.Kind != yaml.MappingNode && c.node.Kind != yaml.SequenceNode) {
+		return nil, false
+	}
+	item := c.node.Kind == yaml.SequenceNode
+	blocks := make([]lockBlock, 0, len(starts))
+	seen := map[int]bool{}
+	for _, n := range starts {
+		if seen[n.Line] {
+			continue
+		}
+		seen[n.Line] = true
+		b, ok := e.block(n.Line, n.Column, item)
+		if !ok {
+			return nil, false
+		}
+		blocks = append(blocks, b)
+	}
+	if len(blocks) == 0 {
+		return nil, false
+	}
+	if len(blocks) == c.size() && c.key != nil {
+		// Nothing is left: the value is written empty after the colon of the key
+		return e.empty(c, blocks)
+	}
+	edits := make([]TextEdit, 0, len(blocks))
+	for _, b := range blocks {
+		edits = append(edits, TextEdit{Start: e.lines.startOf(b.first), End: e.lineEnd(b.last)})
+	}
+	return edits, true
+}
+
+// workflows is the collection "workflows" of the lock file.
+func (l *actionsLock) workflowsCollection() lockCollection {
+	return lockCollection{key: l.workflowsKey, node: l.workflowsNode, empty: "{}"}
+}
+
+func (l *actionsLock) depsCollection() lockCollection {
+	return lockCollection{key: l.depsKey, node: l.depsNode, empty: "{}"}
+}
+
+func (w *lockWorkflow) pinsCollection() lockCollection {
+	return lockCollection{key: &yaml.Node{Line: w.Line, Column: w.Col}, node: w.value, empty: "[]"}
+}
+
+// depKeyNodes returns the keys of "dependencies" whose canonical key is one of the keys: every spelling of them.
+func (l *actionsLock) depKeyNodes(keys map[string]bool) []*yaml.Node {
+	if l.depsNode == nil || l.depsNode.Kind != yaml.MappingNode {
+		return nil
+	}
+	var out []*yaml.Node
+	for i := 0; i+1 < len(l.depsNode.Content); i += 2 {
+		k := l.depsNode.Content[i]
+		if p, ok := parseLockPin(k.Value, k.Line, k.Column); ok && keys[p.Key] {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// reached returns the dependencies which the pins of the workflows reach, directly or through the "uses" of
+// other dependencies. skip tells which pins are left out.
+func (l *actionsLock) reached(skip func(w *lockWorkflow, i int) bool) map[string]bool {
+	reached := map[string]bool{}
+	var reach func(key string)
+	reach = func(key string) {
+		if reached[key] {
+			return
+		}
+		reached[key] = true
+		if d := l.deps[key]; d != nil {
+			for _, u := range d.Uses {
+				reach(u.Key)
+			}
+		}
+	}
+	for _, w := range l.Workflows {
+		for i, p := range w.Pins {
+			if !skip(w, i) {
+				reach(p.Key)
+			}
+		}
+	}
+	return reached
+}
+
+// orphans returns the dependencies which the pins reach and which nothing reaches when the pins which skip tells
+// are deleted.
+func (l *actionsLock) orphans(skip func(w *lockWorkflow, i int) bool) map[string]bool {
+	before := l.reached(func(*lockWorkflow, int) bool { return false })
+	after := l.reached(skip)
+	out := map[string]bool{}
+	for k := range before {
+		if !after[k] && l.deps[k] != nil {
+			out[k] = true
+		}
+	}
+	return out
+}
+
+// lockPinOf is the i-th pin of a workflow.
+type lockPinOf struct {
+	w *lockWorkflow
+	i int
+}
+
+// lockPrune is a finding of an entry which nothing uses, and the entry: a workflow, a pin of a workflow or a
+// dependency.
+type lockPrune struct {
+	err       *Error
+	desc      string
+	workflows []*lockWorkflow
+	pins      []lockPinOf
+	deps      []string // canonical keys
+}
+
+// lockPlan is what one fix deletes: the entries of its findings, and the dependencies which nothing reaches without
+// them.
+type lockPlan struct {
+	workflows map[*lockWorkflow]bool
+	pins      map[*lockWorkflow]map[int]bool
+	deps      map[string]bool
+}
+
+// plan returns what the fix of the prunes deletes. The dependencies which keep lists stay, with all they use: their
+// findings were dropped by an ignore. orphans is false when what a workflow which stays uses is not
+// known: the dependencies which only the deleted entries reach then stay, since that workflow may use them.
+func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool, orphans bool) *lockPlan {
+	p := &lockPlan{workflows: map[*lockWorkflow]bool{}, pins: map[*lockWorkflow]map[int]bool{}, deps: map[string]bool{}}
+	for _, x := range ps {
+		for _, w := range x.workflows {
+			p.workflows[w] = true
+		}
+		for _, pin := range x.pins {
+			if p.pins[pin.w] == nil {
+				p.pins[pin.w] = map[int]bool{}
+			}
+			p.pins[pin.w][pin.i] = true
+		}
+		for _, k := range x.deps {
+			p.deps[k] = true
+		}
+	}
+	if orphans {
+		for k := range l.orphans(func(w *lockWorkflow, i int) bool { return p.workflows[w] || p.pins[w][i] }) {
+			p.deps[k] = true
+		}
+	}
+	seen := map[string]bool{}
+	var stay func(k string)
+	stay = func(k string) {
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		delete(p.deps, k)
+		if d := l.deps[k]; d != nil {
+			for _, u := range d.Uses {
+				stay(u.Key)
+			}
+		}
+	}
+	for k := range keep {
+		stay(k)
+	}
+	return p
+}
+
+// entries returns the entries which the plan deletes by collection: "W" for "workflows", "D" for "dependencies" and
+// "P" and the path of a workflow for its pins. An entry is the line where it starts.
+func (l *actionsLock) entries(p *lockPlan) map[string]map[int]bool {
+	out := map[string]map[int]bool{}
+	add := func(c string, line int) {
+		if out[c] == nil {
+			out[c] = map[int]bool{}
+		}
+		out[c][line] = true
+	}
+	for w := range p.workflows {
+		add("W", w.Line)
+	}
+	for w, items := range p.pins {
+		if p.workflows[w] {
+			continue
+		}
+		for i := range items {
+			add("P"+w.Key, w.Pins[i].Line)
+		}
+	}
+	for _, k := range l.depKeyNodes(p.deps) {
+		add("D", k.Line)
+	}
+	return out
+}
+
+// size returns the number of entries of the collection which entries names.
+func (l *actionsLock) size(c string) int {
+	switch {
+	case c == "W" && l.workflowsNode != nil:
+		return lockCollection{node: l.workflowsNode}.size()
+	case c == "D" && l.depsNode != nil:
+		return lockCollection{node: l.depsNode}.size()
+	case strings.HasPrefix(c, "P"):
+		if w := l.workflows[c[1:]]; w != nil && w.value != nil {
+			return lockCollection{node: w.value}.size()
+		}
+	}
+	return -1
+}
+
+// attachPruneFixes gives the findings of the entries which nothing uses their fixes. Each finding has the fix which
+// deletes its entry, so that a tool which applies some of the fixes of a SARIF log gets a valid file, but the fixes
+// which together delete every entry of a collection are one: it is written empty ("[]" or "{}") rather than left
+// without a value. That fix is attached to the first of its findings, and the others say so.
+//
+// dropped are the prunes whose findings an ignore dropped: their entries stay. A finding which the baseline accepts
+// is not dropped, and its fix applies, as for the other rules.
+func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPrune, orphans bool) {
+	if len(prunes) == 0 || e == nil {
+		return
+	}
+	keepDeps := map[string]bool{}
+	for _, p := range dropped {
+		for _, k := range p.deps {
+			keepDeps[k] = true
+		}
+	}
+	plan := func(ps []*lockPrune) *lockPlan { return l.plan(ps, keepDeps, orphans) }
+	group := make([]int, len(prunes))
+	for i := range group {
+		group[i] = i
+	}
+	root := func(i int) int {
+		for group[i] != i {
+			i = group[i]
+		}
+		return i
+	}
+	members := func() map[int][]*lockPrune {
+		m := map[int][]*lockPrune{}
+		for i, p := range prunes {
+			m[root(i)] = append(m[root(i)], p)
+		}
+		return m
+	}
+	// Merge the groups whose fixes together delete every entry of a collection, until no other collection is emptied
+	for range prunes {
+		deleted := map[string]map[int]bool{}
+		touch := map[string][]int{}
+		for r, ps := range members() {
+			for c, lines := range l.entries(plan(ps)) {
+				if deleted[c] == nil {
+					deleted[c] = map[int]bool{}
+				}
+				for n := range lines {
+					deleted[c][n] = true
+				}
+				touch[c] = append(touch[c], r)
+			}
+		}
+		merged := false
+		for c, rs := range touch {
+			if len(rs) < 2 || len(deleted[c]) != l.size(c) {
+				continue
+			}
+			for _, r := range rs[1:] {
+				if a, b := root(rs[0]), root(r); a != b {
+					group[max(a, b)] = min(a, b)
+					merged = true
+				}
+			}
+		}
+		if !merged {
+			break
+		}
+	}
+	for _, ps := range members() {
+		slices.SortFunc(ps, func(a, b *lockPrune) int { return compareErrors(a.err, b.err) })
+		fix, why := l.planFix(e, plan(ps))
+		if fix != nil {
+			fix.Description = ps[0].desc
+			if len(ps) > 1 {
+				fix.Description = "Remove the entries of the lock file which nothing uses"
+			}
+		}
+		for i, p := range ps {
+			switch {
+			case fix == nil:
+				p.err.NoFix = why
+			case i == 0:
+				p.err.Fix = fix
+			default:
+				p.err.NoFix = &NoFix{Code: NoFixEditConflict, Reason: fmt.Sprintf("the fix of the finding at line %d removes this entry too: together the entries are all of their list or mapping, which the fix writes empty", ps[0].err.Line)}
+			}
+		}
+	}
+}
+
+// planFix returns the fix which deletes what the plan says.
+func (l *actionsLock) planFix(e *lockEditor, p *lockPlan) (*Fix, *NoFix) {
+	var edits []TextEdit
+	add := func(c lockCollection, starts []*yaml.Node) bool {
+		if len(starts) == 0 {
+			return true
+		}
+		more, ok := e.delete(c, starts)
+		edits = append(edits, more...)
+		return ok
+	}
+	var gone []*yaml.Node
+	for _, w := range l.Workflows {
+		if p.workflows[w] {
+			gone = append(gone, &yaml.Node{Line: w.Line, Column: w.Col})
+		}
+	}
+	if !add(l.workflowsCollection(), gone) {
+		return nil, lockNoFixShape
+	}
+	for _, w := range l.Workflows {
+		if p.workflows[w] || len(p.pins[w]) == 0 {
+			continue
+		}
+		var items []*yaml.Node
+		for i, pin := range w.Pins {
+			if p.pins[w][i] {
+				items = append(items, &yaml.Node{Line: pin.Line, Column: pin.Col})
+			}
+		}
+		if !add(w.pinsCollection(), items) {
+			return nil, lockNoFixShape
+		}
+	}
+	if !add(l.depsCollection(), l.depKeyNodes(p.deps)) {
+		return nil, lockNoFixShape
+	}
+	if len(edits) == 0 || !l.prunedTo(applyEdits(e.src, edits), p) {
+		return nil, lockNoFixShape
+	}
+	return &Fix{Description: "Remove the entries of the lock file which nothing uses", Edits: edits}, nil
+}
+
+// empty returns the edit which deletes all the entries of the collection, its blocks, and writes the value empty
+// after the colon of its key. The comment of the key line is kept, and so are the comment lines between the entries,
+// which do not belong to one of them: they follow the key line as they were. It returns false when the key does
+// not have its own line or the entries do not follow it.
+func (e *lockEditor) empty(c lockCollection, blocks []lockBlock) ([]TextEdit, bool) {
+	keyLine := e.line(c.key.Line)
+	m := reLockKeyLine.FindStringSubmatch(keyLine)
+	if m == nil {
+		return nil, false
+	}
+	first, last := blocks[0].first, blocks[0].last
+	for _, b := range blocks {
+		first, last = min(first, b.first), max(last, b.last)
+	}
+	if first <= c.key.Line {
+		return nil, false
+	}
+	eol := "\n"
+	if strings.HasSuffix(string(e.src[e.contentEnd(c.key.Line):e.lineEnd(c.key.Line)]), "\r\n") {
+		eol = "\r\n"
+	}
+	var text strings.Builder
+	text.WriteString(" " + c.empty + strings.TrimRight(m[2], " "))
+	for n := c.key.Line + 1; n <= last; n++ {
+		inBlock := slices.ContainsFunc(blocks, func(b lockBlock) bool { return b.first <= n && n <= b.last })
+		if t := e.line(n); !inBlock && strings.HasPrefix(strings.TrimLeft(t, " "), "#") {
+			text.WriteString(eol + t)
+		}
+	}
+	start := e.lines.startOf(c.key.Line) + len(m[1])
+	return []TextEdit{{Start: start, End: e.contentEnd(last), NewText: text.String()}}, true
+}
+
+// prunedTo reports whether the source is the lock file without the entries which the plan deletes and with all the
+// others, in their order, and still a lock file which is read. It guards the fix against a shape of the file which
+// the line edits do not handle.
+func (l *actionsLock) prunedTo(src []byte, p *lockPlan) bool {
+	n := parseActionsLock(l.Path, src)
+	if !n.usable() || !lockSameKind(l.workflowsNode, n.workflowsNode) || !lockSameKind(l.depsNode, n.depsNode) {
+		return false
+	}
+	var wantWorkflows, gotWorkflows []string
+	for _, w := range l.Workflows {
+		if !p.workflows[w] {
+			wantWorkflows = append(wantWorkflows, w.Key)
+		}
+	}
+	for _, w := range n.Workflows {
+		gotWorkflows = append(gotWorkflows, w.Key)
+	}
+	if !slices.Equal(wantWorkflows, gotWorkflows) {
+		return false
+	}
+	for _, w := range l.Workflows {
+		if p.workflows[w] {
+			continue
+		}
+		var want []string
+		for i, pin := range w.Pins {
+			if !p.pins[w][i] {
+				want = append(want, pin.Raw)
+			}
+		}
+		nw := n.workflows[w.Key]
+		if nw == nil || !lockSameKind(w.value, nw.value) {
+			return false
+		}
+		got := make([]string, 0, len(nw.Pins))
+		for _, pin := range nw.Pins {
+			got = append(got, pin.Raw)
+		}
+		if !slices.Equal(want, got) {
+			return false
+		}
+	}
+	gone := map[*yaml.Node]bool{}
+	for _, k := range l.depKeyNodes(p.deps) {
+		gone[k] = true
+	}
+	var wantDeps, gotDeps []string
+	if l.depsNode != nil {
+		for i := 0; i+1 < len(l.depsNode.Content); i += 2 {
+			if k := l.depsNode.Content[i]; !gone[k] {
+				wantDeps = append(wantDeps, k.Value)
+			}
+		}
+	}
+	if n.depsNode != nil {
+		for i := 0; i+1 < len(n.depsNode.Content); i += 2 {
+			gotDeps = append(gotDeps, n.depsNode.Content[i].Value)
+		}
+	}
+	return slices.Equal(wantDeps, gotDeps)
+}
+
+// lockSameKind reports whether a collection of the lock file is of the same kind after the fix as before it: a
+// mapping or a list which lost all its entries must not be left as null.
+func lockSameKind(before, after *yaml.Node) bool {
+	if before == nil || after == nil {
+		return before == after
+	}
+	return before.Kind == after.Kind
+}
