@@ -252,7 +252,7 @@ type lockPlan struct {
 }
 
 // plan returns what the fix of the prunes deletes. The dependencies which keep lists stay, with all they use: their
-// findings were dropped by an ignore or the baseline. orphans is false when what a workflow which stays uses is not
+// findings were dropped by an ignore. orphans is false when what a workflow which stays uses is not
 // known: the dependencies which only the deleted entries reach then stay, since that workflow may use them.
 func (l *actionsLock) plan(ps []*lockPrune, keep map[string]bool, orphans bool) *lockPlan {
 	p := &lockPlan{workflows: map[*lockWorkflow]bool{}, pins: map[*lockWorkflow]map[int]bool{}, deps: map[string]bool{}}
@@ -342,7 +342,8 @@ func (l *actionsLock) size(c string) int {
 // which together delete every entry of a collection are one: it is written empty ("[]" or "{}") rather than left
 // without a value. That fix is attached to the first of its findings, and the others say so.
 //
-// dropped are the prunes whose findings an ignore or the baseline dropped: their entries stay.
+// dropped are the prunes whose findings an ignore dropped: their entries stay. A finding which the baseline accepts
+// is not dropped, and its fix applies, as for the other rules.
 func (l *actionsLock) attachPruneFixes(e *lockEditor, prunes, dropped []*lockPrune, orphans bool) {
 	if len(prunes) == 0 || e == nil {
 		return

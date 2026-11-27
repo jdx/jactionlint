@@ -149,8 +149,8 @@ type lockFileChecks struct {
 	linter  *Linter
 	cfg     *Config
 	edit    *lockEditor
-	// prunes are the findings of the entries which nothing uses. They get their fixes once the ignores and the
-	// baseline have dropped what they drop: a fix must not delete an entry whose finding was ignored.
+	// prunes are the findings of the entries which nothing uses. They get their fixes once the ignores have
+	// dropped what they drop: a fix must not delete an entry whose finding was ignored.
 	prunes []*lockPrune
 	// unknownUsage is true when what a workflow which stays uses was not read: a fix then keeps the dependencies,
 	// which that workflow may use.
