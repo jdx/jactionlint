@@ -1,8 +1,0 @@
-[checks]
-full = "mise run test"
-lint = "mise run lint"
-before_push = ["mise run lint"]
-
-[checks.focused]
-unit = "jouet test --affected"
-go = "jouet test --cmd -- go test -run NAME ."

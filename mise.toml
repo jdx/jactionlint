@@ -5,7 +5,6 @@
 # tests and govulncheck. Unpin once staticcheck supports the new export data.
 go = "1.27.1"
 hk = "latest"
-jouet = "0.0.3"
 pkl = "latest"
 shellcheck = "0.11.0"
 zizmor = "1.30.1"

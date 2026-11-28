@@ -4,26 +4,6 @@
       {
         "hooks": [
           {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-edit'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write|MultiEdit"
-      },
-      {
-        "hooks": [
-          {
             "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code post-task'",
             "type": "command"
           }
@@ -40,29 +20,7 @@
         "matcher": "TaskCreate|TaskUpdate"
       }
     ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude post-tool-use-failure'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      }
-    ],
     "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude pre-tool-use'",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Read|Grep|Edit|Write|MultiEdit|NotebookEdit"
-      },
       {
         "hooks": [
           {
@@ -97,11 +55,6 @@
       {
         "hooks": [
           {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude session-start'",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
             "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then printf \"%s\\n\" \"{\\\"systemMessage\\\":\\\"\\\\n\\\\nEntire CLI is enabled but not installed or not on PATH.\\\\nInstallation guide: https://docs.entire.io/cli/installation#installation-methods\\\"}\"; exit 0; fi; exec entire hooks claude-code session-start'",
             "type": "command"
           }
@@ -112,11 +65,6 @@
     "Stop": [
       {
         "hooks": [
-          {
-            "command": "sh -c 'command -v jouet \u003e/dev/null 2\u003e\u00261 || exit 0; exec jouet hook claude stop'",
-            "timeout": 10,
-            "type": "command"
-          },
           {
             "command": "sh -c 'if ! command -v entire \u003e/dev/null 2\u003e\u00261; then exit 0; fi; exec entire hooks claude-code stop'",
             "type": "command"
