@@ -7,6 +7,7 @@
           {
             "type": "command",
             "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook codex post-edit'",
+            "commandWindows": "if (Get-Command jouet -ErrorAction Ignore) { jouet hook codex post-edit }",
             "timeout": 10
           }
         ]
@@ -54,6 +55,7 @@
           {
             "type": "command",
             "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook codex session-start'",
+            "commandWindows": "if (Get-Command jouet -ErrorAction Ignore) { jouet hook codex session-start }",
             "timeout": 10
           },
           {
@@ -71,6 +73,7 @@
           {
             "type": "command",
             "command": "sh -c 'command -v jouet >/dev/null 2>&1 || exit 0; exec jouet hook codex stop'",
+            "commandWindows": "if (Get-Command jouet -ErrorAction Ignore) { jouet hook codex stop }",
             "timeout": 10
           },
           {
