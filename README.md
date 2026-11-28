@@ -212,3 +212,24 @@ To report a bug, a false positive or an idea for a check, [open an issue](https:
 ## License and acknowledgments
 
 jactionlint is distributed under the [MIT license](https://github.com/jdx/jactionlint/blob/main/LICENSE.txt). It is a fork of [actionlint](https://github.com/rhysd/actionlint) by [rhysd](https://github.com/rhysd), and its security rules follow the audits of [zizmor](https://github.com/zizmorcore/zizmor). [NOTICE.md](https://github.com/jdx/jactionlint/blob/main/NOTICE.md) names every project that it builds on.
+
+## Entire checkpoints
+
+This repository records [Entire](https://entire.io) checkpoints, which include
+agent session transcripts, and pushes them to the private
+`jdx/jactionlint-checkpoints` repository. Entire ignores that setting in a fork
+owned by another account and pushes checkpoints to the fork instead, which is
+public. If you work from a fork with Entire enabled, turn off session pushing
+before you push:
+
+```sh
+entire configure --local --skip-push-sessions
+```
+
+or send checkpoints to a private repository you own:
+
+```sh
+entire configure --local --checkpoint-remote github:<you>/<private-repo>
+```
+
+Both write `.entire/settings.local.json`, which is not committed.
