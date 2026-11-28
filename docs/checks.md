@@ -6823,7 +6823,7 @@ jobs:
       token: ${{ secrets.DEPLOY_TOKEN }}
 ```
 
-**What is not reported.** `GITHUB_TOKEN`, because its permissions are set by the workflow. Workflows that run through `workflow_call` are skipped: their secrets come from the caller, where the rule reports a secret passed with `secrets:` (but not with `secrets: inherit`). Secrets that are fine outside of an environment can be listed in the `allow` option (names are case-insensitive):
+The workflow sets permissions for `GITHUB_TOKEN`, so the rule skips that token. The rule also skips workflows triggered only by `workflow_call` because the caller supplies their secrets. It still checks workflows that also have a trigger such as `push`. Use the case-insensitive `allow` option to list secrets that are fine outside an environment.
 
 ```yaml
 rules:
