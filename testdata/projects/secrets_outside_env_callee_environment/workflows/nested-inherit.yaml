@@ -1,0 +1,10 @@
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+permissions: {}
+jobs:
+  call:
+    uses: ./workflows/no-env.yaml
+    secrets: inherit

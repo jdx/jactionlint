@@ -1,0 +1,20 @@
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+permissions: {}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.token }}
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./dump.sh
+        env:
+          ALL: ${{ toJSON(secrets) }}

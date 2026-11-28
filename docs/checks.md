@@ -6811,7 +6811,9 @@ Secrets of a repository or an organization are exposed to every job that asks fo
 
 **Fix.** Move the secret to an environment, remove it from the repository secrets, and set `environment:` at the job. jactionlint cannot see where a secret is stored, so it assumes that the secrets of a job with an `environment:` are environment secrets. There is no automatic fix. The line of a secret in a folded block scalar (`>-`) is the line where the block starts.
 
-**Secrets passed to a reusable workflow.** A job that calls a reusable workflow cannot have an `environment:`, so a secret that it passes with `secrets:` is a repository or organization secret, which no environment protects. The rule reports it with a message of its own, at the secret in the `secrets:` of the call. A job of the called workflow can have an environment of its own and use the secrets of that environment, which is a different secret: that design is not reported. `secrets: inherit` names no secret and is not reported here (see [`secrets-inherit`](#check-secrets-inherit)). Only the values under `secrets:` are read: a secret in another field of the job (`with:`, `if:`, `name:`, where the `secrets` context is not available and the expression check reports it) is not a secret that is passed on.
+**Secrets passed to a reusable workflow.** A job that calls a reusable workflow cannot set `environment:`, so a secret it passes can come from the repository or organization. The rule reports the reference under the call's `secrets:` mapping. It skips a direct, same-name mapping (`token: ${{ secrets.TOKEN }}`) to a local workflow (`uses: ./...` or `uses: $/...`) when that workflow reads the secret and every read is in a job with `environment:`. GitHub resolves a secret passed by name even when it only exists in the job's environment. A matching environment secret [takes precedence](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow) over a repository or organization secret of the same name.
+
+The rule still reports renamed or transformed mappings, reads outside an environment job, dynamic access such as `toJSON(secrets)` or computed names, and nested `secrets: inherit`. It also reports mappings when the local callee has no matching read or the callee is remote, unreadable, or malformed. A caller's `secrets: inherit` is handled by [`secrets-inherit`](#check-secrets-inherit).
 
 ```yaml
 jobs:
@@ -6821,7 +6823,7 @@ jobs:
       token: ${{ secrets.DEPLOY_TOKEN }}
 ```
 
-**What is not reported.** `GITHUB_TOKEN`, because its permissions are set by the workflow. Workflows that run through `workflow_call` are skipped: environment secrets do not reach a reusable workflow unless the caller inherits all secrets. Secrets that are fine outside of an environment can be listed in the `allow` option (names are case-insensitive):
+The workflow sets permissions for `GITHUB_TOKEN`, so the rule skips that token. The rule also skips workflows triggered only by `workflow_call` because the caller supplies their secrets. It still checks workflows that also have a trigger such as `push`. Use the case-insensitive `allow` option to list secrets that are fine outside an environment.
 
 ```yaml
 rules:

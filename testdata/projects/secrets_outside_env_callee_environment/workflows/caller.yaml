@@ -1,0 +1,70 @@
+on: push
+permissions: {}
+jobs:
+  # Not reported: the only job of the callee which reads the secret sets "environment:"
+  env:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: the job of the callee has no environment
+  no-env:
+    uses: ./workflows/no-env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: one of the jobs of the callee which read the secret has no environment
+  mixed:
+    uses: ./workflows/mixed.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: the secret which the callee reads outside an environment, not the one it reads in an environment
+  two:
+    uses: ./workflows/two.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+      other: ${{ secrets.OTHER }}
+  # Not reported: the "$/" spelling names the same local workflow
+  self-repository:
+    uses: $/workflows/env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: no environment job of the callee reads the secret
+  unused:
+    uses: ./workflows/unused.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: a workflow-level "env:" of the callee reads the secret for a job without an environment
+  workflow-env:
+    uses: ./workflows/wf-env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: the callee passes every secret on to a workflow which reads it without an environment
+  nested-inherit:
+    uses: ./workflows/nested-inherit.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: a job of the callee without an environment reads every secret with toJSON
+  computed:
+    uses: ./workflows/computed.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}
+  # Reported: GitHub documents the environment secret taking precedence only for a secret passed under its own name
+  renamed:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets.DEPLOY_TOKEN }}
+  formatted:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ format('prefix-{0}', secrets.TOKEN) }}
+  interpolated:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: prefix-${{ secrets.TOKEN }}
+  multi-expression:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}${{ 'suffix' }}
+  indexed:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets['TOKEN'] }}

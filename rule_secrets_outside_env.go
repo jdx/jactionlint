@@ -8,6 +8,7 @@ import "strings"
 // https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment
 type RuleSecretsOutsideEnv struct {
 	RuleBase
+	cache *LocalReusableWorkflowCache // maybe nil
 }
 
 // NewRuleSecretsOutsideEnv creates a new RuleSecretsOutsideEnv instance.
@@ -20,12 +21,23 @@ func NewRuleSecretsOutsideEnv() *RuleSecretsOutsideEnv {
 	}
 }
 
+// calleeReadsInEnvOnly reports whether the local reusable workflow reads the secret and all reads
+// are in jobs with an "environment:". A same-name environment secret takes precedence in those jobs.
+// https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow
+func (rule *RuleSecretsOutsideEnv) calleeReadsInEnvOnly(call *WorkflowCall, name string) bool {
+	if rule.cache == nil || call.Uses == nil {
+		return false
+	}
+	u := rule.cache.secretUse(call.Uses.Value)
+	name = strings.ToLower(name)
+	return u != nil && !u.unknown && u.inEnv[name] && !u.outsideEnv[name]
+}
+
 // VisitWorkflowPre is callback when visiting Workflow node before visiting its children.
 func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 	if onlyWorkflowCall(n) {
-		// A reusable workflow gets its secrets from the caller. Environment secrets do not reach it
-		// unless the caller inherits all secrets, so there is nothing the workflow itself can fix.
-		// A workflow which also has another trigger runs on its own too, so it is checked.
+		// A reusable workflow gets its secrets from the caller, which reports a passed secret that no environment
+		// protects. A workflow which also has another trigger runs on its own too, so it is checked.
 		return nil
 	}
 	allow := rule.Config().ruleOptionStrings("secrets-outside-env", "allow")
@@ -47,27 +59,35 @@ func (rule *RuleSecretsOutsideEnv) VisitWorkflowPre(n *Workflow) error {
 			return
 		}
 		if j.WorkflowCall != nil {
-			// A job which calls a reusable workflow cannot set "environment:", so a secret that it passes with "secrets:" is
-			// a repository or organization secret (zizmor#1792). A job of the called workflow can have an environment of its
-			// own and use the secrets of it, which is a different secret: the one passed here is not behind an environment.
-			// Only the values under "secrets:" are passed on: another field of the job (if:, with:, name:, strategy:) that
-			// reads a secret is not described as passed, and "secrets: inherit" has no value to read.
-			passed := false
-			for _, sec := range j.WorkflowCall.Secrets {
+			// Only expressions in the values under "secrets:" pass secrets to the callee.
+			key := ""
+			for k, sec := range j.WorkflowCall.Secrets {
 				if sec != nil && sec.Value == site.Str {
-					passed = true
+					key = k
+					break
 				}
 			}
-			if !passed {
+			if key == "" {
 				return
+			}
+			// Environment secrets take precedence for a direct, same-name mapping.
+			// A string with literal text or additional placeholders can transform the passed value.
+			if name, ok := secretNameOf(o.Root); ok && strings.EqualFold(key, name) {
+				p := o.Str.placeholders()
+				if !p.failed && len(p.list) == 1 && p.list[0].after == len("${{") &&
+					p.list[0].after+p.list[0].n == len(o.Str.Value) && rule.calleeReadsInEnvOnly(j.WorkflowCall, key) {
+					return
+				}
 			}
 			VisitExprNode(o.Root, func(node, _ ExprNode, entering bool) {
 				if !entering {
 					return
 				}
-				if name, ok := secretNameOf(node); ok && !isAllowed(name) {
-					rule.ReportIDf("secrets-outside-env", o.PosOf(node), "secret %q is passed to a reusable workflow by a job which cannot have an \"environment:\", so it is a repository or organization secret exposed to every job that asks for it. pass a token that the called workflow mints, let a job of the called workflow use an environment of its own, or inline the workflow in a job with an environment", strings.ToUpper(name))
+				name, ok := secretNameOf(node)
+				if !ok || isAllowed(name) {
+					return
 				}
+				rule.ReportIDf("secrets-outside-env", o.PosOf(node), "secret %q is passed to a reusable workflow by a job which cannot have an \"environment:\", so a repository or organization secret of this name may be available outside an environment. pass a token that the called workflow mints, let a job of the called workflow use an environment of its own, or inline the workflow in a job with an environment", strings.ToUpper(name))
 			})
 			return
 		}
@@ -97,6 +117,8 @@ func init() {
 		if !env.config.RuleEnabled("secrets-outside-env") {
 			return nil
 		}
-		return []Rule{NewRuleSecretsOutsideEnv()}
+		rule := NewRuleSecretsOutsideEnv()
+		rule.cache = env.localReusableWorkflows
+		return []Rule{rule}
 	})
 }

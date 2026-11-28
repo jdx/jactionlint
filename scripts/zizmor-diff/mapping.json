@@ -33,7 +33,7 @@
     },
     "secrets-outside-env": {
       "coverage": "full",
-      "notes": "Jobs with secrets but no environment. The allow option mirrors zizmor's.",
+      "notes": "Jobs with secrets but no environment. Direct same-name passes to a local reusable workflow are skipped when the callee reads the secret only in environment jobs. The allow option mirrors zizmor's.",
       "jactionlint": [{ "rule": "secrets-outside-env" }]
     },
     "self-hosted-runner": {
