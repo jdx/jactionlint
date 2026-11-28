@@ -177,13 +177,13 @@ jobs:
           message: '${{ job.container.id }} is running on ${{ runner.os }}'
   caller:
     uses: owner/repo/workflow.yml@main
-    # jobs.<job_id>.with.<with_id>
+    # jobs.<job_id>.with.<input_id>
     with:
       # ERROR
       some-input: ${{ env.HELLO }}
       # OK
       outer: ${{ inputs.foo }}
-    # jobs.<job_id>.secrets.<secrets_id>
+    # jobs.<job_id>.secrets.<secret_id>
     # ERROR
     secrets:
       password: ${{ env.MY_PASSWORD }}

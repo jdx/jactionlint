@@ -600,7 +600,7 @@ var availabilityPaths = map[string]string{
 	"jobs.<job_id>.name":                               "jobs.*.name",
 	"jobs.<job_id>.outputs.<output_id>":                "jobs.*.outputs.*",
 	"jobs.<job_id>.runs-on":                            "jobs.*.runs-on",
-	"jobs.<job_id>.secrets.<secrets_id>":               "jobs.*.secrets.*",
+	"jobs.<job_id>.secrets.<secret_id>":                "jobs.*.secrets.*",
 	"jobs.<job_id>.services":                           "jobs.*.services",
 	"jobs.<job_id>.services.<service_id>.credentials":  "jobs.*.services.*.credentials",
 	"jobs.<job_id>.services.<service_id>.env.<env_id>": "jobs.*.services.*.env.*",
@@ -615,7 +615,7 @@ var availabilityPaths = map[string]string{
 	"jobs.<job_id>.steps.working-directory":            "jobs.*.steps.[].working-directory",
 	"jobs.<job_id>.strategy":                           "jobs.*.strategy",
 	"jobs.<job_id>.timeout-minutes":                    "jobs.*.timeout-minutes",
-	"jobs.<job_id>.with.<with_id>":                     "jobs.*.with.*",
+	"jobs.<job_id>.with.<input_id>":                    "jobs.*.with.*",
 	"on.workflow_call.inputs.<inputs_id>.default":      "on.workflow_call.inputs.*.default",
 	"on.workflow_call.outputs.<output_id>.value":       "on.workflow_call.outputs.*.value",
 }
@@ -772,6 +772,7 @@ const newerThanPin = "the schema of the runner at the pinned commit is older tha
 var schemaConformanceAllowed = map[string]string{
 	"activity types of issues: \"field_added\" is only in jactionlint":                                          newerThanPin,
 	"activity types of issues: \"field_removed\" is only in jactionlint":                                        newerThanPin,
+	"activity types of issues: \"status_changed\" is only in jactionlint":                                       newerThanPin,
 	"activity types of issues: \"typed\" is only in jactionlint":                                                newerThanPin,
 	"activity types of issues: \"untyped\" is only in jactionlint":                                              newerThanPin,
 	"activity types of merge_group: \"destroyed\" is only in jactionlint":                                       pendingPrefix + "#186 removes it. The docs of the workflow trigger and both schemas list only checks_requested; 23f9662c added destroyed from the docs of the webhook",
