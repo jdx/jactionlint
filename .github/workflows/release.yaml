@@ -301,7 +301,11 @@ jobs:
           mise_toml: |
             [tools]
             communique = "latest"
-      - run: communique generate "$TAG" --github-release
+      - run: |
+          communique generate "$TAG" --github-release --review-report "$RUNNER_TEMP/communique-coverage.md"
+          if [[ -f "$RUNNER_TEMP/communique-coverage.md" ]]; then
+            cat "$RUNNER_TEMP/communique-coverage.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
