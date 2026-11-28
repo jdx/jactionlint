@@ -41,7 +41,7 @@ jobs:
         run: go build -o "${RUNNER_TEMP}/jactionlint-test" ./cmd/jactionlint
       - name: Check the workflows of this repository
         id: clean
-        uses: ./
+        uses: $/
         with:
           executable: ${{ runner.temp }}/jactionlint-test
       - name: The executable output is set
@@ -50,7 +50,7 @@ jobs:
         env:
           EXECUTABLE: ${{ steps.clean.outputs.executable }}
       - name: Check given files with options
-        uses: ./
+        uses: $/
         with:
           executable: ${{ runner.temp }}/jactionlint-test
           files: .github/workflows/ci.yaml .github/workflows/action.yaml
@@ -60,7 +60,7 @@ jobs:
           color: "false"
       - name: Check a file which has problems
         id: broken
-        uses: ./
+        uses: $/
         with:
           executable: ${{ runner.temp }}/jactionlint-test
           files: testdata/err/assign_expression.yaml
@@ -73,7 +73,7 @@ jobs:
           OUTCOME: ${{ steps.broken.outcome }}
       - name: Write SARIF for a file which has problems
         id: sarif
-        uses: ./
+        uses: $/
         with:
           executable: ${{ runner.temp }}/jactionlint-test
           files: testdata/err/assign_expression.yaml
