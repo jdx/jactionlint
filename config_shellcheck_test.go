@@ -39,6 +39,8 @@ func TestShellcheckConfigParse(t *testing.T) {
 		{"separate value", "shellcheck:\n  args: ['-e', 'SC2086']\n", `invalid argument "SC2086"`},
 		{"enable name", "shellcheck:\n  enable: [Avoid_Nullary]\n", `invalid check name "Avoid_Nullary" in "shellcheck.enable"`},
 		{"enable list", "shellcheck:\n  enable: [a, b c]\n", `invalid check name "b c"`},
+		{"reenable other code", "shellcheck:\n  reenable: [SC2086]\n", `invalid code "SC2086" in "shellcheck.reenable": write one of the codes jactionlint excludes by default`},
+		{"reenable without prefix", "shellcheck:\n  reenable: [\"1091\"]\n", `invalid code "1091"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ParseConfig([]byte(tc.src))
@@ -58,7 +60,7 @@ func TestShellcheckConfigExtends(t *testing.T) {
 		}
 		return p
 	}
-	write("base.yaml", "shellcheck:\n  rcfile: base.rc\n  args: [--exclude=SC1]\n  enable: [all]\n")
+	write("base.yaml", "shellcheck:\n  rcfile: base.rc\n  args: [--exclude=SC1]\n  enable: [all]\n  reenable: [SC1091]\n")
 	child := write("child.yaml", "extends: [base.yaml]\nshellcheck:\n  args: [--exclude=SC2]\n")
 	c, err := ReadConfigFile(child)
 	if err != nil {
@@ -67,6 +69,9 @@ func TestShellcheckConfigExtends(t *testing.T) {
 	// Written keys replace, the others are inherited
 	if c.Shellcheck.RCFile != "base.rc" || !slices.Equal(c.Shellcheck.Args, []string{"--exclude=SC2"}) || !slices.Equal(c.Shellcheck.Enable, []string{"all"}) {
 		t.Errorf("merged = %+v", c.Shellcheck)
+	}
+	if !slices.Equal(c.Shellcheck.Reenable, []string{"SC1091"}) {
+		t.Errorf("reenable is inherited: %+v", c.Shellcheck)
 	}
 }
 
@@ -119,6 +124,16 @@ func TestShellcheckArgs(t *testing.T) {
 	r.extraArgs = []string{"--exclude=SC2129", "--enable=all"}
 	if got := strings.Join(r.shellcheckArgs("sh"), " "); got != "--rcfile=/x/.shellcheckrc -f json -x --shell sh "+defaults+" --exclude=SC2129 --enable=all -" {
 		t.Errorf("arguments = %s", got)
+	}
+	// reenable removes codes from the default exclusions, and no -e at all when none is left
+	r.rcfile, r.extraArgs = "", nil
+	r.reenable = []string{"SC1091", "SC2154"}
+	if got := strings.Join(r.shellcheckArgs("bash"), " "); got != "--norc -f json -x --shell bash -e SC2194,SC2050,SC2153,SC2157,SC2043 -" {
+		t.Errorf("reenable: %s", got)
+	}
+	r.reenable = shellcheckDefaultExcludes
+	if got := strings.Join(r.shellcheckArgs("bash"), " "); got != "--norc -f json -x --shell bash -" {
+		t.Errorf("reenable all: %s", got)
 	}
 }
 
@@ -273,5 +288,18 @@ func TestShellcheckConfigWithRealShellcheck(t *testing.T) {
 	}
 	if status, out := runCmd(t, wf); status != 1 || count(out, "2250") == 0 {
 		t.Errorf("config enable: status = %d: %s", status, out)
+	}
+
+	// reenable reports a default exclusion again and keeps the other checks (#360): SC1091 for the missing
+	// file, and still SC2086. --include=SC1091 in args would report SC1091 only.
+	root, wf = shellcheckProject(t, `|`+"\n          . ./missing-file.sh\n          echo $FOO", "")
+	if _, out := runCmd(t, wf); count(out, "1091") != 0 || count(out, "2086") != 1 {
+		t.Fatalf("default: %s", out)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".github", "jactionlint.yaml"), []byte("shellcheck:\n  reenable: [SC1091]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if status, out := runCmd(t, wf); status != 1 || count(out, "1091") != 1 || count(out, "2086") != 1 {
+		t.Errorf("config reenable: status = %d: %s", status, out)
 	}
 }

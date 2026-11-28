@@ -622,6 +622,9 @@ func (c *Config) merge(over *Config) {
 	if over.present["shellcheck.enable"] {
 		c.Shellcheck.Enable = over.Shellcheck.Enable
 	}
+	if over.present["shellcheck.reenable"] {
+		c.Shellcheck.Reenable = over.Shellcheck.Reenable
+	}
 	c.Deprecations = append(c.Deprecations, over.Deprecations...)
 	c.Notices = append(c.Notices, over.Notices...)
 	c.profileNotices = append(c.profileNotices, over.profileNotices...)

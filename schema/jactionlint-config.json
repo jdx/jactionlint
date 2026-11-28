@@ -4865,6 +4865,22 @@
         "rcfile": {
           "description": "A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository.",
           "type": "string"
+        },
+        "reenable": {
+          "description": "Codes which jactionlint excludes by default to report again, such as SC1091. Each is removed from the built-in exclusion list and every other check stays on, unlike shellcheck's --include, which reports only the codes it names.",
+          "items": {
+            "enum": [
+              "SC1091",
+              "SC2194",
+              "SC2050",
+              "SC2153",
+              "SC2154",
+              "SC2157",
+              "SC2043"
+            ],
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": [
