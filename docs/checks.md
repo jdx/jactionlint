@@ -3533,11 +3533,13 @@ The script 'Show file content' runs only on Windows because of the `matrix.os ==
 | [SC2157](https://github.com/koalaman/shellcheck/wiki/SC2157) | The argument of `-z` is always false after the replacement: `[ -z ${{ env.FOO }} ]`. |
 | [SC2194](https://github.com/koalaman/shellcheck/wiki/SC2194) | The word is constant after the replacement: `if ${{ matrix.foo }}; then`. |
 
+To report one of them again, list it in [`shellcheck.reenable`](./config.md#shellcheck), for example `reenable: [SC1091]` when the sourced files are in the repository. Every other check keeps running. Passing `--include=SC1091` in `args` instead would make shellcheck report only SC1091.
+
 **Configure.** jactionlint looks for the command `shellcheck` and uses it when it finds one.
 
 - `--shellcheck=PATH` sets the executable of shellcheck, and `--shellcheck=` with an empty value turns the integration off.
 - When the default command is not found, the run prints a note on stderr that says how many scripts were not checked ([external tools](./usage.md#external-tools)). A path given with `--shellcheck` that does not exist stops the run with exit status 3.
-- jactionlint runs shellcheck with `--norc` unless you give a rc file. The `--shellcheck-rcfile` option and the [`shellcheck` section of the config file](./config.md#shellcheck) (a `rcfile`, more `args`, optional checks to `enable`) keep the settings with the repository.
+- jactionlint runs shellcheck with `--norc` unless you give a rc file. The `--shellcheck-rcfile` option and the [`shellcheck` section of the config file](./config.md#shellcheck) (a `rcfile`, more `args`, optional checks to `enable`, default exclusions to `reenable`) keep the settings with the repository.
 - The [`SHELLCHECK_OPTS` environment variable](https://github.com/koalaman/shellcheck/wiki/Integration#environment-variables) works too. From the command line:
 
 ```sh

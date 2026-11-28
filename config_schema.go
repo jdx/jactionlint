@@ -183,6 +183,8 @@ func ConfigSchema() []byte {
 			"rcfile": sStr("A shellcheckrc file to read instead of --norc. A relative path is resolved from the repository root. The file must exist. A config file of the repository can name only a file inside the repository."),
 			"args":   sStrings("More arguments for shellcheck, one option per item with its value attached, such as --exclude=SC2129. The options jactionlint sets itself (--format, --color, --shell, --norc, --rcfile, --version, --wiki-link-count) and file names are errors."),
 			"enable": sStrings("Optional checks of shellcheck to turn on (--enable=NAME,...), such as avoid-nullary-conditions, or all."),
+			"reenable": sArray("Codes which jactionlint excludes by default to report again, such as SC1091. Each is removed from the built-in exclusion list and every other check stays on, unlike shellcheck's --include, which reports only the codes it names.",
+				jsonObject{"type": "string", "enum": shellcheckDefaultExcludes}),
 		}),
 		"update": sObject("Configuration of `jactionlint update`, which checks the external actions and reusable workflows for newer releases and pins them. The command-line options override it.", jsonObject{
 			"cooldown-days":              sInt("Use only releases at least this many days old. 0 (the default) turns the restriction off. A reference is never moved to an older version to satisfy it."),

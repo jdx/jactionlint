@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -27,9 +28,13 @@ type ShellcheckConfig struct {
 	// Enable lists the optional checks of shellcheck to turn on (shellcheck --enable=NAME,...), for example
 	// "avoid-nullary-conditions" or "all".
 	Enable []string `yaml:"enable"`
+	// Reenable lists codes which jactionlint excludes by default (SC1091, SC2194, SC2050, SC2153, SC2154, SC2157
+	// and SC2043) to report again. Each is removed from the built-in exclusion list and every other check stays
+	// as it is, unlike shellcheck's --include, which drops every code it does not name.
+	Reenable []string `yaml:"reenable"`
 }
 
-var shellcheckConfigKeys = []string{"rcfile", "args", "enable"}
+var shellcheckConfigKeys = []string{"rcfile", "args", "enable", "reenable"}
 
 var reShellcheckEnable = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
@@ -63,6 +68,11 @@ func (s *ShellcheckConfig) validate() error {
 	for _, e := range s.Enable {
 		if !reShellcheckEnable.MatchString(e) {
 			return fmt.Errorf("invalid check name %q in \"shellcheck.enable\": write the name of an optional check of shellcheck such as \"avoid-nullary-conditions\" or \"all\"", e)
+		}
+	}
+	for _, c := range s.Reenable {
+		if !slices.Contains(shellcheckDefaultExcludes, c) {
+			return fmt.Errorf("invalid code %q in \"shellcheck.reenable\": write one of the codes jactionlint excludes by default, %s. to exclude more codes, use \"--exclude=SC....\" in \"shellcheck.args\"", c, strings.Join(shellcheckDefaultExcludes, ", "))
 		}
 	}
 	return nil

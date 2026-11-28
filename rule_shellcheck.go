@@ -3,6 +3,7 @@ package jactionlint
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -34,7 +35,14 @@ type RuleShellcheck struct {
 	// configuration (see ShellcheckConfig).
 	rcfile    string
 	extraArgs []string
+	// reenable are the codes of shellcheckDefaultExcludes which the configuration turns back on.
+	reenable []string
 }
+
+// shellcheckDefaultExcludes are the codes which jactionlint excludes from every call of shellcheck, because they
+// report the replacement of ${{ }} or the CI environment rather than a mistake in the script (see runShellcheck).
+// "shellcheck.reenable" removes codes from this list.
+var shellcheckDefaultExcludes = []string{"SC1091", "SC2194", "SC2050", "SC2153", "SC2154", "SC2157", "SC2043"}
 
 func newRuleShellcheck(cmd *externalCommand) *RuleShellcheck {
 	return &RuleShellcheck{
@@ -305,7 +313,16 @@ func (rule *RuleShellcheck) shellcheckArgs(sh string) []string {
 	if rule.rcfile != "" {
 		rc = "--rcfile=" + rule.rcfile
 	}
-	args := []string{rc, "-f", "json", "-x", "--shell", sh, "-e", "SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043"}
+	args := []string{rc, "-f", "json", "-x", "--shell", sh}
+	var excludes []string
+	for _, c := range shellcheckDefaultExcludes {
+		if !slices.Contains(rule.reenable, c) {
+			excludes = append(excludes, c)
+		}
+	}
+	if len(excludes) > 0 {
+		args = append(args, "-e", strings.Join(excludes, ","))
+	}
 	args = append(args, rule.extraArgs...)
 	return append(args, "-")
 }
@@ -404,6 +421,7 @@ func init() {
 		r.rcfile = rc
 		if env.config != nil {
 			r.extraArgs = env.config.Shellcheck.extraArgs()
+			r.reenable = env.config.Shellcheck.Reenable
 		}
 		return []Rule{r}
 	})
