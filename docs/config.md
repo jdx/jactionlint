@@ -371,7 +371,7 @@ Only the comment block at the top of the file counts, within its first 40 lines.
 
 jactionlint sets the output format, the shell of each script, `-x` and the script itself. So `args` rejects `--format`, `--color`, `--shell`, `--norc`, `--rcfile`, `--version` and `--wiki-link-count`, and the short forms `-f`, `-C`, `-s`, `-V` and `-W`.
 
-jactionlint always passes `-e SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043`, the codes that give false findings in workflow scripts: a file that exists only in CI, a variable that `env:` defines, and the placeholder that replaces `${{ }}`. An `--exclude` in `args` adds to them. An `--include` in `args` makes shellcheck report only the codes it names, and that includes a code from the built-in list, which it brings back.
+By default jactionlint passes `-e SC1091,SC2194,SC2050,SC2153,SC2154,SC2157,SC2043`, the codes that give false findings in workflow scripts: a file that exists only in CI, a variable that `env:` defines, and the placeholder that replaces `${{ }}`. An `--exclude` in `args` adds to them. Each code in `reenable` is left out of that list, and when all seven are listed jactionlint passes no `-e`. An `--include` in `args` makes shellcheck report only the codes it names, so use `reenable`, not `--include`, to get a built-in code back.
 
 ```yaml
 shellcheck:
