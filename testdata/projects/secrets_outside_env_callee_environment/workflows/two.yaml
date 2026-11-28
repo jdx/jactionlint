@@ -1,0 +1,22 @@
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: true
+      other:
+        required: true
+permissions: {}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: ./deploy.sh
+        env:
+          TOKEN: ${{ secrets.token }}
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: ./notify.sh
+        env:
+          OTHER: ${{ secrets.other }}

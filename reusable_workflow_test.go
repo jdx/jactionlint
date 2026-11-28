@@ -1051,3 +1051,120 @@ func TestSharedFindingOfManyCallersIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestLocalReusableWorkflowCacheSecretUse(t *testing.T) {
+	head := `on:
+  workflow_call:
+permissions: {}
+`
+	tests := []struct {
+		what  string
+		jobs  string
+		want  *calleeSecretUse
+		known bool
+	}{
+		{
+			what: "jobs with and without an environment",
+			jobs: `jobs:
+  in-env:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo
+        env:
+          A: ${{ secrets.a }}
+          B: ${{ secrets['B'] }}
+  no-env:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+        env:
+          B: ${{ secrets.b }}
+          C: ${{ secrets.C }}
+`,
+			want:  &calleeSecretUse{names: map[string]bool{"b": true, "c": true}},
+			known: true,
+		},
+		{
+			what: "workflow-level env",
+			jobs: `env:
+  A: ${{ secrets.a }}
+jobs:
+  j:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo
+`,
+			want:  &calleeSecretUse{names: map[string]bool{"a": true}},
+			known: true,
+		},
+		{
+			what: "secrets inherited by a nested call",
+			jobs: `jobs:
+  call:
+    uses: ./.github/workflows/other.yaml
+    secrets: inherit
+`,
+			want:  &calleeSecretUse{all: true, names: map[string]bool{}},
+			known: true,
+		},
+		{
+			what: "computed secret access",
+			jobs: `jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+        env:
+          ALL: ${{ toJSON(secrets) }}
+          ONE: ${{ secrets[format('{0}', 'x')] }}
+`,
+			want:  &calleeSecretUse{all: true, names: map[string]bool{}},
+			known: true,
+		},
+		{
+			what: "a file with an error",
+			jobs: `jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      run: echo ${{ secrets.a }}
+`,
+			known: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.what, func(t *testing.T) {
+			proj := &Project{root: t.TempDir()}
+			d := filepath.Join(proj.root, ".github", "workflows")
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(d, "callee.yaml"), []byte(head+tc.jobs), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c := NewLocalReusableWorkflowCache(proj, proj.root, nil)
+			for _, spec := range []string{"./.github/workflows/callee.yaml", "$/.github/workflows/callee.yaml"} {
+				got := c.secretUse(spec)
+				if !tc.known {
+					if got != nil {
+						t.Fatalf("%s: want unknown, got %+v", spec, got)
+					}
+					continue
+				}
+				if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(calleeSecretUse{})); diff != "" {
+					t.Fatalf("%s (-want +got):\n%s", spec, diff)
+				}
+			}
+			if len(c.secretUses) != 1 {
+				t.Errorf("both spellings should share one entry: %v", c.secretUses)
+			}
+		})
+	}
+
+	if u := NewLocalReusableWorkflowCache(&Project{root: t.TempDir()}, "", nil).secretUse("octo/repo/.github/workflows/w.yaml@v1"); u != nil {
+		t.Errorf("a remote workflow should be unknown: %+v", u)
+	}
+}
