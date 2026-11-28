@@ -689,7 +689,7 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 	}
 
 	for n, i := range c.Inputs {
-		ts := rule.checkString(i.Value, "jobs.<job_id>.with.<with_id>")
+		ts := rule.checkString(i.Value, "jobs.<job_id>.with.<input_id>")
 
 		if m == nil {
 			continue
@@ -742,7 +742,7 @@ func (rule *RuleExpression) checkWorkflowCall(c *WorkflowCall) {
 	}
 
 	for _, s := range c.Secrets {
-		rule.checkString(s.Value, "jobs.<job_id>.secrets.<secrets_id>")
+		rule.checkString(s.Value, "jobs.<job_id>.secrets.<secret_id>")
 	}
 }
 

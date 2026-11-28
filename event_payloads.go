@@ -4,7 +4,7 @@ package jactionlint
 
 // The shapes of the payloads of the webhook events, which are the shapes of github.event. They are derived from
 // the JSON schemas of the webhooks of octokit/webhooks (MIT licence) at the commit aa80c24a3f55354465b8b1438d33dd5602956d0d and of
-// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 2a93393cfccb),
+// the OpenAPI description of github/rest-api-description (MIT licence), version 1.1.4 (SHA-256 d84f59f8b6bb),
 // reduced to the first 3 levels of objects: an object of a deeper level is not written, and nothing is known of it.
 // A property of an object is known when the payload of any action of the event has it, in any of the sources.
 //
@@ -58,8 +58,8 @@ var eventPayloadObjects = map[string]string{
 		comments_url,created_at,draft,events_url,html_url,id,issue_dependencies_summary:@issue_dependencies_summary,issue_field_values:[@issue_field_value],
 		labels:[],labels_url,locked,milestone:@nullable_milestone,node_id,number,parent_issue_url,performed_via_github_app,
 		pinned_comment:@nullable_issue_comment,pull_request:{diff_url,html_url,merged_at,patch_url,url},reactions:@reactions,
-		repository:@repository,repository_url,state,state_reason,sub_issues_summary:{completed,percent_completed,total},
-		timeline_url,title,type:@issue_type,updated_at,url,user}`,
+		repository:@repository,repository_url,state,state_reason,status:{category,id,name},sub_issues_summary:{completed,
+		percent_completed,total},timeline_url,title,type:@issue_type,updated_at,url,user}`,
 	"issue_dependencies_summary": `{blocked_by,blocking,total_blocked_by,total_blocking}`,
 	"issue_field_value":          `{data_type,issue_field_id,issue_field_name,multi_select_options:[],node_id,single_select_option,value}`,
 	"issue_field_value2":         `{id,option:{color,description,id,name},options:[{color,description,id,name}],value,value_id,value_ids:[]}`,
