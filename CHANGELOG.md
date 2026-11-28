@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.7.0](https://github.com/jdx/jactionlint/compare/v2.6.0...v2.7.0) (2026-11-28)
+
+
+### Features
+
+* **actions-lock:** fix the lock file by removing the entries nothing uses ([#361](https://github.com/jdx/jactionlint/issues/361)) ([a158811](https://github.com/jdx/jactionlint/commit/a158811fe8b7db3a4726198f6989a86081f34262))
+* **hooks:** deprecate the published pre-commit hooks ([#359](https://github.com/jdx/jactionlint/issues/359)) ([4443a3a](https://github.com/jdx/jactionlint/commit/4443a3a76868c9ab6198cafc398c516cc2ffe59f))
+* **shellcheck:** add shellcheck.reenable to turn a default exclusion back on ([#363](https://github.com/jdx/jactionlint/issues/363)) ([37fe4be](https://github.com/jdx/jactionlint/commit/37fe4be81850ac67ec6879d91d8ba52d881b66cb))
+
+
+### Bug Fixes
+
+* **action:** don't fail the job for findings with advanced-security ([#354](https://github.com/jdx/jactionlint/issues/354)) ([66fc847](https://github.com/jdx/jactionlint/commit/66fc8479e3aaf3af5a15876740ad9fed371b889d))
+* follow GitHub's renamed context availability keys and new issues type ([#369](https://github.com/jdx/jactionlint/issues/369)) ([3fb537d](https://github.com/jdx/jactionlint/commit/3fb537d7db849922bb11c68ccb47d8ff39f8e67e))
+* **online:** accept an anonymous not-found after a forbidden token ([#351](https://github.com/jdx/jactionlint/issues/351)) ([cf965f8](https://github.com/jdx/jactionlint/commit/cf965f8c92292982804aaaa3295c6579a17630b7))
+* respect environment secrets in local reusable workflows ([#365](https://github.com/jdx/jactionlint/issues/365)) ([1ada181](https://github.com/jdx/jactionlint/commit/1ada18176b93d872906ada3850dd73c32c7692e9))
+
 ## [2.6.0](https://github.com/jdx/jactionlint/compare/v2.5.0...v2.6.0) (2026-11-12)
 
 
