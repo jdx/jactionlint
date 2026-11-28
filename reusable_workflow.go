@@ -191,63 +191,82 @@ type LocalReusableWorkflowCache struct {
 	// that workflow fails again, so every workflow that calls it reports it and the linter keeps the first
 	// finding in the order of the files, instead of the one of whichever goroutine searched first.
 	failures map[string]reusableFailure
-	// secretUses are the secrets which the jobs of a workflow read outside an "environment:", by the key of the
-	// cache. A nil value means it is unknown.
+	// secretUses summarizes secret reads by the key of the cache. A nil value means the callee is unknown.
 	secretUses map[string]*calleeSecretUse
 	cwd        string
 	dbg        io.Writer
 }
 
-// calleeSecretUse is the secrets which the jobs of a reusable workflow read without an "environment:".
 type calleeSecretUse struct {
-	all   bool            // a read which names no secret: "secrets: inherit", "toJSON(secrets)" or a computed name
-	names map[string]bool // in lower case
+	unknown    bool            // dynamic access, invalid expression, or secrets passed to a nested workflow via inherit
+	inEnv      map[string]bool // names in lower case
+	outsideEnv map[string]bool
 }
 
-func (u *calleeSecretUse) readsOutsideEnv(name string) bool {
-	return u.all || u.names[strings.ToLower(name)]
-}
-
-// calleeSecretsOutsideEnv returns the secrets which the workflow reads outside an "environment:". A job with an
-// "environment:" reads the secret of its environment, even when the caller passes the secret by name.
-func calleeSecretsOutsideEnv(w *Workflow) *calleeSecretUse {
-	u := &calleeSecretUse{names: map[string]bool{}}
+func summarizeCalleeSecretUse(w *Workflow) *calleeSecretUse {
+	u := &calleeSecretUse{inEnv: map[string]bool{}, outsideEnv: map[string]bool{}}
 	for _, j := range w.Jobs {
 		if j != nil && j.WorkflowCall != nil && j.WorkflowCall.InheritSecrets {
-			u.all = true // The workflow it calls may read any secret
+			u.unknown = true
+			return u
 		}
 	}
-	workflowExprs(w, func(site exprSite, o *exprOccurrence) {
-		if site.Job != nil && site.Job.Environment != nil {
+	workflowExprSites(w, func(site exprSite) {
+		if u.unknown {
 			return
 		}
-		VisitExprNode(o.Root, func(node, parent ExprNode, entering bool) {
-			if !entering {
+		var roots []ExprNode
+		if site.Cond && !site.Str.ContainsExpression() {
+			root, err := site.Str.condExpr()
+			if err != nil {
+				u.unknown = true
 				return
 			}
-			if name, ok := secretNameOf(node); ok {
-				u.names[strings.ToLower(name)] = true
+			roots = []ExprNode{root}
+		} else {
+			var ok bool
+			roots, ok = site.Str.templateExprs()
+			if !ok {
+				u.unknown = true
 				return
 			}
-			if isContextVariable(node, "secrets") {
-				if _, ok := secretNameOf(parent); !ok {
-					u.all = true
+		}
+		names := u.outsideEnv
+		if site.Job != nil && site.Job.Environment != nil {
+			names = u.inEnv
+		}
+		for _, root := range roots {
+			VisitExprNode(root, func(node, parent ExprNode, entering bool) {
+				if !entering {
+					return
 				}
-			}
-		})
+				if name, ok := secretNameOf(node); ok {
+					names[strings.ToLower(name)] = true
+				}
+				if isContextVariable(node, "secrets") {
+					if _, ok := secretNameOf(parent); !ok {
+						u.unknown = true
+					}
+				}
+			})
+		}
 	})
 	return u
 }
 
-// secretUse returns the secrets which the jobs of the local reusable workflow read outside an "environment:". It
-// returns nil when they are unknown: the workflow is remote, or its file cannot be read or has an error.
-// Calling this method is thread-safe.
+// secretUse returns a summary of reads in a local reusable workflow. A nil result means the callee
+// cannot be inspected. Calling this method is thread-safe.
 func (c *LocalReusableWorkflowCache) secretUse(spec string) *calleeSecretUse {
 	if c.proj == nil || ContainsExpression(spec) {
 		return nil
 	}
-	key, ok := canonLocalUsesSpec(spec)
-	if !ok {
+	ref := ParseUses(spec)
+	if !ref.isLocalWorkflowCall() || selfRepositoryProblem(spec) != "" {
+		return nil
+	}
+	key := ref.Path
+	file := filepath.Join(c.proj.RootDir(), filepath.FromSlash(key))
+	if !isPathInDir(c.proj.RootDir(), file) {
 		return nil
 	}
 	c.mu.RLock()
@@ -256,9 +275,11 @@ func (c *LocalReusableWorkflowCache) secretUse(spec string) *calleeSecretUse {
 	if ok {
 		return u
 	}
-	if src, err := os.ReadFile(filepath.Join(c.proj.RootDir(), filepath.FromSlash(key))); err == nil {
+	if src, err := os.ReadFile(file); err == nil {
 		if w, errs := Parse(src); w != nil && len(errs) == 0 {
-			u = calleeSecretsOutsideEnv(w) // A partial tree could miss a job which reads the secret
+			if _, ok := w.FindWorkflowCallEvent(); ok {
+				u = summarizeCalleeSecretUse(w) // A partial tree could miss a job which reads the secret
+			}
 		}
 	}
 	c.mu.Lock()

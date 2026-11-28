@@ -1082,7 +1082,7 @@ permissions: {}
           B: ${{ secrets.b }}
           C: ${{ secrets.C }}
 `,
-			want:  &calleeSecretUse{names: map[string]bool{"b": true, "c": true}},
+			want:  &calleeSecretUse{inEnv: map[string]bool{"a": true, "b": true}, outsideEnv: map[string]bool{"b": true, "c": true}},
 			known: true,
 		},
 		{
@@ -1096,7 +1096,7 @@ jobs:
     steps:
       - run: echo
 `,
-			want:  &calleeSecretUse{names: map[string]bool{"a": true}},
+			want:  &calleeSecretUse{inEnv: map[string]bool{}, outsideEnv: map[string]bool{"a": true}},
 			known: true,
 		},
 		{
@@ -1106,21 +1106,35 @@ jobs:
     uses: ./.github/workflows/other.yaml
     secrets: inherit
 `,
-			want:  &calleeSecretUse{all: true, names: map[string]bool{}},
+			want:  &calleeSecretUse{unknown: true, inEnv: map[string]bool{}, outsideEnv: map[string]bool{}},
 			known: true,
 		},
 		{
-			what: "computed secret access",
+			what: "computed secret access in an environment job",
 			jobs: `jobs:
   j:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - run: echo
         env:
           ALL: ${{ toJSON(secrets) }}
           ONE: ${{ secrets[format('{0}', 'x')] }}
 `,
-			want:  &calleeSecretUse{all: true, names: map[string]bool{}},
+			want:  &calleeSecretUse{unknown: true, inEnv: map[string]bool{}, outsideEnv: map[string]bool{}},
+			known: true,
+		},
+		{
+			what: "an invalid expression before a secret read",
+			jobs: `jobs:
+  j:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+        env:
+          VALUE: ${{ format( }}-${{ secrets.a }}
+`,
+			want:  &calleeSecretUse{unknown: true, inEnv: map[string]bool{}, outsideEnv: map[string]bool{}},
 			known: true,
 		},
 		{

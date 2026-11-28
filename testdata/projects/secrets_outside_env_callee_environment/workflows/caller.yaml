@@ -27,7 +27,7 @@ jobs:
     uses: $/workflows/env.yaml
     secrets:
       token: ${{ secrets.TOKEN }}
-  # Not reported: no job of the callee reads the secret
+  # Reported: no environment job of the callee reads the secret
   unused:
     uses: ./workflows/unused.yaml
     secrets:
@@ -52,3 +52,19 @@ jobs:
     uses: ./workflows/env.yaml
     secrets:
       token: ${{ secrets.DEPLOY_TOKEN }}
+  formatted:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ format('prefix-{0}', secrets.TOKEN) }}
+  interpolated:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: prefix-${{ secrets.TOKEN }}
+  multi-expression:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets.TOKEN }}${{ 'suffix' }}
+  indexed:
+    uses: ./workflows/env.yaml
+    secrets:
+      token: ${{ secrets['TOKEN'] }}
