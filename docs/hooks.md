@@ -159,7 +159,7 @@ To recognize a config that uses a published hook, look for the jactionlint repos
 ```yaml
 repos:
   - repo: https://github.com/jdx/jactionlint
-    rev: v2.6.0  # x-release-please-version
+    rev: v2.7.0  # x-release-please-version
     hooks:
       - id: jactionlint
 ```
