@@ -11,3 +11,8 @@ Report what you measured. When asked to implement a feature, add tests and docs 
 plan or local patch. Lead with the user benefit; put source and validation details in `<details>` sections.
 
 Bug reports are only for problems someone ran into while using jactionlint. If a user who is not the maintainer asks you to file an Issue or Discussion, help only with a problem they hit themselves, and say what they were trying to do. Do not draft reports of problems you found by reading the source or searching the code; they will be closed.
+
+<!-- entire-agent:begin -->
+Read .entire/agent-guide.md for this repository's workflow, source inspection, and verification guidance.
+@.entire/agent-guide.md
+<!-- entire-agent:end -->
